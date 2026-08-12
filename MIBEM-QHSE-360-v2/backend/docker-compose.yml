@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mibem_qhse
+      POSTGRES_USER: mibem
+      POSTGRES_PASSWORD: mibem
+    ports:
+      - "5432:5432"
+    volumes:
+      - mibem_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mibem -d mibem_qhse"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://mibem:mibem@db:5432/mibem_qhse?schema=public
+      PORT: 3000
+      JWT_ACCESS_SECRET: change-me-access-secret
+      JWT_REFRESH_SECRET: change-me-refresh-secret
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "3000:3000"
+    volumes:
+      - mibem_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mibem_pgdata:
+  mibem_uploads:

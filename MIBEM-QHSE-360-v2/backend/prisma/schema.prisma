@@ -1,0 +1,437 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================================
+// ENUMS
+// ==========================================================
+
+enum ControlResultValue {
+  CONFORME
+  OBSERVATION
+  NON_CONFORME
+  NON_APPLICABLE
+}
+
+enum ControlPointType {
+  BOOLEEN         // conforme / non conforme
+  NUMERIQUE       // valeur avec bornes min/max
+  TEXTE           // saisie libre
+  CHOIX_MULTIPLE  // liste d'options prédéfinies
+  PHOTO           // preuve photo obligatoire
+}
+
+enum NCSeverity {
+  MINEURE
+  MAJEURE
+  CRITIQUE
+}
+
+enum NCStatus {
+  OUVERTE
+  EN_ANALYSE
+  ACTION_EN_COURS
+  A_VERIFIER
+  CLOTUREE
+  REJETEE
+}
+
+enum ActionPriority {
+  BASSE
+  MOYENNE
+  HAUTE
+  CRITIQUE
+}
+
+enum ActionStatus {
+  OUVERTE
+  EN_COURS
+  TERMINEE
+  A_VERIFIER
+  CLOTUREE
+  EN_RETARD
+}
+
+enum UserRole {
+  CONTROLEUR
+  RESPONSABLE_LIGNE
+  QHSE_MANAGER
+  ADMIN
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum AttachmentOwnerType {
+  CONTROL
+  CONTROL_RESULT
+  NON_CONFORMITY
+  ACTION
+}
+
+// ==========================================================
+// AUTH
+// ==========================================================
+
+model User {
+  id            String    @id @default(uuid())
+  employeeId    String    @unique
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  email         String    @unique
+  passwordHash  String
+  role          UserRole  @default(CONTROLEUR)
+  isActive      Boolean   @default(true)
+
+  refreshTokens RefreshToken[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ==========================================================
+// REFERENTIEL
+// ==========================================================
+
+model Employee {
+  id                String  @id @default(uuid())
+  employeeNumber    String  @unique
+  firstName         String
+  lastName          String
+  email             String? @unique
+  status            String  @default("ACTIVE")
+
+  user              User?
+  controls          Control[]
+  detectedNCs       NonConformity[] @relation("NCDetectedBy")
+  responsibleNCs    NonConformity[] @relation("NCResponsible")
+  actions           Action[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Site {
+  id                String @id @default(uuid())
+  code              String @unique
+  name              String
+
+  productionLines   ProductionLine[]
+  shifts            Shift[]
+}
+
+model ProductionLine {
+  id                String @id @default(uuid())
+  code              String @unique
+  name              String
+  siteId            String
+  site              Site @relation(fields: [siteId], references: [id])
+
+  machines          Machine[]
+  controls          Control[]
+  nonConformities   NonConformity[]
+  templateLinks     ControlTemplateLine[]
+}
+
+model Machine {
+  id                String @id @default(uuid())
+  code              String @unique
+  name              String
+  productionLineId  String
+  productionLine    ProductionLine @relation(fields: [productionLineId], references: [id])
+
+  controls          Control[]
+  nonConformities   NonConformity[]
+}
+
+model Product {
+  id                String @id @default(uuid())
+  code              String @unique
+  name              String
+
+  formats           ProductFormat[]
+  controls          Control[]
+  nonConformities   NonConformity[]
+}
+
+model ProductFormat {
+  id                String @id @default(uuid())
+  productId         String
+  volumeMl          Int
+  label             String
+  product           Product @relation(fields: [productId], references: [id])
+
+  controls          Control[]
+}
+
+model PackagingType {
+  id                String @id @default(uuid())
+  code              String @unique
+  name              String
+  material          String?
+
+  controls          Control[]
+}
+
+model Shift {
+  id                String @id @default(uuid())
+  siteId            String
+  name              String
+  startTime         String
+  endTime           String
+  site              Site @relation(fields: [siteId], references: [id])
+
+  controls          Control[]
+}
+
+// ==========================================================
+// CHECKLIST DYNAMIQUE
+// ==========================================================
+
+model ControlTemplate {
+  id                String  @id @default(uuid())
+  code              String  @unique
+  name              String
+  version           Int     @default(1)
+  isActive          Boolean @default(true)
+
+  points            ControlPoint[]
+  lines             ControlTemplateLine[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Rattachement d'un template a une ou plusieurs lignes de production.
+// Si aucune ligne n'est liee, le template est considere generique.
+model ControlTemplateLine {
+  id                String @id @default(uuid())
+  templateId        String
+  productionLineId  String
+  template          ControlTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  productionLine    ProductionLine  @relation(fields: [productionLineId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, productionLineId])
+}
+
+model ControlPoint {
+  id                String @id @default(uuid())
+  templateId        String
+  code              String
+  description       String
+  sequence          Int
+  template          ControlTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  type              ControlPointType @default(BOOLEEN)
+  unit              String?          // ex: "ml", "N", "°C", "mm"
+  minValue          Decimal?
+  maxValue          Decimal?
+  options           String?          // options CHOIX_MULTIPLE separees par "|"
+  isCritical        Boolean @default(false) // pilote severite NC auto
+  requiresPhoto     Boolean @default(false)
+
+  results           ControlResult[]
+}
+
+// ==========================================================
+// CONTROLE TERRAIN
+// ==========================================================
+
+model Control {
+  id                String @id @default(uuid())
+  reference         String @unique
+  controlDate       DateTime @default(now())
+  controllerId      String
+  productionLineId  String?
+  machineId         String?
+  productId         String?
+  formatId          String?
+  packagingTypeId   String?
+  shiftId           String?
+  comments          String?
+
+  latitude          Float?
+  longitude         Float?
+
+  deviceId          String?
+  clientLocalId     String?   @unique
+  syncStatus        SyncStatus @default(SYNCED)
+
+  controller        Employee @relation(fields: [controllerId], references: [id])
+  productionLine    ProductionLine? @relation(fields: [productionLineId], references: [id])
+  machine           Machine? @relation(fields: [machineId], references: [id])
+  product           Product? @relation(fields: [productId], references: [id])
+  format            ProductFormat? @relation(fields: [formatId], references: [id])
+  packagingType     PackagingType? @relation(fields: [packagingTypeId], references: [id])
+  shift             Shift? @relation(fields: [shiftId], references: [id])
+
+  results           ControlResult[]
+  nonConformities   NonConformity[]
+  attachments       Attachment[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([controlDate])
+  @@index([controllerId])
+  @@index([productionLineId])
+  @@index([syncStatus])
+}
+
+model ControlResult {
+  id              String @id @default(uuid())
+  controlId       String
+  controlPointId  String
+  result          ControlResultValue
+  numericValue    Decimal?
+  textValue       String?
+  observation     String?
+
+  control         Control @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  controlPoint    ControlPoint @relation(fields: [controlPointId], references: [id])
+
+  nonConformity   NonConformity?
+  attachments     Attachment[]
+
+  createdAt       DateTime @default(now())
+
+  @@index([controlId])
+}
+
+// ==========================================================
+// NON-CONFORMITES & ACTIONS
+// ==========================================================
+
+model NonConformity {
+  id                String       @id @default(uuid())
+  reference         String       @unique
+  controlResultId   String?      @unique
+  controlId         String?
+  detectedAt        DateTime     @default(now())
+  detectedById      String
+  productionLineId  String?
+  machineId         String?
+  productId         String?
+  category          String
+  description       String
+  severity          NCSeverity   @default(MAJEURE)
+  quantityAffected  Decimal?
+  responsibleId     String?
+  dueDate           DateTime?
+  status            NCStatus     @default(OUVERTE)
+  closedAt          DateTime?
+
+  controlResult     ControlResult? @relation(fields: [controlResultId], references: [id])
+  control           Control? @relation(fields: [controlId], references: [id])
+  detectedBy        Employee @relation("NCDetectedBy", fields: [detectedById], references: [id])
+  responsible       Employee? @relation("NCResponsible", fields: [responsibleId], references: [id])
+  productionLine    ProductionLine? @relation(fields: [productionLineId], references: [id])
+  machine           Machine? @relation(fields: [machineId], references: [id])
+  product           Product? @relation(fields: [productId], references: [id])
+
+  actions           Action[]
+  attachments       Attachment[]
+  statusHistory     NonConformityStatusHistory[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([detectedAt])
+  @@index([status])
+  @@index([severity])
+  @@index([productionLineId])
+}
+
+model NonConformityStatusHistory {
+  id              String   @id @default(uuid())
+  nonConformityId String
+  nonConformity   NonConformity @relation(fields: [nonConformityId], references: [id], onDelete: Cascade)
+  fromStatus      NCStatus
+  toStatus        NCStatus
+  changedById     String
+  comment         String?
+  changedAt       DateTime @default(now())
+
+  @@index([nonConformityId])
+}
+
+model Action {
+  id              String         @id @default(uuid())
+  reference       String         @unique
+  originType      String
+  originId        String
+  nonConformityId String?
+  description     String
+  actionType      String         @default("CORRECTIVE")
+  priority        ActionPriority @default(MOYENNE)
+  responsibleId   String
+  createdAt       DateTime       @default(now())
+  dueDate         DateTime
+  completedAt     DateTime?
+  status          ActionStatus   @default(OUVERTE)
+  effectiveness   String?
+  verificationComment String?
+
+  nonConformity   NonConformity? @relation(fields: [nonConformityId], references: [id])
+  responsible     Employee       @relation(fields: [responsibleId], references: [id])
+  attachments     Attachment[]
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([responsibleId])
+}
+
+// ==========================================================
+// PIECES JOINTES (photos, documents)
+// ==========================================================
+
+model Attachment {
+  id                String   @id @default(uuid())
+  ownerType         AttachmentOwnerType
+  fileUrl           String
+  fileType          String   // "PHOTO" | "DOCUMENT"
+  mimeType          String?
+  latitude          Float?
+  longitude         Float?
+  capturedAt        DateTime @default(now())
+  deviceId          String?
+  clientLocalId     String?  @unique
+  syncStatus        SyncStatus @default(SYNCED)
+
+  controlId         String?
+  control           Control? @relation(fields: [controlId], references: [id], onDelete: Cascade)
+
+  controlResultId   String?
+  controlResult     ControlResult? @relation(fields: [controlResultId], references: [id], onDelete: Cascade)
+
+  nonConformityId   String?
+  nonConformity     NonConformity? @relation(fields: [nonConformityId], references: [id], onDelete: Cascade)
+
+  actionId          String?
+  action            Action? @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  createdAt         DateTime @default(now())
+
+  @@index([controlId])
+  @@index([nonConformityId])
+  @@index([actionId])
+}
