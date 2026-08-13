@@ -1,0 +1,155 @@
+name: Build MIBEM QHSE 360 (Android + Windows)
+
+# Tout est géré ici, sans rien générer en local :
+# 1. Job "scaffold" : si flutter_app/android ou flutter_app/windows n'existent
+#    pas encore, les génère avec `flutter create`, applique les correctifs
+#    indispensables (nom de l'app, HTTP en clair autorisé sur Android pour
+#    parler à un backend local), puis committe le résultat dans le dépôt
+#    (commit marqué [skip ci] pour ne pas re-déclencher le workflow en boucle).
+# 2. Jobs "build-android" / "build-windows" : compilent à partir de l'état
+#    du dépôt une fois le scaffold en place (généré à l'instant ou déjà
+#    présent d'un run précédent) et publient les artefacts.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "flutter_app/**"
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "URL de l'API backend à intégrer dans le build (ex. http://192.168.1.50:3000)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-flutter-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    outputs:
+      scaffolded: ${{ steps.check.outputs.exists == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Vérifier si android/ et windows/ existent déjà
+        id: check
+        working-directory: flutter_app
+        run: |
+          if [ -d android ] && [ -d windows ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Générer les dossiers de plateforme (Android + Windows + Web)
+        if: steps.check.outputs.exists == 'false'
+        working-directory: flutter_app
+        run: flutter create . --platforms=android,windows,web --org com.mibem --project-name mibem_qhse_360
+
+      - name: Autoriser le HTTP en clair sur Android (backend local en http://)
+        if: steps.check.outputs.exists == 'false'
+        working-directory: flutter_app
+        run: |
+          sed -i 's/<application/<application\n        android:usesCleartextTraffic="true"/' \
+            android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="mibem_qhse_360"/android:label="MIBEM QHSE 360"/' \
+            android/app/src/main/AndroidManifest.xml
+
+      - name: Renommer l'application Windows
+        if: steps.check.outputs.exists == 'false'
+        working-directory: flutter_app
+        run: |
+          sed -i 's/L"mibem_qhse_360"/L"MIBEM QHSE 360"/' windows/runner/main.cpp
+
+      - name: Committer les dossiers générés
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add flutter_app/android flutter_app/windows flutter_app/web
+          git commit -m "chore(flutter): génération auto android/windows/web [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
+
+  build-android:
+    needs: scaffold
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build APK (release)
+        run: |
+          API_URL="${{ github.event.inputs.api_base_url || vars.API_BASE_URL }}"
+          if [ -n "$API_URL" ]; then
+            flutter build apk --release --dart-define=API_BASE_URL="$API_URL"
+          else
+            flutter build apk --release
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mibem-qhse-360-android
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+  build-windows:
+    needs: scaffold
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build Windows (release)
+        shell: bash
+        run: |
+          API_URL="${{ github.event.inputs.api_base_url || vars.API_BASE_URL }}"
+          if [ -n "$API_URL" ]; then
+            flutter build windows --release --dart-define=API_BASE_URL="$API_URL"
+          else
+            flutter build windows --release
+          fi
+
+      - name: Compresser le build Windows
+        shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath mibem-qhse-360-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mibem-qhse-360-windows
+          path: flutter_app/mibem-qhse-360-windows.zip
+          retention-days: 30
