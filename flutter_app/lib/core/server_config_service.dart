@@ -3,6 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _kServerUrlKey = 'mibem_server_base_url';
 
+// Valeur injectée au moment du build (ex. --dart-define=API_BASE_URL=...
+// dans le workflow GitHub Actions). Sert uniquement de valeur par défaut
+// tant que rien n'est encore enregistré localement — l'utilisateur reste
+// libre de la changer ensuite depuis l'écran de paramètres.
+const _kBuildTimeDefaultUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+
 /// Adresse du backend saisie par l'utilisateur (ou l'admin) au premier
 /// lancement, persistée localement, et modifiable à tout moment depuis
 /// l'écran de paramètres — sans jamais avoir à reconstruire l'application.
@@ -22,6 +28,14 @@ class ServerConfigService extends ChangeNotifier {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     _baseUrl = prefs.getString(_kServerUrlKey);
+    // Rien d'enregistré localement : si le build a été fait avec une adresse
+    // par défaut (--dart-define=API_BASE_URL=...), on la pré-remplit et on
+    // la persiste directement, pour que l'app soit utilisable dès le premier
+    // lancement sans saisie manuelle.
+    if ((_baseUrl == null || _baseUrl!.isEmpty) && _kBuildTimeDefaultUrl.isNotEmpty) {
+      _baseUrl = _kBuildTimeDefaultUrl;
+      await prefs.setString(_kServerUrlKey, _baseUrl!);
+    }
     _loading = false;
     notifyListeners();
   }
