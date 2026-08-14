@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { ActionStatus } from "@prisma/client";
+import { ActionStatus, QualificationStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 
 const SYSTEM_ACTOR = "SYSTEM";
@@ -45,11 +45,30 @@ export async function markOverdueActions() {
   return overdue.length;
 }
 
+/**
+ * V3 Phase 3 : bascule en EXPIREE les compétences dont expiresAt est
+ * dépassée (formations à recycler — SST, travail en hauteur, HACCP...).
+ * Les alertes proactives avant expiration (J-30 etc.) sont prévues pour
+ * la Phase 5 (Alertes) et ne sont pas encore implémentées.
+ */
+export async function markExpiredCompetencies() {
+  const result = await prisma.employeeCompetency.updateMany({
+    where: { expiresAt: { lt: new Date() }, status: { not: QualificationStatus.EXPIREE } },
+    data: { status: QualificationStatus.EXPIREE },
+  });
+  if (result.count > 0) {
+    console.log(`[overdue-job] ${result.count} compétence(s) basculée(s) en EXPIREE`);
+  }
+  return result.count;
+}
+
 export function startOverdueActionsJob() {
   // Toutes les heures, à la minute 0
   cron.schedule("0 * * * *", () => {
     markOverdueActions().catch((err) => console.error("[overdue-job] échec :", err));
+    markExpiredCompetencies().catch((err) => console.error("[overdue-job] échec compétences :", err));
   });
   // Passage immédiat au démarrage pour ne pas attendre la première heure pleine
   markOverdueActions().catch((err) => console.error("[overdue-job] échec initial :", err));
+  markExpiredCompetencies().catch((err) => console.error("[overdue-job] échec initial compétences :", err));
 }

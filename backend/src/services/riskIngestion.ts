@@ -18,6 +18,7 @@ interface CreateRiskInput {
   exposure?: number;
   comment?: string;
   actionDueDate?: string;
+  solutionId?: string;
 }
 
 const DEFAULT_ACTION_DELAY_DAYS = 14;
@@ -101,6 +102,7 @@ export async function ingestRisk(tx: Tx, identifiedById: string, input: CreateRi
         responsibleId: input.ownerId ?? identifiedById,
         dueDate,
         status: ActionStatus.OUVERTE,
+        solutionId: input.solutionId,
         sources: { create: { sourceType: "RISK", sourceId: risk.id } },
         history: {
           create: {
@@ -113,6 +115,10 @@ export async function ingestRisk(tx: Tx, identifiedById: string, input: CreateRi
       },
     });
     autoActionId = action.id;
+
+    if (input.solutionId) {
+      await tx.solution.update({ where: { id: input.solutionId }, data: { usageCount: { increment: 1 } } });
+    }
 
     await tx.risk.update({ where: { id: risk.id }, data: { status: RiskStatus.TRAITEMENT_REQUIS } });
     await tx.riskStatusHistory.create({

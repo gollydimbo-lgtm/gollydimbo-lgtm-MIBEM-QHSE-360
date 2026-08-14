@@ -130,6 +130,8 @@ export async function ingestControl(
         responsibleId: item.responsibleId ?? controllerId,
         dueDate,
         status: ActionStatus.OUVERTE,
+        // V3 Phase 4 : solution éprouvée choisie parmi les suggestions.
+        solutionId: item.solutionId,
         // V3 : trace la source via la table générique en plus du lien direct
         // nonConformityId (conservé pour compatibilité), et initialise
         // l'historique de statut dès la création.
@@ -146,6 +148,10 @@ export async function ingestControl(
         },
       },
     });
+
+    if (item.solutionId) {
+      await tx.solution.update({ where: { id: item.solutionId }, data: { usageCount: { increment: 1 } } });
+    }
   }
 
   const full = await tx.control.findUniqueOrThrow({ where: { id: control.id }, include: fullControlInclude });

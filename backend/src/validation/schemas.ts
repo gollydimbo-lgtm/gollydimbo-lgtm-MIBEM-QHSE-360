@@ -20,6 +20,7 @@ const controlResultInputSchema = z.object({
   responsibleId: z.string().uuid().optional(),
   dueDate: z.string().datetime().optional(),
   action: z.string().optional(),
+  solutionId: z.string().uuid().optional(),
 });
 
 export const createControlSchema = z.object({
@@ -61,7 +62,7 @@ export const actionStatusTransitionSchema = z.object({
 });
 
 export const attachmentMetaSchema = z.object({
-  ownerType: z.enum(["CONTROL", "CONTROL_RESULT", "NON_CONFORMITY", "ACTION", "RISK", "SAFETY_EVENT"]),
+  ownerType: z.enum(["CONTROL", "CONTROL_RESULT", "NON_CONFORMITY", "ACTION", "RISK", "SAFETY_EVENT", "AUDIT", "INSPECTION", "DOCUMENT"]),
   ownerId: z.string().uuid(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
@@ -88,9 +89,8 @@ export const createRiskSchema = z.object({
   exposure: z.number().int().min(1).max(5).optional(),
   comment: z.string().optional(),
   actionDueDate: z.string().datetime().optional(),
-});
-
-export const riskStatusTransitionSchema = z.object({
+  solutionId: z.string().uuid().optional(),
+}); = z.object({
   toStatus: z.enum(["IDENTIFIE", "EVALUE", "TRAITEMENT_REQUIS", "TRAITEMENT_EN_COURS", "ACCEPTE", "MAITRISE", "CLOTURE"]),
   comment: z.string().optional(),
 });
@@ -125,6 +125,7 @@ export const createSafetyEventSchema = z.object({
   injuryType: z.enum(["AUCUNE", "PREMIERS_SECOURS", "SOINS_MEDICAUX", "ARRET_TRAVAIL", "INVALIDITE_PERMANENTE", "DECES"]).optional(),
   lostWorkDays: z.number().int().min(0).optional(),
   actionDueDate: z.string().datetime().optional(),
+  solutionId: z.string().uuid().optional(),
 });
 
 export const safetyEventStatusTransitionSchema = z.object({
@@ -154,4 +155,177 @@ export const createSafetyEventCauseSchema = z.object({
   description: z.string().min(1),
   isRootCause: z.boolean().optional(),
   parentCauseId: z.string().uuid().optional(),
+});
+
+// ---- V3 Phase 3 : Audits & Inspections ----
+
+export const createAuditSchema = z.object({
+  programId: z.string().uuid().optional(),
+  templateId: z.string().uuid().optional(),
+  type: z.enum(["INTERNE", "FOURNISSEUR", "REGLEMENTAIRE", "CERTIFICATION"]),
+  title: z.string().min(1),
+  scope: z.string().optional(),
+  siteId: z.string().uuid().optional(),
+  plannedDate: z.string().datetime(),
+});
+
+export const auditStatusTransitionSchema = z.object({
+  toStatus: z.enum(["PLANIFIE", "EN_COURS", "TERMINE", "ANNULE"]),
+});
+
+export const submitAuditChecklistItemSchema = z.object({
+  questionId: z.string().uuid(),
+  result: z.enum(["CONFORME", "OBSERVATION", "NC_MINEURE", "NC_MAJEURE"]),
+  comment: z.string().optional(),
+});
+
+export const createAuditFindingSchema = z.object({
+  checklistItemId: z.string().uuid().optional(),
+  type: z.enum(["CONFORME", "OBSERVATION", "NC_MINEURE", "NC_MAJEURE"]),
+  description: z.string().min(1),
+  responsibleId: z.string().uuid().optional(),
+  dueDate: z.string().datetime().optional(),
+});
+
+const inspectionResultInputSchema = z.object({
+  inspectionPointId: z.string().uuid(),
+  result: z.enum(["CONFORME", "OBSERVATION", "NON_CONFORME", "NON_APPLICABLE"]),
+  observation: z.string().optional(),
+});
+
+export const createInspectionSchema = z.object({
+  templateId: z.string().uuid(),
+  siteId: z.string().uuid().optional(),
+  productionLineId: z.string().uuid().optional(),
+  machineId: z.string().uuid().optional(),
+  comments: z.string().optional(),
+  results: z.array(inspectionResultInputSchema).min(1),
+});
+
+// ---- V3 Phase 3 : Formation & Compétences ----
+
+export const createTrainingSchema = z.object({
+  code: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  durationHours: z.number().positive().optional(),
+  validityMonths: z.number().int().positive().optional(),
+});
+
+export const createTrainingSessionSchema = z.object({
+  sessionDate: z.string().datetime(),
+  location: z.string().optional(),
+  trainerName: z.string().optional(),
+});
+
+export const recordAttendanceSchema = z.object({
+  employeeId: z.string().uuid(),
+  attended: z.boolean().optional(),
+  evaluationScore: z.number().min(0).max(20).optional(),
+  evaluationComment: z.string().optional(),
+});
+
+// ---- V3 Phase 3 : EPI ----
+
+export const createPPEItemSchema = z.object({
+  categoryId: z.string().uuid(),
+  name: z.string().min(1),
+  reference: z.string().optional(),
+  defaultLifespanMonths: z.number().int().positive().optional(),
+});
+
+export const createPPEAssignmentSchema = z.object({
+  itemId: z.string().uuid(),
+  employeeId: z.string().uuid(),
+  expectedReplacementAt: z.string().datetime().optional(),
+});
+
+export const createPPEInspectionSchema = z.object({
+  result: z.enum(["CONFORME", "OBSERVATION", "NON_CONFORME", "NON_APPLICABLE"]),
+  comment: z.string().optional(),
+});
+
+export const updatePPEStockSchema = z.object({
+  itemId: z.string().uuid(),
+  siteId: z.string().uuid().optional(),
+  quantity: z.number().int().min(0),
+});
+
+// ---- V3 Phase 3 : GED ----
+
+export const createDocumentSchema = z.object({
+  code: z.string().min(1),
+  title: z.string().min(1),
+  category: z.string().optional(),
+  fileUrl: z.string().min(1),
+});
+
+export const documentStatusTransitionSchema = z.object({
+  toStatus: z.enum(["BROUILLON", "VALIDATION", "APPROBATION", "PUBLIE", "REVISION", "ARCHIVE"]),
+});
+
+export const createDocumentVersionSchema = z.object({
+  fileUrl: z.string().min(1),
+  changeNote: z.string().optional(),
+});
+
+export const decideDocumentApprovalSchema = z.object({
+  approved: z.boolean(),
+  comment: z.string().optional(),
+});
+
+export const distributeDocumentSchema = z.object({
+  employeeIds: z.array(z.string().uuid()).min(1),
+});
+
+// ---- V3 Phase 4 : Bibliothèque de solutions ----
+
+export const createSolutionSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  sourceType: z.enum([
+    "NON_CONFORMITY", "RISK", "HAZARD_REPORT", "SAFETY_EVENT",
+    "INSPECTION", "AUDIT", "ENVIRONMENTAL_EVENT", "MANUAL",
+  ]),
+  category: z.string().min(1),
+  keywords: z.string().optional(),
+});
+
+export const updateSolutionSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  keywords: z.string().optional(),
+  isValidated: z.boolean().optional(),
+});
+
+// ---- V3 Phase 4 : Quarts d'heure sécurité ----
+
+export const createSafetyBriefingSchema = z.object({
+  title: z.string().min(1),
+  scheduledDate: z.string().datetime(),
+  siteId: z.string().uuid().optional(),
+  productionLineId: z.string().uuid().optional(),
+  topics: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        content: z.string().min(1),
+        sourceType: z
+          .enum(["NON_CONFORMITY", "RISK", "HAZARD_REPORT", "SAFETY_EVENT", "INSPECTION", "AUDIT", "ENVIRONMENTAL_EVENT", "MANUAL"])
+          .optional(),
+        sourceId: z.string().uuid().optional(),
+      })
+    )
+    .min(1),
+});
+
+export const briefingStatusTransitionSchema = z.object({
+  toStatus: z.enum(["PLANIFIE", "REALISE", "ANNULE"]),
+  summary: z.string().optional(),
+});
+
+export const recordBriefingAttendanceSchema = z.object({
+  employeeId: z.string().uuid(),
+  comment: z.string().optional(),
 });

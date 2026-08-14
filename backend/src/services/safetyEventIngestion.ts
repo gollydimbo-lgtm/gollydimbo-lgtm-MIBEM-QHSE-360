@@ -19,6 +19,7 @@ interface CreateSafetyEventInput {
   injuryType?: string;
   lostWorkDays?: number;
   actionDueDate?: string;
+  solutionId?: string;
 }
 
 const DEFAULT_ACTION_DELAY_DAYS = 7;
@@ -98,6 +99,7 @@ export async function ingestSafetyEvent(tx: Tx, reportedById: string, input: Cre
         responsibleId: reportedById,
         dueDate,
         status: ActionStatus.OUVERTE,
+        solutionId: input.solutionId,
         sources: { create: { sourceType: "SAFETY_EVENT", sourceId: event.id } },
         history: {
           create: {
@@ -110,6 +112,10 @@ export async function ingestSafetyEvent(tx: Tx, reportedById: string, input: Cre
       },
     });
     autoActionId = action.id;
+
+    if (input.solutionId) {
+      await tx.solution.update({ where: { id: input.solutionId }, data: { usageCount: { increment: 1 } } });
+    }
   }
 
   const full = await tx.safetyEvent.findUniqueOrThrow({

@@ -59,5 +59,21 @@ export const swaggerDocument = {
     "/api/dashboard/overview": { get: { responses: { "200": { description: "Indicateurs globaux" } } } },
     "/api/dashboard/pareto": { get: { responses: { "200": { description: "Pareto des NC par catégorie" } } } },
     "/api/dashboard/trend": { get: { responses: { "200": { description: "Tendance de conformité" } } } },
+    "/api/solutions/suggest": { get: { responses: { "200": { description: "Solutions suggérées (usage + efficacité)" } } } },
+    "/api/solutions": {
+      get: { responses: { "200": { description: "Liste des solutions" } } },
+      post: { responses: { "201": { description: "Solution créée manuellement" } } },
+    },
+    "/api/solutions/from-action/{actionId}": {
+      post: { responses: { "201": { description: "Action clôturée efficace promue en solution" }, "409": { description: "Condition non remplie" } } },
+    },
+    "/api/safety-briefings/suggest-topics": {
+      get: { responses: { "200": { description: "Sujets suggérés à partir des incidents/risques récents" } } },
+    },
+    "/api/safety-briefings": {
+      get: { responses: { "200": { description: "Liste des quarts d'heure sécurité" } } },
+      post: { responses: { "201": { description: "Quart d'heure créé avec ses sujets" } } },
+    },
+    "/api/safety-briefings/{id}/attendance": { post: { responses: { "201": { description: "Émargement enregistré" } } } },
   },
 };

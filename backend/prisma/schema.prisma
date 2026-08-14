@@ -77,6 +77,9 @@ enum AttachmentOwnerType {
   ACTION
   RISK
   SAFETY_EVENT
+  AUDIT
+  INSPECTION
+  DOCUMENT
 }
 
 // ---- V3 : moteur central des actions (additif, non destructif) ----
@@ -270,6 +273,24 @@ model Employee {
   witnessedSafetyEvents     SafetyEventWitness[]  @relation("SafetyEventWitnesses")
   safetyEventInjuries       SafetyEventInjury[]   @relation("SafetyEventInjuries")
 
+  // ---- V3 Phase 3 : Audits, Formations, EPI, GED ----
+  auditsLed                Audit[]
+  inspectionsPerformed     Inspection[]
+  trainingAttendances      TrainingAttendance[]
+  competencies             EmployeeCompetency[]
+  ppeAssignments           PPEAssignment[]
+  ppeInspectionsPerformed  PPEInspection[]
+  documentsOwned           Document[]
+  documentVersionsCreated  DocumentVersion[]
+  documentApprovals        DocumentApproval[]
+  documentDistributions    DocumentDistribution[]
+  documentReviews          DocumentReview[]
+
+  // ---- V3 Phase 4 : Solutions & Quarts d'heure sécurité ----
+  solutionsCreated          Solution[]
+  safetyBriefingsPresented  SafetyBriefing[]
+  safetyBriefingAttendances SafetyBriefingAttendance[]
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
@@ -283,6 +304,10 @@ model Site {
   shifts            Shift[]
   risks             Risk[]
   safetyEvents      SafetyEvent[]
+  audits            Audit[]
+  inspections       Inspection[]
+  ppeStocks         PPEStock[]
+  safetyBriefings   SafetyBriefing[]
 }
 
 model ProductionLine {
@@ -298,6 +323,8 @@ model ProductionLine {
   templateLinks     ControlTemplateLine[]
   risks             Risk[]
   safetyEvents      SafetyEvent[]
+  inspections       Inspection[]
+  safetyBriefings   SafetyBriefing[]
 }
 
 model Machine {
@@ -311,6 +338,7 @@ model Machine {
   nonConformities   NonConformity[]
   risks             Risk[]
   safetyEvents      SafetyEvent[]
+  inspections       Inspection[]
 }
 
 model Product {
@@ -550,9 +578,15 @@ model Action {
   verifiedAt           DateTime?
   effectivenessStatus  EffectivenessStatus @default(NON_EVALUEE)
 
+  // ---- V3 Phase 4 : bibliothèque de solutions ----
+  // Solution éprouvée à l'origine de cette action, le cas échéant (choisie
+  // parmi les suggestions automatiques ou saisie manuellement puis promue).
+  solutionId           String?
+
   nonConformity   NonConformity? @relation(fields: [nonConformityId], references: [id])
   responsible     Employee       @relation("ActionResponsible", fields: [responsibleId], references: [id])
   verifiedBy      Employee?      @relation("ActionVerifiedBy", fields: [verifiedById], references: [id])
+  solution        Solution?      @relation(fields: [solutionId], references: [id])
   attachments     Attachment[]
 
   // Sources multiples (V3) : en plus du lien direct nonConformityId conservé
@@ -635,6 +669,16 @@ model Attachment {
   safetyEventId     String?
   safetyEvent       SafetyEvent? @relation(fields: [safetyEventId], references: [id], onDelete: Cascade)
 
+  // ---- V3 Phase 3 ----
+  auditId           String?
+  audit             Audit? @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  inspectionId      String?
+  inspection        Inspection? @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  documentId        String?
+  document          Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
   createdAt         DateTime @default(now())
 
   @@index([controlId])
@@ -642,6 +686,9 @@ model Attachment {
   @@index([actionId])
   @@index([riskId])
   @@index([safetyEventId])
+  @@index([auditId])
+  @@index([inspectionId])
+  @@index([documentId])
 }
 
 // ==========================================================
@@ -881,4 +928,532 @@ model SafetyEventStatusHistory {
   safetyEvent   SafetyEvent @relation(fields: [safetyEventId], references: [id], onDelete: Cascade)
 
   @@index([safetyEventId])
+}
+
+// ==========================================================
+// V3 PHASE 3 : AUDITS & INSPECTIONS
+// ==========================================================
+
+enum AuditType {
+  INTERNE
+  FOURNISSEUR
+  REGLEMENTAIRE
+  CERTIFICATION
+}
+
+enum AuditStatus {
+  PLANIFIE
+  EN_COURS
+  TERMINE
+  ANNULE
+}
+
+enum FindingType {
+  CONFORME
+  OBSERVATION
+  NC_MINEURE
+  NC_MAJEURE
+}
+
+model AuditProgram {
+  id          String   @id @default(uuid())
+  year        Int
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  audits      Audit[]
+}
+
+model AuditChecklistTemplate {
+  id        String @id @default(uuid())
+  code      String @unique
+  name      String
+  isActive  Boolean @default(true)
+
+  questions AuditQuestion[]
+  audits    Audit[]
+}
+
+model AuditQuestion {
+  id          String @id @default(uuid())
+  templateId  String
+  code        String
+  text        String
+  sequence    Int
+
+  template        AuditChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  checklistItems  AuditChecklistItem[]
+}
+
+model Audit {
+  id           String      @id @default(uuid())
+  reference    String      @unique
+  programId    String?
+  templateId   String?
+  type         AuditType
+  status       AuditStatus @default(PLANIFIE)
+  title        String
+  scope        String?
+  siteId       String?
+  auditorId    String
+  plannedDate  DateTime
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  program      AuditProgram? @relation(fields: [programId], references: [id])
+  template     AuditChecklistTemplate? @relation(fields: [templateId], references: [id])
+  site         Site? @relation(fields: [siteId], references: [id])
+  auditor      Employee @relation(fields: [auditorId], references: [id])
+
+  checklistItems AuditChecklistItem[]
+  findings       AuditFinding[]
+  attachments    Attachment[]
+
+  @@index([status])
+  @@index([siteId])
+}
+
+model AuditChecklistItem {
+  id          String      @id @default(uuid())
+  auditId     String
+  questionId  String
+  result      FindingType
+  comment     String?
+  createdAt   DateTime    @default(now())
+
+  audit       Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  question    AuditQuestion @relation(fields: [questionId], references: [id])
+  findings    AuditFinding[]
+
+  @@index([auditId])
+}
+
+// Une NC_MAJEURE déclenche automatiquement une action (voir services/auditIngestion.ts)
+model AuditFinding {
+  id              String       @id @default(uuid())
+  auditId         String
+  checklistItemId String?
+  type            FindingType
+  description     String
+  createdAt       DateTime     @default(now())
+
+  audit           Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  checklistItem   AuditChecklistItem? @relation(fields: [checklistItemId], references: [id])
+
+  @@index([auditId])
+}
+
+// Inspections périodiques (machine, incendie, EPI, environnement...) —
+// réutilise ControlResultValue (déjà défini) plutôt que dupliquer un enum.
+model InspectionTemplate {
+  id        String @id @default(uuid())
+  code      String @unique
+  name      String
+  category  String
+  isActive  Boolean @default(true)
+
+  points      InspectionPoint[]
+  inspections Inspection[]
+}
+
+model InspectionPoint {
+  id          String @id @default(uuid())
+  templateId  String
+  description String
+  sequence    Int
+  isCritical  Boolean @default(false)
+
+  template    InspectionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  results     InspectionResult[]
+}
+
+model Inspection {
+  id                String   @id @default(uuid())
+  reference         String   @unique
+  templateId        String
+  inspectorId       String
+  siteId            String?
+  productionLineId  String?
+  machineId         String?
+  inspectionDate    DateTime @default(now())
+  comments          String?
+  createdAt         DateTime @default(now())
+
+  template          InspectionTemplate @relation(fields: [templateId], references: [id])
+  inspector         Employee @relation(fields: [inspectorId], references: [id])
+  site              Site? @relation(fields: [siteId], references: [id])
+  productionLine    ProductionLine? @relation(fields: [productionLineId], references: [id])
+  machine           Machine? @relation(fields: [machineId], references: [id])
+
+  results           InspectionResult[]
+  attachments       Attachment[]
+
+  @@index([inspectionDate])
+  @@index([siteId])
+}
+
+model InspectionResult {
+  id                  String @id @default(uuid())
+  inspectionId        String
+  inspectionPointId   String
+  result              ControlResultValue
+  observation         String?
+
+  inspection          Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionPoint     InspectionPoint @relation(fields: [inspectionPointId], references: [id])
+
+  @@index([inspectionId])
+}
+
+// ==========================================================
+// V3 PHASE 3 : FORMATION & COMPÉTENCES
+// ==========================================================
+
+enum TrainingSessionStatus {
+  PLANIFIEE
+  REALISEE
+  ANNULEE
+}
+
+enum QualificationStatus {
+  VALIDE
+  EXPIREE
+  A_RENOUVELER
+}
+
+model Training {
+  id              String  @id @default(uuid())
+  code            String  @unique
+  title           String
+  description     String?
+  category        String?
+  durationHours   Float?
+  // Durée de validité avant qu'un renouvellement soit nécessaire ; utilisée
+  // pour calculer automatiquement l'expiration d'une compétence obtenue.
+  validityMonths  Int?
+  createdAt       DateTime @default(now())
+
+  sessions        TrainingSession[]
+  competencies    EmployeeCompetency[]
+}
+
+model TrainingSession {
+  id           String                @id @default(uuid())
+  trainingId   String
+  status       TrainingSessionStatus @default(PLANIFIEE)
+  sessionDate  DateTime
+  location     String?
+  trainerName  String?
+  createdAt    DateTime              @default(now())
+
+  training     Training @relation(fields: [trainingId], references: [id])
+  attendances  TrainingAttendance[]
+
+  @@index([trainingId])
+}
+
+// Une présence validée crée/renouvelle automatiquement l'EmployeeCompetency
+// correspondante (voir services/trainingIngestion.ts).
+model TrainingAttendance {
+  id                 String   @id @default(uuid())
+  sessionId          String
+  employeeId         String
+  attended           Boolean  @default(true)
+  evaluationScore    Float?
+  evaluationComment  String?
+  certificateUrl     String?
+  createdAt          DateTime @default(now())
+
+  session            TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  employee           Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([sessionId])
+  @@index([employeeId])
+}
+
+model EmployeeCompetency {
+  id          String              @id @default(uuid())
+  employeeId  String
+  trainingId  String
+  obtainedAt  DateTime
+  expiresAt   DateTime?
+  status      QualificationStatus @default(VALIDE)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  training    Training @relation(fields: [trainingId], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+// ==========================================================
+// V3 PHASE 3 : EPI
+// ==========================================================
+
+enum PPEAssignmentStatus {
+  ACTIF
+  RETOURNE
+  PERDU
+}
+
+model PPECategory {
+  id    String @id @default(uuid())
+  code  String @unique
+  name  String
+
+  items PPEItem[]
+}
+
+model PPEItem {
+  id                     String  @id @default(uuid())
+  categoryId             String
+  name                   String
+  reference              String?
+  defaultLifespanMonths  Int?
+
+  category               PPECategory @relation(fields: [categoryId], references: [id])
+  stock                  PPEStock[]
+  assignments            PPEAssignment[]
+}
+
+model PPEStock {
+  id        String   @id @default(uuid())
+  itemId    String
+  siteId    String?
+  quantity  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  item      PPEItem @relation(fields: [itemId], references: [id])
+  site      Site? @relation(fields: [siteId], references: [id])
+
+  @@index([itemId])
+}
+
+model PPEAssignment {
+  id                     String              @id @default(uuid())
+  itemId                 String
+  employeeId             String
+  assignedAt             DateTime            @default(now())
+  expectedReplacementAt  DateTime?
+  status                 PPEAssignmentStatus @default(ACTIF)
+  returnedAt             DateTime?
+
+  item                   PPEItem @relation(fields: [itemId], references: [id])
+  employee               Employee @relation(fields: [employeeId], references: [id])
+  inspections            PPEInspection[]
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model PPEInspection {
+  id            String   @id @default(uuid())
+  assignmentId  String
+  inspectedById String?
+  inspectedAt   DateTime @default(now())
+  result        ControlResultValue
+  comment       String?
+
+  assignment    PPEAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  inspectedBy   Employee? @relation(fields: [inspectedById], references: [id])
+
+  @@index([assignmentId])
+}
+
+// ==========================================================
+// V3 PHASE 3 : GESTION DOCUMENTAIRE (GED)
+// ==========================================================
+
+enum DocumentStatus {
+  BROUILLON
+  VALIDATION
+  APPROBATION
+  PUBLIE
+  REVISION
+  ARCHIVE
+}
+
+model Document {
+  id        String         @id @default(uuid())
+  code      String         @unique
+  title     String
+  category  String?
+  ownerId   String
+  status    DocumentStatus @default(BROUILLON)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  owner     Employee @relation(fields: [ownerId], references: [id])
+  versions  DocumentVersion[]
+  reviews   DocumentReview[]
+  attachments Attachment[]
+
+  @@index([status])
+}
+
+model DocumentVersion {
+  id             String   @id @default(uuid())
+  documentId     String
+  versionNumber  Int
+  fileUrl        String
+  changeNote     String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  document       Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdBy      Employee @relation(fields: [createdById], references: [id])
+
+  approvals      DocumentApproval[]
+  distributions  DocumentDistribution[]
+
+  @@unique([documentId, versionNumber])
+}
+
+model DocumentApproval {
+  id          String    @id @default(uuid())
+  versionId   String
+  approverId  String
+  approved    Boolean?
+  comment     String?
+  decidedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  version     DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  approver    Employee @relation(fields: [approverId], references: [id])
+
+  @@index([versionId])
+}
+
+// La prise de connaissance ("Acknowledgement") est fusionnée ici via
+// acknowledgedAt plutôt qu'une table séparée — simplification volontaire.
+model DocumentDistribution {
+  id              String    @id @default(uuid())
+  versionId       String
+  employeeId      String
+  distributedAt   DateTime  @default(now())
+  acknowledgedAt  DateTime?
+
+  version         DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  employee        Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([versionId])
+  @@index([employeeId])
+}
+
+model DocumentReview {
+  id            String    @id @default(uuid())
+  documentId    String
+  reviewDate    DateTime
+  reviewedById  String?
+  comment       String?
+  createdAt     DateTime  @default(now())
+
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewedBy    Employee? @relation(fields: [reviewedById], references: [id])
+
+  @@index([documentId])
+}
+
+// ==========================================================
+// V3 PHASE 4 : BIBLIOTHÈQUE DE SOLUTIONS
+// (suggestions automatiques de résolution — approche par bibliothèque
+//  de solutions éprouvées, pas par appel à une IA externe à chaque fois :
+//  plus fiable, traçable et conforme pour un usage réglementaire ISO.
+//  La bibliothèque s'enrichit à chaque action clôturée jugée efficace.)
+// ==========================================================
+
+model Solution {
+  id             String           @id @default(uuid())
+  title          String
+  description    String
+  // Réutilise ActionSourceType : NON_CONFORMITY / RISK / SAFETY_EVENT / ...
+  sourceType     ActionSourceType
+  // Catégorie libre pour permettre le rapprochement avec NonConformity.category,
+  // Risk.category ou SafetyEvent.type sans dupliquer ces enums.
+  category       String
+  keywords       String?
+  usageCount     Int              @default(0)
+  successCount   Int              @default(0)
+  isValidated    Boolean          @default(false)
+  createdById    String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  createdBy      Employee @relation(fields: [createdById], references: [id])
+  actions        Action[]
+
+  @@index([sourceType, category])
+  @@index([usageCount])
+}
+
+// ==========================================================
+// V3 PHASE 4 : QUARTS D'HEURE SÉCURITÉ
+// Sujets suggérés automatiquement à partir des événements sécurité,
+// risques et non-conformités récents (voir services/briefingSuggestion.ts).
+// ==========================================================
+
+enum SafetyBriefingStatus {
+  PLANIFIE
+  REALISE
+  ANNULE
+}
+
+model SafetyBriefing {
+  id                String               @id @default(uuid())
+  reference         String               @unique
+  title             String
+  status            SafetyBriefingStatus @default(PLANIFIE)
+  scheduledDate     DateTime
+  siteId            String?
+  productionLineId  String?
+  presenterId       String
+  summary           String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  site              Site? @relation(fields: [siteId], references: [id])
+  productionLine    ProductionLine? @relation(fields: [productionLineId], references: [id])
+  presenter         Employee @relation(fields: [presenterId], references: [id])
+
+  topics            SafetyBriefingTopic[]
+  attendances       SafetyBriefingAttendance[]
+
+  @@index([scheduledDate])
+  @@index([siteId])
+}
+
+model SafetyBriefingTopic {
+  id           String            @id @default(uuid())
+  briefingId   String
+  title        String
+  content      String
+  // Origine du sujet : reprend ActionSourceType (SAFETY_EVENT / RISK /
+  // NON_CONFORMITY / MANUAL...) pour tracer d'où vient chaque sujet suggéré.
+  sourceType   ActionSourceType  @default(MANUAL)
+  sourceId     String?
+  sequence     Int
+
+  briefing     SafetyBriefing @relation(fields: [briefingId], references: [id], onDelete: Cascade)
+
+  @@index([briefingId])
+}
+
+model SafetyBriefingAttendance {
+  id          String    @id @default(uuid())
+  briefingId  String
+  employeeId  String
+  signedAt    DateTime?
+  comment     String?
+  createdAt   DateTime  @default(now())
+
+  briefing    SafetyBriefing @relation(fields: [briefingId], references: [id], onDelete: Cascade)
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([briefingId])
+  @@unique([briefingId, employeeId])
 }
