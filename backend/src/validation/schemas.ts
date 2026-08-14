@@ -90,7 +90,9 @@ export const createRiskSchema = z.object({
   comment: z.string().optional(),
   actionDueDate: z.string().datetime().optional(),
   solutionId: z.string().uuid().optional(),
-}); = z.object({
+});
+
+export const riskStatusTransitionSchema = z.object({
   toStatus: z.enum(["IDENTIFIE", "EVALUE", "TRAITEMENT_REQUIS", "TRAITEMENT_EN_COURS", "ACCEPTE", "MAITRISE", "CLOTURE"]),
   comment: z.string().optional(),
 });
