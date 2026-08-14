@@ -1,12 +1,15 @@
 import { Router } from "express";
-import { ActionStatus, ControlResultValue, NCSeverity, NCStatus } from "@prisma/client";
+import { ActionStatus, ControlResultValue, NCSeverity, NCStatus, RiskLevel, RiskStatus, SeverityLevel } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 
 export const dashboardRouter = Router();
 
 dashboardRouter.get("/overview", async (_req, res) => {
   const now = new Date();
-  const [controls, results, nc, criticalNc, openNc, actions, overdueActions, pendingSync] = await Promise.all([
+  const [
+    controls, results, nc, criticalNc, openNc, actions, overdueActions, pendingSync,
+    openRisks, criticalRisks, openSafetyEvents, severeSafetyEvents,
+  ] = await Promise.all([
     prisma.control.count(),
     prisma.controlResult.count(),
     prisma.nonConformity.count(),
@@ -15,6 +18,13 @@ dashboardRouter.get("/overview", async (_req, res) => {
     prisma.action.count(),
     prisma.action.count({ where: { status: ActionStatus.EN_RETARD } }),
     prisma.control.count({ where: { syncStatus: "PENDING" } }),
+    // ---- V3 Phase 2 ----
+    prisma.risk.count({ where: { status: { not: RiskStatus.CLOTURE } } }),
+    prisma.risk.count({ where: { status: { not: RiskStatus.CLOTURE }, initialLevel: RiskLevel.CRITIQUE } }),
+    prisma.safetyEvent.count({ where: { status: { notIn: ["CLOTURE", "REJETE"] } } }),
+    prisma.safetyEvent.count({
+      where: { status: { notIn: ["CLOTURE", "REJETE"] }, severity: { in: [SeverityLevel.MAJEURE, SeverityLevel.CATASTROPHIQUE] } },
+    }),
   ]);
 
   const conformes = await prisma.controlResult.count({ where: { result: ControlResultValue.CONFORME } });
@@ -37,6 +47,11 @@ dashboardRouter.get("/overview", async (_req, res) => {
     pendingSync,
     complianceRate,
     nonConformitiesByLine: byLine,
+    // ---- V3 Phase 2 ----
+    openRisks,
+    criticalRisks,
+    openSafetyEvents,
+    severeSafetyEvents,
   });
 });
 

@@ -75,6 +75,140 @@ enum AttachmentOwnerType {
   CONTROL_RESULT
   NON_CONFORMITY
   ACTION
+  RISK
+  SAFETY_EVENT
+}
+
+// ---- V3 : moteur central des actions (additif, non destructif) ----
+
+// Type de l'élément qui a déclenché la création d'une action. NON_CONFORMITY
+// est le seul type utilisé aujourd'hui ; les autres sont prévus pour les
+// prochaines phases (Risques, Sécurité, Audits...) sans qu'aucune migration
+// supplémentaire ne soit nécessaire à ce moment-là.
+enum ActionSourceType {
+  NON_CONFORMITY
+  RISK
+  HAZARD_REPORT
+  SAFETY_EVENT
+  INSPECTION
+  AUDIT
+  ENVIRONMENTAL_EVENT
+  MANUAL
+}
+
+enum EffectivenessStatus {
+  NON_EVALUEE
+  EFFICACE
+  PARTIELLEMENT_EFFICACE
+  INEFFICACE
+}
+
+// ---- V3 Phase 2 : Risques ----
+
+enum RiskCategory {
+  SECURITE
+  SANTE
+  QUALITE
+  ENVIRONNEMENT
+  SECURITE_ALIMENTAIRE
+  OPERATIONNEL
+  INCENDIE
+  CHIMIQUE
+  ELECTRIQUE
+  MECANIQUE
+  ERGONOMIQUE
+  AUTRE
+}
+
+enum RiskStatus {
+  IDENTIFIE
+  EVALUE
+  TRAITEMENT_REQUIS
+  TRAITEMENT_EN_COURS
+  ACCEPTE
+  MAITRISE
+  CLOTURE
+}
+
+enum RiskLevel {
+  FAIBLE
+  MODERE
+  ELEVE
+  CRITIQUE
+}
+
+enum RiskControlType {
+  ELIMINATION
+  SUBSTITUTION
+  INGENIERIE
+  ADMINISTRATIF
+  EPI
+  SURVEILLANCE
+}
+
+// ---- V3 Phase 2 : Événements Sécurité (situations dangereuses, incidents,
+// presqu'accidents, accidents) regroupés dans un modèle central unique
+// plutôt que 4 tables quasi identiques ----
+
+enum SafetyEventType {
+  SITUATION_DANGEREUSE
+  CONDITION_DANGEREUSE
+  ACTE_DANGEREUX
+  PRESQU_ACCIDENT
+  INCIDENT
+  ACCIDENT
+}
+
+enum SafetyEventStatus {
+  SIGNALE
+  EN_EXAMEN
+  EN_INVESTIGATION
+  ACTION_REQUISE
+  RESOLU
+  CLOTURE
+  REJETE
+}
+
+enum SeverityLevel {
+  NEGLIGEABLE
+  MINEURE
+  MODEREE
+  MAJEURE
+  CATASTROPHIQUE
+}
+
+enum ProbabilityLevel {
+  RARE
+  PEU_PROBABLE
+  POSSIBLE
+  PROBABLE
+  QUASI_CERTAIN
+}
+
+enum InvestigationStatus {
+  NON_REQUISE
+  OUVERTE
+  EN_COURS
+  TERMINEE
+}
+
+enum InjuryType {
+  AUCUNE
+  PREMIERS_SECOURS
+  SOINS_MEDICAUX
+  ARRET_TRAVAIL
+  INVALIDITE_PERMANENTE
+  DECES
+}
+
+enum CauseCategory {
+  HUMAIN
+  MACHINE
+  METHODE
+  MATERIEL
+  ENVIRONNEMENT
+  MANAGEMENT
+  AUTRE
 }
 
 // ==========================================================
@@ -124,7 +258,17 @@ model Employee {
   controls          Control[]
   detectedNCs       NonConformity[] @relation("NCDetectedBy")
   responsibleNCs    NonConformity[] @relation("NCResponsible")
-  actions           Action[]
+  actions           Action[] @relation("ActionResponsible")
+  verifiedActions   Action[] @relation("ActionVerifiedBy")
+
+  // ---- V3 Phase 2 : Risques & Sécurité ----
+  identifiedRisks           Risk[]               @relation("RiskIdentifiedBy")
+  ownedRisks                Risk[]               @relation("RiskOwner")
+  riskAssessments           RiskAssessment[]     @relation("RiskAssessmentBy")
+  reportedSafetyEvents      SafetyEvent[]        @relation("SafetyEventReportedBy")
+  investigatedSafetyEvents  SafetyEvent[]        @relation("SafetyEventInvestigatedBy")
+  witnessedSafetyEvents     SafetyEventWitness[]  @relation("SafetyEventWitnesses")
+  safetyEventInjuries       SafetyEventInjury[]   @relation("SafetyEventInjuries")
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -137,6 +281,8 @@ model Site {
 
   productionLines   ProductionLine[]
   shifts            Shift[]
+  risks             Risk[]
+  safetyEvents      SafetyEvent[]
 }
 
 model ProductionLine {
@@ -150,6 +296,8 @@ model ProductionLine {
   controls          Control[]
   nonConformities   NonConformity[]
   templateLinks     ControlTemplateLine[]
+  risks             Risk[]
+  safetyEvents      SafetyEvent[]
 }
 
 model Machine {
@@ -161,6 +309,8 @@ model Machine {
 
   controls          Control[]
   nonConformities   NonConformity[]
+  risks             Risk[]
+  safetyEvents      SafetyEvent[]
 }
 
 model Product {
@@ -391,13 +541,62 @@ model Action {
   effectiveness   String?
   verificationComment String?
 
+  // ---- Champs V3 (additifs) ----
+  // Titre court optionnel : le code existant continue d'utiliser
+  // `description` comme aujourd'hui ; `title` est disponible pour les
+  // futurs écrans qui voudront un intitulé court + une description longue.
+  title                String?
+  verifiedById         String?
+  verifiedAt           DateTime?
+  effectivenessStatus  EffectivenessStatus @default(NON_EVALUEE)
+
   nonConformity   NonConformity? @relation(fields: [nonConformityId], references: [id])
-  responsible     Employee       @relation(fields: [responsibleId], references: [id])
+  responsible     Employee       @relation("ActionResponsible", fields: [responsibleId], references: [id])
+  verifiedBy      Employee?      @relation("ActionVerifiedBy", fields: [verifiedById], references: [id])
   attachments     Attachment[]
+
+  // Sources multiples (V3) : en plus du lien direct nonConformityId conservé
+  // pour compatibilité, chaque action peut être reliée à une ou plusieurs
+  // origines via ActionSource — utile dès qu'une action peut provenir d'un
+  // Risque ou d'un événement Sécurité (phases suivantes).
+  sources         ActionSource[]
+  history         ActionHistory[]
 
   @@index([status])
   @@index([dueDate])
   @@index([responsibleId])
+}
+
+// Table de liaison générique : une action peut être reliée à plusieurs
+// origines (NC aujourd'hui, Risque/Sécurité/Audit dans les phases suivantes)
+// sans avoir besoin d'une colonne de clé étrangère par type d'origine.
+model ActionSource {
+  id         String           @id @default(uuid())
+  actionId   String
+  sourceType ActionSourceType
+  sourceId   String
+  createdAt  DateTime         @default(now())
+
+  action     Action @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@unique([actionId, sourceType, sourceId])
+  @@index([sourceType, sourceId])
+}
+
+// Historique des changements de statut d'une action — l'équivalent de
+// NonConformityStatusHistory, qui manquait côté Action jusqu'ici.
+model ActionHistory {
+  id          String        @id @default(uuid())
+  actionId    String
+  fromStatus  ActionStatus?
+  toStatus    ActionStatus
+  comment     String?
+  changedById String
+  changedAt   DateTime      @default(now())
+
+  action      Action @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@index([actionId])
 }
 
 // ==========================================================
@@ -429,9 +628,257 @@ model Attachment {
   actionId          String?
   action            Action? @relation(fields: [actionId], references: [id], onDelete: Cascade)
 
+  // ---- V3 Phase 2 ----
+  riskId            String?
+  risk              Risk? @relation(fields: [riskId], references: [id], onDelete: Cascade)
+
+  safetyEventId     String?
+  safetyEvent       SafetyEvent? @relation(fields: [safetyEventId], references: [id], onDelete: Cascade)
+
   createdAt         DateTime @default(now())
 
   @@index([controlId])
   @@index([nonConformityId])
   @@index([actionId])
+  @@index([riskId])
+  @@index([safetyEventId])
+}
+
+// ==========================================================
+// V3 PHASE 2 : RISQUES
+// ==========================================================
+
+model Risk {
+  id                String       @id @default(uuid())
+  reference         String       @unique
+  title             String
+  description       String?
+  category          RiskCategory
+  status            RiskStatus   @default(IDENTIFIE)
+
+  siteId            String?
+  productionLineId  String?
+  machineId         String?
+
+  identifiedById    String
+  ownerId           String?
+
+  initialLevel      RiskLevel?
+  residualLevel     RiskLevel?
+
+  identifiedAt      DateTime     @default(now())
+  nextReviewDate    DateTime?
+
+  clientLocalId     String?      @unique
+  syncStatus        SyncStatus   @default(SYNCED)
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  identifiedBy      Employee @relation("RiskIdentifiedBy", fields: [identifiedById], references: [id])
+  owner             Employee? @relation("RiskOwner", fields: [ownerId], references: [id])
+  site              Site? @relation(fields: [siteId], references: [id])
+  productionLine    ProductionLine? @relation(fields: [productionLineId], references: [id])
+  machine           Machine? @relation(fields: [machineId], references: [id])
+
+  assessments       RiskAssessment[]
+  controls          RiskControl[]
+  attachments       Attachment[]
+  statusHistory     RiskStatusHistory[]
+
+  @@index([category])
+  @@index([status])
+  @@index([siteId])
+  @@index([machineId])
+}
+
+// Score = gravité × probabilité × exposition (exposition = 1 si omise).
+// 1-10 FAIBLE · 11-25 MODERE · 26-50 ELEVE · >50 CRITIQUE (voir services/riskScoring.ts)
+model RiskAssessment {
+  id                  String     @id @default(uuid())
+  riskId              String
+
+  severity            Int
+  probability         Int
+  exposure            Int?
+  initialScore        Int
+  initialLevel        RiskLevel
+
+  residualSeverity    Int?
+  residualProbability Int?
+  residualExposure    Int?
+  residualScore       Int?
+  residualLevel       RiskLevel?
+
+  comment             String?
+
+  assessedById        String
+  assessedAt          DateTime   @default(now())
+
+  risk                Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  assessedBy          Employee @relation("RiskAssessmentBy", fields: [assessedById], references: [id])
+
+  @@index([riskId])
+}
+
+model RiskControl {
+  id            String          @id @default(uuid())
+  riskId        String
+  type          RiskControlType
+
+  title         String
+  description   String?
+
+  implemented   Boolean         @default(false)
+  implementedAt DateTime?
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  risk          Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+
+  @@index([riskId])
+}
+
+model RiskStatusHistory {
+  id          String     @id @default(uuid())
+  riskId      String
+  fromStatus  RiskStatus
+  toStatus    RiskStatus
+  changedById String
+  comment     String?
+  changedAt   DateTime   @default(now())
+
+  risk        Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+
+  @@index([riskId])
+}
+
+// ==========================================================
+// V3 PHASE 2 : ÉVÉNEMENTS SÉCURITÉ
+// (situations dangereuses, incidents, presqu'accidents, accidents —
+//  regroupés dans un modèle central unique plutôt que 4 tables séparées)
+// ==========================================================
+
+model SafetyEvent {
+  id                        String              @id @default(uuid())
+  reference                 String              @unique
+
+  type                      SafetyEventType
+  status                    SafetyEventStatus   @default(SIGNALE)
+
+  title                     String
+  description               String
+
+  siteId                    String?
+  productionLineId          String?
+  machineId                 String?
+  locationDescription       String?
+  latitude                  Float?
+  longitude                 Float?
+
+  reportedById              String
+  reportedAt                DateTime            @default(now())
+
+  severity                  SeverityLevel
+  probability                ProbabilityLevel?
+
+  injuryType                InjuryType          @default(AUCUNE)
+  lostWorkDays               Int                @default(0)
+
+  investigationStatus        InvestigationStatus @default(NON_REQUISE)
+  investigatedById            String?
+  investigationStartedAt      DateTime?
+  investigationCompletedAt    DateTime?
+  rootCause                   String?
+
+  clientLocalId              String?             @unique
+  syncStatus                  SyncStatus         @default(SYNCED)
+
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+
+  reportedBy      Employee  @relation("SafetyEventReportedBy", fields: [reportedById], references: [id])
+  investigatedBy  Employee? @relation("SafetyEventInvestigatedBy", fields: [investigatedById], references: [id])
+  site            Site? @relation(fields: [siteId], references: [id])
+  productionLine  ProductionLine? @relation(fields: [productionLineId], references: [id])
+  machine         Machine? @relation(fields: [machineId], references: [id])
+
+  witnesses       SafetyEventWitness[]
+  injuries        SafetyEventInjury[]
+  causes          SafetyEventCause[]
+  attachments     Attachment[]
+  statusHistory   SafetyEventStatusHistory[]
+
+  @@index([type])
+  @@index([status])
+  @@index([reportedAt])
+  @@index([siteId])
+  @@index([machineId])
+}
+
+model SafetyEventWitness {
+  id            String   @id @default(uuid())
+  safetyEventId String
+  employeeId    String?
+  name          String?
+  phone         String?
+  statement     String?
+  createdAt     DateTime @default(now())
+
+  safetyEvent   SafetyEvent @relation(fields: [safetyEventId], references: [id], onDelete: Cascade)
+  employee      Employee? @relation("SafetyEventWitnesses", fields: [employeeId], references: [id])
+
+  @@index([safetyEventId])
+}
+
+model SafetyEventInjury {
+  id            String     @id @default(uuid())
+  safetyEventId String
+  employeeId    String?
+  personName    String?
+
+  injuryType    InjuryType
+  bodyPart      String?
+  description   String?
+
+  workStopped   Boolean    @default(false)
+  lostWorkDays  Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  safetyEvent   SafetyEvent @relation(fields: [safetyEventId], references: [id], onDelete: Cascade)
+  employee      Employee? @relation("SafetyEventInjuries", fields: [employeeId], references: [id])
+
+  @@index([safetyEventId])
+}
+
+// Permet la méthode des 5 Pourquoi / arbre des causes via parentCauseId.
+model SafetyEventCause {
+  id            String        @id @default(uuid())
+  safetyEventId String
+  category      CauseCategory
+  description   String
+  isRootCause   Boolean       @default(false)
+  parentCauseId String?
+  createdAt     DateTime      @default(now())
+
+  safetyEvent   SafetyEvent        @relation(fields: [safetyEventId], references: [id], onDelete: Cascade)
+  parentCause   SafetyEventCause?  @relation("CauseHierarchy", fields: [parentCauseId], references: [id])
+  childCauses   SafetyEventCause[] @relation("CauseHierarchy")
+
+  @@index([safetyEventId])
+}
+
+model SafetyEventStatusHistory {
+  id            String            @id @default(uuid())
+  safetyEventId String
+  fromStatus    SafetyEventStatus
+  toStatus      SafetyEventStatus
+  changedById   String
+  comment       String?
+  changedAt     DateTime          @default(now())
+
+  safetyEvent   SafetyEvent @relation(fields: [safetyEventId], references: [id], onDelete: Cascade)
+
+  @@index([safetyEventId])
 }

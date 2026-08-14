@@ -56,14 +56,102 @@ export const actionStatusTransitionSchema = z.object({
   toStatus: z.enum(["OUVERTE", "EN_COURS", "TERMINEE", "A_VERIFIER", "CLOTUREE", "EN_RETARD"]),
   effectiveness: z.string().optional(),
   verificationComment: z.string().optional(),
+  effectivenessStatus: z.enum(["NON_EVALUEE", "EFFICACE", "PARTIELLEMENT_EFFICACE", "INEFFICACE"]).optional(),
+  comment: z.string().optional(),
 });
 
 export const attachmentMetaSchema = z.object({
-  ownerType: z.enum(["CONTROL", "CONTROL_RESULT", "NON_CONFORMITY", "ACTION"]),
+  ownerType: z.enum(["CONTROL", "CONTROL_RESULT", "NON_CONFORMITY", "ACTION", "RISK", "SAFETY_EVENT"]),
   ownerId: z.string().uuid(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   deviceId: z.string().optional(),
   clientLocalId: z.string().uuid().optional(),
   capturedAt: z.string().datetime().optional(),
+});
+
+// ---- V3 Phase 2 : Risques ----
+
+export const createRiskSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  category: z.enum([
+    "SECURITE", "SANTE", "QUALITE", "ENVIRONNEMENT", "SECURITE_ALIMENTAIRE",
+    "OPERATIONNEL", "INCENDIE", "CHIMIQUE", "ELECTRIQUE", "MECANIQUE", "ERGONOMIQUE", "AUTRE",
+  ]),
+  siteId: z.string().uuid().optional(),
+  productionLineId: z.string().uuid().optional(),
+  machineId: z.string().uuid().optional(),
+  ownerId: z.string().uuid().optional(),
+  severity: z.number().int().min(1).max(5),
+  probability: z.number().int().min(1).max(5),
+  exposure: z.number().int().min(1).max(5).optional(),
+  comment: z.string().optional(),
+  actionDueDate: z.string().datetime().optional(),
+});
+
+export const riskStatusTransitionSchema = z.object({
+  toStatus: z.enum(["IDENTIFIE", "EVALUE", "TRAITEMENT_REQUIS", "TRAITEMENT_EN_COURS", "ACCEPTE", "MAITRISE", "CLOTURE"]),
+  comment: z.string().optional(),
+});
+
+export const createRiskControlSchema = z.object({
+  type: z.enum(["ELIMINATION", "SUBSTITUTION", "INGENIERIE", "ADMINISTRATIF", "EPI", "SURVEILLANCE"]),
+  title: z.string().min(1),
+  description: z.string().optional(),
+});
+
+export const updateRiskControlSchema = z.object({
+  implemented: z.boolean(),
+});
+
+// ---- V3 Phase 2 : Événements Sécurité ----
+
+export const createSafetyEventSchema = z.object({
+  type: z.enum([
+    "SITUATION_DANGEREUSE", "CONDITION_DANGEREUSE", "ACTE_DANGEREUX",
+    "PRESQU_ACCIDENT", "INCIDENT", "ACCIDENT",
+  ]),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  severity: z.enum(["NEGLIGEABLE", "MINEURE", "MODEREE", "MAJEURE", "CATASTROPHIQUE"]),
+  probability: z.enum(["RARE", "PEU_PROBABLE", "POSSIBLE", "PROBABLE", "QUASI_CERTAIN"]).optional(),
+  siteId: z.string().uuid().optional(),
+  productionLineId: z.string().uuid().optional(),
+  machineId: z.string().uuid().optional(),
+  locationDescription: z.string().optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  injuryType: z.enum(["AUCUNE", "PREMIERS_SECOURS", "SOINS_MEDICAUX", "ARRET_TRAVAIL", "INVALIDITE_PERMANENTE", "DECES"]).optional(),
+  lostWorkDays: z.number().int().min(0).optional(),
+  actionDueDate: z.string().datetime().optional(),
+});
+
+export const safetyEventStatusTransitionSchema = z.object({
+  toStatus: z.enum(["SIGNALE", "EN_EXAMEN", "EN_INVESTIGATION", "ACTION_REQUISE", "RESOLU", "CLOTURE", "REJETE"]),
+  comment: z.string().optional(),
+});
+
+export const createSafetyEventWitnessSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  statement: z.string().optional(),
+});
+
+export const createSafetyEventInjurySchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  personName: z.string().optional(),
+  injuryType: z.enum(["AUCUNE", "PREMIERS_SECOURS", "SOINS_MEDICAUX", "ARRET_TRAVAIL", "INVALIDITE_PERMANENTE", "DECES"]),
+  bodyPart: z.string().optional(),
+  description: z.string().optional(),
+  workStopped: z.boolean().optional(),
+  lostWorkDays: z.number().int().min(0).optional(),
+});
+
+export const createSafetyEventCauseSchema = z.object({
+  category: z.enum(["HUMAIN", "MACHINE", "METHODE", "MATERIEL", "ENVIRONNEMENT", "MANAGEMENT", "AUTRE"]),
+  description: z.string().min(1),
+  isRootCause: z.boolean().optional(),
+  parentCauseId: z.string().uuid().optional(),
 });

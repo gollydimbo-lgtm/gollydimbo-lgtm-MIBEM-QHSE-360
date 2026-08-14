@@ -14,7 +14,7 @@ actionsRouter.get("/", async (req, res) => {
       dueDate: overdue === "true" ? { lt: new Date() } : undefined,
     },
     orderBy: { dueDate: "asc" },
-    include: { nonConformity: true, responsible: true },
+    include: { nonConformity: true, responsible: true, sources: true },
     take: 100,
   });
   res.json(data);
@@ -23,7 +23,14 @@ actionsRouter.get("/", async (req, res) => {
 actionsRouter.get("/:id", async (req, res) => {
   const action = await prisma.action.findUnique({
     where: { id: req.params.id },
-    include: { nonConformity: true, responsible: true, attachments: true },
+    include: {
+      nonConformity: true,
+      responsible: true,
+      verifiedBy: true,
+      attachments: true,
+      sources: true,
+      history: { orderBy: { changedAt: "asc" } },
+    },
   });
   if (!action) return res.status(404).json({ message: "Action introuvable" });
   res.json(action);
@@ -34,12 +41,15 @@ actionsRouter.patch("/:id/status", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ message: "Payload invalide", errors: parsed.error.flatten() });
   }
+  const changedById = req.user!.employeeId;
 
   try {
     const updated = await prisma.$transaction((tx) =>
-      transitionAction(tx, req.params.id, parsed.data.toStatus, {
+      transitionAction(tx, req.params.id, parsed.data.toStatus, changedById, {
         effectiveness: parsed.data.effectiveness,
         verificationComment: parsed.data.verificationComment,
+        effectivenessStatus: parsed.data.effectivenessStatus,
+        comment: parsed.data.comment,
       })
     );
     res.json(updated);

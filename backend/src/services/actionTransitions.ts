@@ -1,4 +1,4 @@
-import { ActionStatus } from "@prisma/client";
+import { ActionStatus, EffectivenessStatus } from "@prisma/client";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
@@ -21,7 +21,13 @@ export async function transitionAction(
   tx: Tx,
   actionId: string,
   toStatus: ActionStatus,
-  fields: { effectiveness?: string; verificationComment?: string } = {}
+  changedById: string,
+  fields: {
+    effectiveness?: string;
+    verificationComment?: string;
+    effectivenessStatus?: EffectivenessStatus;
+    comment?: string;
+  } = {}
 ) {
   const action = await tx.action.findUnique({ where: { id: actionId } });
   if (!action) throw new ActionTransitionError("Action introuvable");
@@ -37,13 +43,32 @@ export async function transitionAction(
     throw new ActionTransitionError("Un commentaire d'efficacité est requis pour clôturer une action");
   }
 
-  return tx.action.update({
+  const isVerificationStep = toStatus === ActionStatus.CLOTUREE && action.status === ActionStatus.A_VERIFIER;
+
+  const updated = await tx.action.update({
     where: { id: actionId },
     data: {
       status: toStatus,
       completedAt: toStatus === ActionStatus.TERMINEE ? new Date() : action.completedAt,
       effectiveness: fields.effectiveness ?? action.effectiveness,
       verificationComment: fields.verificationComment ?? action.verificationComment,
+      // V3 : trace qui a vérifié l'action et quand, et qualifie son
+      // efficacité au-delà du simple commentaire texte existant.
+      verifiedById: isVerificationStep ? changedById : action.verifiedById,
+      verifiedAt: isVerificationStep ? new Date() : action.verifiedAt,
+      effectivenessStatus: fields.effectivenessStatus ?? action.effectivenessStatus,
     },
   });
+
+  await tx.actionHistory.create({
+    data: {
+      actionId,
+      fromStatus: action.status,
+      toStatus,
+      changedById,
+      comment: fields.comment,
+    },
+  });
+
+  return updated;
 }

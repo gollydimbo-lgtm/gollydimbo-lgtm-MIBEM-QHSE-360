@@ -10,6 +10,8 @@ import { referenceRouter } from "./routes/reference.routes.js";
 import { controlsRouter } from "./routes/controls.routes.js";
 import { nonConformitiesRouter } from "./routes/nonConformities.routes.js";
 import { actionsRouter } from "./routes/actions.routes.js";
+import { risksRouter } from "./routes/risks.routes.js";
+import { safetyEventsRouter } from "./routes/safetyEvents.routes.js";
 import { attachmentsRouter } from "./routes/attachments.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { startOverdueActionsJob } from "./jobs/overdueActions.job.js";
@@ -41,6 +43,8 @@ app.use("/api/reference-data", authenticate, referenceRouter);
 app.use("/api/controls", authenticate, controlsRouter);
 app.use("/api/non-conformities", authenticate, nonConformitiesRouter);
 app.use("/api/actions", authenticate, actionsRouter);
+app.use("/api/risks", authenticate, risksRouter);
+app.use("/api/safety-events", authenticate, safetyEventsRouter);
 app.use("/api/attachments", authenticate, attachmentsRouter);
 app.use("/api/dashboard", authenticate, dashboardRouter);
 

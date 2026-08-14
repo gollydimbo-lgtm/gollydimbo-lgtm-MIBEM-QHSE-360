@@ -130,6 +130,20 @@ export async function ingestControl(
         responsibleId: item.responsibleId ?? controllerId,
         dueDate,
         status: ActionStatus.OUVERTE,
+        // V3 : trace la source via la table générique en plus du lien direct
+        // nonConformityId (conservé pour compatibilité), et initialise
+        // l'historique de statut dès la création.
+        sources: {
+          create: { sourceType: "NON_CONFORMITY", sourceId: nc.id },
+        },
+        history: {
+          create: {
+            fromStatus: null,
+            toStatus: ActionStatus.OUVERTE,
+            changedById: controllerId,
+            comment: "Création automatique suite à non-conformité",
+          },
+        },
       },
     });
   }

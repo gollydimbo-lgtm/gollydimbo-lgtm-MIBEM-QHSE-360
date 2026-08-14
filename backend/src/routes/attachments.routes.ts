@@ -22,11 +22,13 @@ const storage = multer.diskStorage({
 // 15 Mo max : suffisant pour une photo terrain compressée côté mobile.
 const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
 
-const OWNER_FIELD: Record<string, "controlId" | "controlResultId" | "nonConformityId" | "actionId"> = {
+const OWNER_FIELD: Record<string, "controlId" | "controlResultId" | "nonConformityId" | "actionId" | "riskId" | "safetyEventId"> = {
   CONTROL: "controlId",
   CONTROL_RESULT: "controlResultId",
   NON_CONFORMITY: "nonConformityId",
   ACTION: "actionId",
+  RISK: "riskId",
+  SAFETY_EVENT: "safetyEventId",
 };
 
 /**

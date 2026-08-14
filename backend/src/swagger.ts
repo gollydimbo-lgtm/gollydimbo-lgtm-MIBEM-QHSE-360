@@ -33,6 +33,25 @@ export const swaggerDocument = {
     "/api/actions/{id}/status": {
       patch: { responses: { "200": { description: "Statut action mis à jour" }, "409": { description: "Transition refusée" } } },
     },
+    "/api/risks": {
+      get: { responses: { "200": { description: "Liste des risques" } } },
+      post: { responses: { "201": { description: "Risque créé avec évaluation initiale, action auto si ÉLEVÉ/CRITIQUE" } } },
+    },
+    "/api/risks/{id}/assessments": { post: { responses: { "201": { description: "Réévaluation (score résiduel)" } } } },
+    "/api/risks/{id}/controls": { post: { responses: { "201": { description: "Mesure de maîtrise ajoutée" } } } },
+    "/api/risks/{id}/status": {
+      patch: { responses: { "200": { description: "Statut risque mis à jour" }, "409": { description: "Transition refusée" } } },
+    },
+    "/api/safety-events": {
+      get: { responses: { "200": { description: "Liste des événements sécurité" } } },
+      post: { responses: { "201": { description: "Événement créé, action auto si gravité élevée" } } },
+    },
+    "/api/safety-events/{id}/witnesses": { post: { responses: { "201": { description: "Témoin ajouté" } } } },
+    "/api/safety-events/{id}/injuries": { post: { responses: { "201": { description: "Blessure enregistrée" } } } },
+    "/api/safety-events/{id}/causes": { post: { responses: { "201": { description: "Cause ajoutée (5 Pourquoi / Ishikawa)" } } } },
+    "/api/safety-events/{id}/status": {
+      patch: { responses: { "200": { description: "Statut événement mis à jour" }, "409": { description: "Transition refusée" } } },
+    },
     "/api/attachments": {
       post: { responses: { "201": { description: "Pièce jointe uploadée" } } },
       get: { responses: { "200": { description: "Pièces jointes d'un élément" } } },
