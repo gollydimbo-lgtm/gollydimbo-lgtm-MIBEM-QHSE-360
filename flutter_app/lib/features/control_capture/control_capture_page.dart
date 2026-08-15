@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/models.dart';
@@ -98,11 +99,16 @@ class _ControlCapturePageState extends State<ControlCapturePage> {
       final api = context.read<ApiClient>();
       final results = template.points.map((point) {
         final answer = _answers[point.id]!;
+        // Calculé à part : si le parsing échoue, la clé ne doit pas du tout
+        // être envoyée (envoyer `null` explicitement fait échouer la
+        // validation côté serveur, qui distingue "absent" de "nul").
+        final numericValue = point.type == ControlPointType.numerique
+            ? double.tryParse(answer.numericController.text.replaceAll(',', '.'))
+            : null;
         return {
           'controlPointId': point.id,
           'result': answer.result,
-          if (point.type == ControlPointType.numerique && answer.numericController.text.isNotEmpty)
-            'numericValue': double.tryParse(answer.numericController.text.replaceAll(',', '.')),
+          if (numericValue != null) 'numericValue': numericValue,
           if (point.type == ControlPointType.texte && answer.textController.text.isNotEmpty)
             'textValue': answer.textController.text,
           if (point.type == ControlPointType.choixMultiple && answer.choice != null)
@@ -254,6 +260,9 @@ class _ControlCapturePageState extends State<ControlCapturePage> {
         return TextField(
           controller: answer.numericController,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          // Le clavier numérique n'est qu'une suggestion : un clavier physique
+          // (PC Windows) peut quand même taper des lettres sans ce filtre.
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]'))],
           decoration: InputDecoration(
             labelText: 'Valeur mesurée${point.unit != null ? ' (${point.unit})' : ''}',
             border: const OutlineInputBorder(),

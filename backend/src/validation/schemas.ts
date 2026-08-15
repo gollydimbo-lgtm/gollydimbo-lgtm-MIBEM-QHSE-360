@@ -12,7 +12,7 @@ export const refreshSchema = z.object({
 const controlResultInputSchema = z.object({
   controlPointId: z.string().uuid(),
   result: z.enum(["CONFORME", "OBSERVATION", "NON_CONFORME", "NON_APPLICABLE"]),
-  numericValue: z.number().optional(),
+  numericValue: z.number().nullable().optional(),
   textValue: z.string().optional(),
   observation: z.string().optional(),
   category: z.string().optional(),
