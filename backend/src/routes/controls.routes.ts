@@ -42,6 +42,8 @@ controlsRouter.get("/:id", async (req, res) => {
 controlsRouter.post("/", async (req, res) => {
   const parsed = createControlSchema.safeParse(req.body);
   if (!parsed.success) {
+    console.error("[POST /api/controls] Payload invalide :", JSON.stringify(parsed.error.flatten(), null, 2));
+    console.error("[POST /api/controls] Corps reçu :", JSON.stringify(req.body, null, 2));
     return res.status(400).json({ message: "Payload invalide", errors: parsed.error.flatten() });
   }
 
