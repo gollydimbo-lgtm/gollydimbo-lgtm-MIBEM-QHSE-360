@@ -17,12 +17,23 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _pages = [
-    DashboardPage(),
-    ControlCapturePage(),
-    NonConformitiesPage(),
-    ActionsPage(),
+  // Liste de constructeurs (pas d'instances figées) : chaque changement
+  // d'onglet crée une NOUVELLE instance de la page, ce qui relance son
+  // chargement de données depuis l'API. Avant, avec IndexedStack, les pages
+  // restaient vivantes en permanence et gardaient leurs données figées au
+  // premier chargement — un contrôle créé pendant la session n'apparaissait
+  // jamais dans l'onglet NC tant qu'on ne relançait pas complètement l'app.
+  static const List<Widget Function()> _pageBuilders = [
+    _buildDashboard,
+    _buildControlCapture,
+    _buildNonConformities,
+    _buildActions,
   ];
+
+  static Widget _buildDashboard() => const DashboardPage();
+  static Widget _buildControlCapture() => const ControlCapturePage();
+  static Widget _buildNonConformities() => const NonConformitiesPage();
+  static Widget _buildActions() => const ActionsPage();
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +62,13 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _index, children: _pages),
+      // Key(_index) force Flutter à considérer chaque onglet comme un widget
+      // différent à chaque sélection, donc à recréer sa State (et donc son
+      // initState -> chargement API) plutôt que de réutiliser l'ancienne.
+      body: KeyedSubtree(
+        key: ValueKey(_index),
+        child: _pageBuilders[_index](),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
