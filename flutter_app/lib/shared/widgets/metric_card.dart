@@ -52,7 +52,8 @@ class StatusChip extends StatelessWidget {
   }
 }
 
-/// Palette cohérente pour les statuts NC/Action à travers toute l'app.
+/// Palette cohérente pour les statuts NC/Action/Risque/Sécurité à travers
+/// toute l'app.
 Color statusColor(String status) {
   switch (status) {
     case 'OUVERTE':
@@ -67,11 +68,37 @@ Color statusColor(String status) {
     case 'TERMINEE':
       return Colors.teal;
     case 'CLOTUREE':
+    case 'CLOTURE':
       return Colors.green;
     case 'REJETEE':
+    case 'REJETE':
       return Colors.grey;
     case 'EN_RETARD':
       return Colors.red;
+    // ---- Risques ----
+    case 'IDENTIFIE':
+      return Colors.orange;
+    case 'EVALUE':
+      return Colors.blue;
+    case 'TRAITEMENT_REQUIS':
+      return Colors.deepOrange;
+    case 'TRAITEMENT_EN_COURS':
+      return Colors.indigo;
+    case 'ACCEPTE':
+      return Colors.teal;
+    case 'MAITRISE':
+      return Colors.green;
+    // ---- Événements sécurité ----
+    case 'SIGNALE':
+      return Colors.orange;
+    case 'EN_EXAMEN':
+      return Colors.blue;
+    case 'EN_INVESTIGATION':
+      return Colors.indigo;
+    case 'ACTION_REQUISE':
+      return Colors.deepOrange;
+    case 'RESOLU':
+      return Colors.teal;
     default:
       return Colors.grey;
   }
@@ -80,10 +107,34 @@ Color statusColor(String status) {
 Color severityColor(String severity) {
   switch (severity) {
     case 'CRITIQUE':
+    case 'CATASTROPHIQUE':
       return Colors.red;
     case 'MAJEURE':
       return Colors.orange;
+    case 'MODEREE':
+      return Colors.amber.shade700;
+    case 'MINEURE':
+    case 'NEGLIGEABLE':
+      return Colors.blueGrey;
     default:
       return Colors.amber.shade700;
+  }
+}
+
+/// Palette dédiée aux niveaux de risque (FAIBLE/MODERE/ELEVE/CRITIQUE),
+/// distincte de severityColor pour éviter toute confusion avec les
+/// sévérités NC/événements sécurité qui utilisent une échelle différente.
+Color riskLevelColor(String? level) {
+  switch (level) {
+    case 'CRITIQUE':
+      return Colors.red;
+    case 'ELEVE':
+      return Colors.orange;
+    case 'MODERE':
+      return Colors.amber.shade700;
+    case 'FAIBLE':
+      return Colors.green;
+    default:
+      return Colors.grey;
   }
 }

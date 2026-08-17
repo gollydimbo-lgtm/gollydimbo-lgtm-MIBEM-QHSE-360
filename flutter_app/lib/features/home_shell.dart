@@ -5,6 +5,8 @@ import 'dashboard/dashboard_page.dart';
 import 'control_capture/control_capture_page.dart';
 import 'non_conformities/non_conformities_page.dart';
 import 'actions/actions_page.dart';
+import 'risks/risks_page.dart';
+import 'safety_events/safety_events_page.dart';
 import 'settings/server_setup_page.dart';
 
 class HomeShell extends StatefulWidget {
@@ -68,6 +70,44 @@ class _HomeShellState extends State<HomeShell> {
       body: KeyedSubtree(
         key: ValueKey(_index),
         child: _pageBuilders[_index](),
+      ),
+      // Modules secondaires (utilisés moins souvent au quotidien que les 4
+      // onglets principaux) accessibles via le menu latéral plutôt que
+      // d'ajouter sans cesse des onglets à la barre du bas.
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFF0B3A67)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Text('MIBEM QHSE 360', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                  if (auth.user != null)
+                    Text(auth.user!.employeeFullName, style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dangerous_outlined),
+              title: const Text('Risques'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RisksPage()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.health_and_safety_outlined),
+              title: const Text('Événements sécurité'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SafetyEventsPage()));
+              },
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

@@ -256,3 +256,67 @@ class ActionSummary {
         dueDate: DateTime.parse(json['dueDate']),
       );
 }
+
+// ---- V3 Phase 2 : Risques ----
+
+class RiskSummary {
+  final String id;
+  final String reference;
+  final String title;
+  final String category;
+  final String status;
+  final String? initialLevel;
+  final DateTime identifiedAt;
+
+  RiskSummary({
+    required this.id,
+    required this.reference,
+    required this.title,
+    required this.category,
+    required this.status,
+    this.initialLevel,
+    required this.identifiedAt,
+  });
+
+  factory RiskSummary.fromJson(Map<String, dynamic> json) => RiskSummary(
+        id: json['id'],
+        reference: json['reference'],
+        title: json['title'],
+        category: json['category'],
+        status: json['status'],
+        initialLevel: json['initialLevel'],
+        identifiedAt: DateTime.parse(json['identifiedAt']),
+      );
+}
+
+// ---- V3 Phase 2 : Événements Sécurité ----
+
+class SafetyEventSummary {
+  final String id;
+  final String reference;
+  final String title;
+  final String type;
+  final String severity;
+  final String status;
+  final DateTime reportedAt;
+
+  SafetyEventSummary({
+    required this.id,
+    required this.reference,
+    required this.title,
+    required this.type,
+    required this.severity,
+    required this.status,
+    required this.reportedAt,
+  });
+
+  factory SafetyEventSummary.fromJson(Map<String, dynamic> json) => SafetyEventSummary(
+        id: json['id'],
+        reference: json['reference'],
+        title: json['title'],
+        type: json['type'],
+        severity: json['severity'],
+        status: json['status'],
+        reportedAt: DateTime.parse(json['reportedAt']),
+      );
+}
