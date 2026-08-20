@@ -1,0 +1,1 @@
+import { Injectable } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; @Injectable() export class UsersService{constructor(private db:PrismaService){} list(){return this.db.user.findMany({select:{id:true,email:true,firstName:true,lastName:true,status:true,roles:{include:{role:true}}},orderBy:{lastName:'asc'}})}}

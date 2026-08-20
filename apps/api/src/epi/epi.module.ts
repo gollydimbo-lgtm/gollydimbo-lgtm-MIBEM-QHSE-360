@@ -1,0 +1,1 @@
+import { Module } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; import { EpiService } from './epi.service'; import { EpiController } from './epi.controller'; @Module({controllers:[EpiController],providers:[EpiService,PrismaService]}) export class EpiModule{}

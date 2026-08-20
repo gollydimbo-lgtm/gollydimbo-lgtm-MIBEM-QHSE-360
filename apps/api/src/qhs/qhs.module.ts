@@ -1,0 +1,1 @@
+import {Module} from '@nestjs/common'; import {PrismaService} from '../common/prisma.service'; import {QhsService} from './qhs.service'; import {QhsController} from './qhs.controller'; @Module({controllers:[QhsController],providers:[QhsService,PrismaService]}) export class QhsModule{}

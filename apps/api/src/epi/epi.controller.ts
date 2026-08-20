@@ -1,0 +1,1 @@
+import {Controller,Get,Query} from '@nestjs/common'; import {EpiService} from './epi.service'; @Controller('epi') export class EpiController{constructor(private s:EpiService){} @Get('dashboard') dashboard(){return this.s.dashboard()} @Get('renewals') renewals(@Query('days') days?:string){return this.s.annualRenewals(days?Number(days):30)}}

@@ -1,0 +1,20 @@
+name: qhse_mobile
+publish_to: 'none'
+description: QHSE Platform V4 Android Windows Web client
+version: 1.0.0+1
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  image_picker: ^1.1.2
+  geolocator: ^13.0.1
+  intl: ^0.19.0
+  connectivity_plus: ^6.1.0
+  path_provider: ^2.1.5
+  uuid: ^4.5.1
+  file_picker: ^8.1.2
+flutter:
+  uses-material-design: true
