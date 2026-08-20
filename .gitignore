@@ -1,0 +1,27 @@
+# --- Backend (Node/TypeScript) ---
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/uploads/
+backend/*.log
+
+# --- Flutter ---
+flutter_app/.dart_tool/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+flutter_app/.packages
+flutter_app/build/
+flutter_app/**/ios/
+flutter_app/**/macos/
+flutter_app/**/linux/
+# Note : android/ et windows/ sont volontairement suivis par git (générés
+# et committés automatiquement par le job "scaffold" du workflow CI) —
+# seuls leurs propres sous-dossiers de build restent ignorés :
+flutter_app/android/.gradle/
+flutter_app/android/app/build/
+flutter_app/windows/flutter/ephemeral/
+flutter_app/**/*.iml
+
+# --- Divers ---
+.DS_Store
+*.swp
