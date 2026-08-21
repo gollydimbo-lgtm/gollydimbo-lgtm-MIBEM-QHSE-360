@@ -4,7 +4,7 @@
 # natifs doivent être produits par le vrai SDK Flutter, pas écrits à la main).
 # Idempotent : ne touche pas lib/, pubspec.yaml, ni un dossier déjà généré.
 set -euo pipefail
-cd "$(dirname "$0")/../apps/flutter"
+cd "$(dirname "$0")/../../apps/flutter"
 
 if [ ! -d "android" ] || [ ! -d "windows" ]; then
   echo "== Génération des dossiers natifs manquants (android/windows) =="
