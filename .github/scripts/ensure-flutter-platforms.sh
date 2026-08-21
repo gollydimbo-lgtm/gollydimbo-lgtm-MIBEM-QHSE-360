@@ -63,13 +63,19 @@ add_compile_sdk_override "android/app/build.gradle.kts" \
 
 # 2) TOUS les sous-modules (dont les plugins tiers comme file_picker) : le vrai
 # correctif nécessaire. Racine du projet Android = android/build.gradle.kts.
+# On utilise plugins.withId(...) et non afterEvaluate : le fichier généré par
+# Flutter contient déjà "project.evaluationDependsOn(\":app\")", qui force
+# l'évaluation immédiate de :app — afterEvaluate plante alors avec "Cannot
+# run Project.afterEvaluate(Action) when the project is already evaluated."
+# plugins.withId ne dépend pas de l'ordre d'évaluation, donc pas ce problème.
 add_compile_sdk_override "android/build.gradle.kts" \
   "// QHSE MIBEM: force compileSdk=36 sur tous les sous-modules (plugins inclus)" \
   'subprojects {
-    afterEvaluate {
-        extensions.findByType<com.android.build.gradle.BaseExtension>()?.let { ext ->
-            ext.compileSdkVersion(36)
-        }
+    plugins.withId("com.android.library") {
+        (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.compileSdkVersion(36)
+    }
+    plugins.withId("com.android.application") {
+        (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.compileSdkVersion(36)
     }
 }'
 
