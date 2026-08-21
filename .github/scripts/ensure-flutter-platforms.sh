@@ -36,10 +36,12 @@ fi
 
 # file_picker (via flutter_plugin_android_lifecycle) exige compileSdk >= 36 ;
 # le squelette généré par "flutter create" pointe encore vers 34 par défaut.
-# Méthode robuste : Gradle (Kotlin DSL comme Groovy) accepte plusieurs blocs
-# "android { }" dans un même script, exécutés dans l'ordre du fichier. On
-# AJOUTE donc un second bloc à la toute fin, qui s'exécute après le premier
-# et l'emporte — sans dépendre du format exact de la ligne d'origine.
+# IMPORTANT : ":file_picker:checkReleaseAarMetadata" échoue sur le sous-module
+# du PLUGIN lui-même (géré par Flutter, avec son propre compileSdk via
+# flutter.compileSdkVersion = 34), pas sur notre application. Patcher notre
+# app/build.gradle.kts ne suffit donc pas : il faut forcer compileSdk au
+# niveau racine du projet Android via un bloc "subprojects", qui s'applique
+# à TOUS les sous-modules — y compris les plugins comme file_picker.
 add_compile_sdk_override() {
   local file="$1" marker="$2" body="$3"
   [ -f "$file" ] || return 0
@@ -47,19 +49,34 @@ add_compile_sdk_override() {
   {
     echo ""
     echo "$marker"
-    echo "android {"
-    echo "    $body"
-    echo "}"
+    echo "$body"
   } >> "$file"
-  echo "== Bloc compileSdk=36 ajouté en fin de fichier : $file =="
+  echo "== Correctif compileSdk ajouté en fin de fichier : $file =="
 }
-add_compile_sdk_override "android/app/build.gradle.kts" "// QHSE MIBEM: compileSdk override (file_picker requires >=36)" "compileSdk = 36"
-add_compile_sdk_override "android/app/build.gradle" "// QHSE MIBEM: compileSdk override (file_picker requires >=36)" "compileSdkVersion 36"
 
-for GRADLE_FILE in android/app/build.gradle.kts android/app/build.gradle; do
+# 1) Notre propre module (app) : garde le correctif précédent, sans effet de bord.
+add_compile_sdk_override "android/app/build.gradle.kts" \
+  "// QHSE MIBEM: compileSdk override (file_picker requires >=36)" \
+  'android {
+    compileSdk = 36
+}'
+
+# 2) TOUS les sous-modules (dont les plugins tiers comme file_picker) : le vrai
+# correctif nécessaire. Racine du projet Android = android/build.gradle.kts.
+add_compile_sdk_override "android/build.gradle.kts" \
+  "// QHSE MIBEM: force compileSdk=36 sur tous les sous-modules (plugins inclus)" \
+  'subprojects {
+    afterEvaluate {
+        extensions.findByType<com.android.build.gradle.BaseExtension>()?.let { ext ->
+            ext.compileSdkVersion(36)
+        }
+    }
+}'
+
+for GRADLE_FILE in android/app/build.gradle.kts android/build.gradle.kts; do
   if [ -f "$GRADLE_FILE" ]; then
     echo "== Contenu compileSdk final dans $GRADLE_FILE =="
-    grep -n "compileSdk" "$GRADLE_FILE" || echo "  (aucune ligne compileSdk trouvée)"
+    grep -n "compileSdk\|BaseExtension" "$GRADLE_FILE" || echo "  (rien trouvé)"
   fi
 done
 
