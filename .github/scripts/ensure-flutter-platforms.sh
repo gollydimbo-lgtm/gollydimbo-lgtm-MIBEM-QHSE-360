@@ -4,7 +4,7 @@
 # natifs doivent être produits par le vrai SDK Flutter, pas écrits à la main).
 # Idempotent : ne touche pas lib/, pubspec.yaml, ni un dossier déjà généré.
 set -euo pipefail
-   cd "$(dirname "$0")/../../apps/flutter"
+cd "$(dirname "$0")/../apps/flutter"
 
 if [ ! -d "android" ] || [ ! -d "windows" ]; then
   echo "== Génération des dossiers natifs manquants (android/windows) =="
@@ -33,6 +33,24 @@ if [ -f "$MANIFEST" ]; then
     sed -i 's/android:label="qhse_mobile"/android:label="QHSE MIBEM"/' "$MANIFEST"
   fi
 fi
+
+# file_picker (via flutter_plugin_android_lifecycle) exige compileSdk >= 36 ;
+# le squelette généré par "flutter create" pointe encore vers 34 par défaut
+# (flutter.compileSdkVersion). On force une valeur littérale plus récente,
+# quelle que soit la syntaxe Gradle utilisée par ce canal Flutter (Kotlin
+# DSL .kts ou Groovy classique).
+for GRADLE_FILE in android/app/build.gradle.kts android/app/build.gradle; do
+  if [ -f "$GRADLE_FILE" ]; then
+    echo "== Ajustement de compileSdk dans $GRADLE_FILE =="
+    sed -i \
+      -e 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' \
+      -e 's/compileSdkVersion flutter\.compileSdkVersion/compileSdkVersion 36/' \
+      -e 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]\+/compileSdk = 36/' \
+      -e 's/compileSdkVersion[[:space:]]\+[0-9]\+/compileSdkVersion 36/' \
+      "$GRADLE_FILE"
+    grep -n "compileSdk" "$GRADLE_FILE" || true
+  fi
+done
 
 CMAKE="windows/runner/CMakeLists.txt"
 if [ -f "$CMAKE" ]; then
