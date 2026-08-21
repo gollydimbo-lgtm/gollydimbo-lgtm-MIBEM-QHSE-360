@@ -71,11 +71,18 @@ add_compile_sdk_override "android/app/build.gradle.kts" \
 add_compile_sdk_override "android/build.gradle.kts" \
   "// QHSE MIBEM: force compileSdk=36 sur tous les sous-modules (plugins inclus)" \
   'subprojects {
-    plugins.withId("com.android.library") {
-        (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.compileSdkVersion(36)
-    }
-    plugins.withId("com.android.application") {
-        (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.compileSdkVersion(36)
+    // afterEvaluate est necessaire ici : plugins.withId(...) se declenche
+    // au moment ou le plugin Android est applique, AVANT que le module
+    // ne termine de lire son propre compileSdk = flutter.compileSdkVersion
+    // (34), qui ecraserait sinon notre valeur juste apres. On exclut
+    // explicitement ":app", deja force en evaluation immediate ailleurs
+    // dans ce fichier (evaluationDependsOn) : appeler afterEvaluate ici
+    // ferait planter avec "already evaluated". Le module app est de toute
+    // facon deja corrige directement dans app/build.gradle.kts.
+    if (project.name != "app") {
+        afterEvaluate {
+            (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.compileSdkVersion(36)
+        }
     }
 }'
 
