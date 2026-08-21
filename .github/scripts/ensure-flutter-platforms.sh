@@ -36,25 +36,29 @@ fi
 
 # file_picker (via flutter_plugin_android_lifecycle) exige compileSdk >= 36 ;
 # le squelette généré par "flutter create" pointe encore vers 34 par défaut.
-# Plutôt que de deviner l'exact format de la ligne d'origine (fragile d'une
-# version de Flutter à l'autre), on INSÈRE une seconde affectation juste
-# après l'ouverture du bloc "android {" : en Kotlin DSL comme en Groovy,
-# la dernière affectation d'une même propriété l'emporte, donc peu importe
-# ce que dit la ligne générée par défaut.
+# IMPORTANT : en Kotlin DSL comme en Groovy, c'est la DERNIÈRE affectation
+# d'une propriété dans le fichier qui l'emporte. On insère donc notre
+# "compileSdk = 36" juste APRÈS la ligne d'origine (pas après l'ouverture du
+# bloc "android {", qui se trouve avant et serait donc écrasée par elle).
 patch_compile_sdk() {
-  local file="$1" line="$2"
-  if [ -f "$file" ] && ! grep -qF "$line" "$file"; then
-    sed -i "0,/android[[:space:]]*{/{s//&\n    ${line}/}" "$file"
-    echo "== $line injecté dans $file =="
-  fi
+  local file="$1" pattern="$2" line="$3"
+  [ -f "$file" ] || return 0
+  grep -qE "$pattern" "$file" || return 0
+  local last_line
+  last_line=$(grep -E "compileSdk" "$file" | tail -n 1)
+  case "$last_line" in
+    *"$line"*) return 0 ;; # déjà patché, la dernière ligne est déjà la nôtre
+  esac
+  sed -i -E "0,/$pattern/{s/($pattern)/\1\n    ${line}/}" "$file"
+  echo "== $line injecté après la ligne compileSdk d'origine dans $file =="
 }
-patch_compile_sdk "android/app/build.gradle.kts" "compileSdk = 36"
-patch_compile_sdk "android/app/build.gradle" "compileSdk 36"
+patch_compile_sdk "android/app/build.gradle.kts" "compileSdk[[:space:]]*=[[:space:]]*(flutter\.compileSdkVersion|[0-9]+)" "compileSdk = 36"
+patch_compile_sdk "android/app/build.gradle" "compileSdkVersion[[:space:]]+(flutter\.compileSdkVersion|[0-9]+)" "compileSdkVersion 36"
 
 for GRADLE_FILE in android/app/build.gradle.kts android/app/build.gradle; do
   if [ -f "$GRADLE_FILE" ]; then
-    echo "== Contenu compileSdk final dans $GRADLE_FILE =="
-    grep -n "compileSdk" "$GRADLE_FILE" || echo "  (aucune ligne compileSdk trouvée — build.gradle probablement absent, normal si l'autre variante est utilisée)"
+    echo "== Contenu compileSdk final dans $GRADLE_FILE (la DERNIÈRE ligne fait foi) =="
+    grep -n "compileSdk" "$GRADLE_FILE" || echo "  (aucune ligne compileSdk trouvée)"
   fi
 done
 
