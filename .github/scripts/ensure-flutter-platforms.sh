@@ -35,20 +35,26 @@ if [ -f "$MANIFEST" ]; then
 fi
 
 # file_picker (via flutter_plugin_android_lifecycle) exige compileSdk >= 36 ;
-# le squelette généré par "flutter create" pointe encore vers 34 par défaut
-# (flutter.compileSdkVersion). On force une valeur littérale plus récente,
-# quelle que soit la syntaxe Gradle utilisée par ce canal Flutter (Kotlin
-# DSL .kts ou Groovy classique).
+# le squelette généré par "flutter create" pointe encore vers 34 par défaut.
+# Plutôt que de deviner l'exact format de la ligne d'origine (fragile d'une
+# version de Flutter à l'autre), on INSÈRE une seconde affectation juste
+# après l'ouverture du bloc "android {" : en Kotlin DSL comme en Groovy,
+# la dernière affectation d'une même propriété l'emporte, donc peu importe
+# ce que dit la ligne générée par défaut.
+patch_compile_sdk() {
+  local file="$1" line="$2"
+  if [ -f "$file" ] && ! grep -qF "$line" "$file"; then
+    sed -i "0,/android[[:space:]]*{/{s//&\n    ${line}/}" "$file"
+    echo "== $line injecté dans $file =="
+  fi
+}
+patch_compile_sdk "android/app/build.gradle.kts" "compileSdk = 36"
+patch_compile_sdk "android/app/build.gradle" "compileSdk 36"
+
 for GRADLE_FILE in android/app/build.gradle.kts android/app/build.gradle; do
   if [ -f "$GRADLE_FILE" ]; then
-    echo "== Ajustement de compileSdk dans $GRADLE_FILE =="
-    sed -i \
-      -e 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' \
-      -e 's/compileSdkVersion flutter\.compileSdkVersion/compileSdkVersion 36/' \
-      -e 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]\+/compileSdk = 36/' \
-      -e 's/compileSdkVersion[[:space:]]\+[0-9]\+/compileSdkVersion 36/' \
-      "$GRADLE_FILE"
-    grep -n "compileSdk" "$GRADLE_FILE" || true
+    echo "== Contenu compileSdk final dans $GRADLE_FILE =="
+    grep -n "compileSdk" "$GRADLE_FILE" || echo "  (aucune ligne compileSdk trouvée — build.gradle probablement absent, normal si l'autre variante est utilisée)"
   fi
 done
 
