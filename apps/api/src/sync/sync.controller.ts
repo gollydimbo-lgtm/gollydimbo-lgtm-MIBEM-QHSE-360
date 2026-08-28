@@ -57,7 +57,7 @@ export class SyncController {
         await this.db.syncItem.update({ where: { id: record.id }, data: { status: 'SYNCED', entityId, syncedAt: new Date(), error: null } });
         results.push({ clientLocalId: item.clientLocalId, status: 'SYNCED', entityId });
       } catch (e: any) {
-        await this.db.syncItem.update({ where: { id: record.id }, data: { status: 'ERROR', error: String(e?.message || e) } });
+        await this.db.syncItem.update({ where: { id: record.id }, data: { status: 'FAILED', error: String(e?.message || e) } });
         results.push({ clientLocalId: item.clientLocalId, status: 'ERROR', error: String(e?.message || e) });
       }
     }
@@ -73,7 +73,7 @@ export class SyncController {
   async status() {
     const [pending, error, synced] = await Promise.all([
       this.db.syncItem.count({ where: { status: 'PENDING' } }),
-      this.db.syncItem.count({ where: { status: 'ERROR' } }),
+      this.db.syncItem.count({ where: { status: 'FAILED' } }),
       this.db.syncItem.count({ where: { status: 'SYNCED' } }),
     ]);
     return { pending, error, synced };
