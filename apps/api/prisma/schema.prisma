@@ -1,80 +1,639 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
 
-enum UserStatus { ACTIVE INACTIVE }
-enum RoleName { ADMINISTRATEUR RESPONSABLE_QHSE ASSISTANT_QHSE CONTROLEUR_QUALITE CHEF_PRODUCTION OPERATEUR AUDITEUR CONSULTATION }
-enum DocumentStatus { DRAFT REVIEW APPROVED ACTIVE SUPERSEDED ARCHIVED }
-enum EpiFrequency { DAILY ANNUAL }
-enum EpiMovementType { RECEIPT DAILY_DISTRIBUTION ANNUAL_DISTRIBUTION REPLACEMENT LOSS DAMAGE ADJUSTMENT }
-enum SyncStatus { PENDING SYNCED CONFLICT FAILED }
-enum SafetyTalkStatus { DRAFT APPROVED DELIVERED }
-enum QualityControlStatus { DRAFT IN_PROGRESS SUBMITTED COMPLIANT NON_COMPLIANT CANCELLED }
-enum ControlValueType { BOOLEAN NUMERIC TEXT CHOICE PHOTO }
-enum SignatureType { CONTROLLER RESPONSIBLE VALIDATOR }
-enum AttachmentOwnerType { QUALITY_CONTROL NON_CONFORMITY ACTION SAFETY_EVENT RISK AUDIT EPI }
-enum QualityShift { MORNING AFTERNOON NIGHT }
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RoleName {
+  ADMINISTRATEUR
+  RESPONSABLE_QHSE
+  ASSISTANT_QHSE
+  CONTROLEUR_QUALITE
+  CHEF_PRODUCTION
+  OPERATEUR
+  AUDITEUR
+  CONSULTATION
+}
+
+enum DocumentStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  ACTIVE
+  SUPERSEDED
+  ARCHIVED
+}
+
+enum EpiFrequency {
+  DAILY
+  ANNUAL
+}
+
+enum EpiMovementType {
+  RECEIPT
+  DAILY_DISTRIBUTION
+  ANNUAL_DISTRIBUTION
+  REPLACEMENT
+  LOSS
+  DAMAGE
+  ADJUSTMENT
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  CONFLICT
+  FAILED
+}
+
+enum SafetyTalkStatus {
+  DRAFT
+  APPROVED
+  DELIVERED
+}
+
+enum QualityControlStatus {
+  DRAFT
+  IN_PROGRESS
+  SUBMITTED
+  COMPLIANT
+  NON_COMPLIANT
+  CANCELLED
+}
+
+enum ControlValueType {
+  BOOLEAN
+  NUMERIC
+  TEXT
+  CHOICE
+  PHOTO
+}
+
+enum SignatureType {
+  CONTROLLER
+  RESPONSIBLE
+  VALIDATOR
+}
+
+enum AttachmentOwnerType {
+  QUALITY_CONTROL
+  NON_CONFORMITY
+  ACTION
+  SAFETY_EVENT
+  RISK
+  AUDIT
+  EPI
+}
+
+enum QualityShift {
+  MORNING
+  AFTERNOON
+  NIGHT
+}
 
 model User {
- id String @id @default(cuid())
- email String @unique
- passwordHash String
- firstName String
- lastName String
- status UserStatus @default(ACTIVE)
- employeeId String? @unique
- roles UserRole[]
- createdAt DateTime @default(now())
- updatedAt DateTime @updatedAt
- auditLogs AuditLog[]
- attachments Attachment[]
- documentsCreated Document[] @relation("DocumentCreator")
- epiMovements EpiMovement[]
- safetyTalks SafetyTalk[]
- actionsResponsible Action[]
- qualityControls QualityControl[]
- qualitySignatures QualityControlSignature[]
- controlResults ControlResult[]
- audits QhseAudit[]
- refreshTokens RefreshToken[]
+  id String @id @default(cuid())
+  email String @unique
+  passwordHash String
+  firstName String
+  lastName String
+  status UserStatus @default(ACTIVE)
+  employeeId String? @unique
+  roles UserRole[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  auditLogs AuditLog[]
+  attachments Attachment[]
+  documentsCreated Document[] @relation("DocumentCreator")
+  epiMovements EpiMovement[]
+  safetyTalks SafetyTalk[]
+  actionsResponsible Action[]
+  qualityControls QualityControl[]
+  qualitySignatures QualityControlSignature[]
+  controlResults ControlResult[]
+  audits QhseAudit[]
+  refreshTokens RefreshToken[]
 }
-model Role { id String @id @default(cuid()); name RoleName @unique; permissions RolePermission[]; users UserRole[] }
-model Permission { id String @id @default(cuid()); code String @unique; roles RolePermission[] }
-model UserRole { userId String; roleId String; user User @relation(fields:[userId], references:[id], onDelete: Cascade); role Role @relation(fields:[roleId], references:[id], onDelete: Cascade); @@id([userId,roleId]) }
-model RolePermission { roleId String; permissionId String; role Role @relation(fields:[roleId], references:[id], onDelete: Cascade); permission Permission @relation(fields:[permissionId], references:[id], onDelete: Cascade); @@id([roleId,permissionId]) }
-model RefreshToken { id String @id @default(cuid()); tokenHash String; userId String; expiresAt DateTime; revokedAt DateTime?; createdAt DateTime @default(now()); user User @relation(fields:[userId], references:[id], onDelete: Cascade) }
-model AuditLog { id String @id @default(cuid()); userId String?; action String; module String; entityId String?; oldValue Json?; newValue Json?; ipAddress String?; userAgent String?; createdAt DateTime @default(now()); user User? @relation(fields:[userId], references:[id], onDelete: SetNull); @@index([module,entityId]); @@index([createdAt]) }
-model Attachment { id String @id @default(cuid()); originalName String; storagePath String; mimeType String; size Int; sha256 String?; uploadedById String?; documentId String?; createdAt DateTime @default(now()); uploadedBy User? @relation(fields:[uploadedById], references:[id], onDelete:SetNull); document Document? @relation(fields:[documentId], references:[id], onDelete: Cascade); links AttachmentLink[]; @@index([documentId]) }
+
+model Role {
+  id String @id @default(cuid())
+  name RoleName @unique
+  permissions RolePermission[]
+  users UserRole[]
+}
+
+model Permission {
+  id String @id @default(cuid())
+  code String @unique
+  roles RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user User @relation(fields:[userId], references:[id], onDelete: Cascade)
+  role Role @relation(fields:[roleId], references:[id], onDelete: Cascade)
+  @@id([userId,roleId])
+}
+
+model RolePermission {
+  roleId String
+  permissionId String
+  role Role @relation(fields:[roleId], references:[id], onDelete: Cascade)
+  permission Permission @relation(fields:[permissionId], references:[id], onDelete: Cascade)
+  @@id([roleId,permissionId])
+}
+
+model RefreshToken {
+  id String @id @default(cuid())
+  tokenHash String
+  userId String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+  userId String?
+  action String
+  module String
+  entityId String?
+  oldValue Json?
+  newValue Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user User? @relation(fields:[userId], references:[id], onDelete: SetNull)
+  @@index([module,entityId])
+  @@index([createdAt])
+}
+
+model Attachment {
+  id String @id @default(cuid())
+  originalName String
+  storagePath String
+  mimeType String
+  size Int
+  sha256 String?
+  uploadedById String?
+  documentId String?
+  createdAt DateTime @default(now())
+  uploadedBy User? @relation(fields:[uploadedById], references:[id], onDelete:SetNull)
+  document Document? @relation(fields:[documentId], references:[id], onDelete: Cascade)
+  links AttachmentLink[]
+  qualityControlLinks QualityControlAttachment[]
+  @@index([documentId])
+}
+
 // Liaison générique attachment <-> entité métier (accident, NC, risque, audit, EPI...).
 // Complète QualityControlAttachment qui reste dédiée au contrôle qualité pour compatibilité.
-model AttachmentLink { id String @id @default(cuid()); ownerType AttachmentOwnerType; ownerId String; attachmentId String; createdAt DateTime @default(now()); attachment Attachment @relation(fields:[attachmentId], references:[id], onDelete:Cascade); @@unique([ownerType,ownerId,attachmentId]); @@index([ownerType,ownerId]) }
-model Document { id String @id @default(cuid()); code String @unique; title String; category String; status DocumentStatus @default(DRAFT); currentVersion Int @default(1); createdById String?; createdAt DateTime @default(now()); updatedAt DateTime @updatedAt; createdBy User? @relation("DocumentCreator", fields:[createdById], references:[id], onDelete:SetNull); versions DocumentVersion[]; attachments Attachment[] }
-model DocumentVersion { id String @id @default(cuid()); documentId String; version Int; fileName String; storagePath String; checksum String?; status DocumentStatus @default(DRAFT); createdAt DateTime @default(now()); document Document @relation(fields:[documentId], references:[id], onDelete:Cascade); @@unique([documentId,version]) }
-model Epi { id String @id @default(cuid()); code String @unique; name String; frequency EpiFrequency; unit String @default("piece"); annualValidityDays Int?; minStock Int @default(0); active Boolean @default(true); movements EpiMovement[] }
-model Employee { id String @id @default(cuid()); matricule String @unique; firstName String; lastName String; department String?; position String?; active Boolean @default(true); epiAssignments EpiAssignment[]; epiMovements EpiMovement[] }
-model EpiAssignment { id String @id @default(cuid()); employeeId String; epiId String; quantity Int; distributedAt DateTime; renewalAt DateTime?; condition String?; reason String?; employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade); epi Epi @relation(fields:[epiId], references:[id], onDelete:Restrict); @@index([employeeId,epiId]); }
-model EpiMovement { id String @id @default(cuid()); epiId String; type EpiMovementType; quantity Int; employeeId String?; distributionDate DateTime @default(now()); userId String?; note String?; epi Epi @relation(fields:[epiId], references:[id], onDelete:Restrict); employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull); user User? @relation(fields:[userId], references:[id], onDelete:SetNull); @@index([epiId,distributionDate]) }
-model DailyHeadcount { id String @id @default(cuid()); date DateTime @unique; headcount Int; source String?; createdAt DateTime @default(now()) }
-model SyncItem { id String @id @default(cuid()); clientLocalId String @unique; entity String; entityId String?; operation String; payload Json; status SyncStatus @default(PENDING); error String?; createdAt DateTime @default(now()); syncedAt DateTime? }
-model SafetyEvent { id String @id @default(cuid()); type String; title String; description String?; occurredAt DateTime; severity Int @default(1); createdAt DateTime @default(now()) }
-model NonConformity { id String @id @default(cuid()); code String @unique; title String; description String?; severity Int @default(1); status String @default("OPEN"); source String?; occurredAt DateTime @default(now()); createdAt DateTime @default(now()); qualityControlId String?; actions Action[]; qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull); @@index([status,occurredAt]) }
-model Action { id String @id @default(cuid()); code String @unique; title String; description String?; status String @default("OPEN"); priority Int @default(2); dueDate DateTime?; completedAt DateTime?; responsibleId String?; nonConformityId String?; responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull); nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull); createdAt DateTime @default(now()); updatedAt DateTime @updatedAt; @@index([status,dueDate]) }
-model Site { id String @id @default(cuid()); code String @unique; name String; location String?; active Boolean @default(true); lines ProductionLine[]; createdAt DateTime @default(now()) }
-model ProductionLine { id String @id @default(cuid()); siteId String; code String @unique; name String; area String?; active Boolean @default(true); site Site @relation(fields:[siteId], references:[id], onDelete:Restrict); machines Machine[]; controls QualityControl[]; @@index([siteId]) }
-model Machine { id String @id @default(cuid()); lineId String; code String @unique; name String; category String?; active Boolean @default(true); line ProductionLine @relation(fields:[lineId], references:[id], onDelete:Restrict); controls QualityControl[]; }
-model Product { id String @id @default(cuid()); code String @unique; name String; category String?; active Boolean @default(true); formats ProductFormat[]; controls QualityControl[] }
-model ProductFormat { id String @id @default(cuid()); productId String; code String; label String; volumeMl Int?; product Product @relation(fields:[productId], references:[id], onDelete:Cascade); controls QualityControl[]; @@unique([productId,code]) }
-model Shift { id String @id @default(cuid()); code String @unique; name String; startTime String?; endTime String?; active Boolean @default(true); controls QualityControl[] }
+model AttachmentLink {
+  id String @id @default(cuid())
+  ownerType AttachmentOwnerType
+  ownerId String
+  attachmentId String
+  createdAt DateTime @default(now())
+  attachment Attachment @relation(fields:[attachmentId], references:[id], onDelete:Cascade)
+  @@unique([ownerType,ownerId,attachmentId])
+  @@index([ownerType,ownerId])
+}
 
-model QualityControl { id String @id @default(cuid()); code String @unique; siteId String?; lineId String?; machineId String?; productId String?; formatId String?; shiftId String?; line String?; product String?; format String?; lotNumber String?; shift String?; controlDate DateTime @default(now()); status QualityControlStatus @default(DRAFT); result String?; notes String?; latitude Float?; longitude Float?; gpsAccuracy Float?; startedAt DateTime?; submittedAt DateTime?; createdById String?; templateId String?; site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull); productionLine ProductionLine? @relation(fields:[lineId], references:[id], onDelete:SetNull); machine Machine? @relation(fields:[machineId], references:[id], onDelete:SetNull); productRef Product? @relation(fields:[productId], references:[id], onDelete:SetNull); productFormat ProductFormat? @relation(fields:[formatId], references:[id], onDelete:SetNull); shiftRef Shift? @relation(fields:[shiftId], references:[id], onDelete:SetNull); createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull); template ControlTemplate? @relation(fields:[templateId], references:[id], onDelete:SetNull); nonConformities NonConformity[]; results ControlResult[]; attachments QualityControlAttachment[]; signatures QualityControlSignature[]; @@index([controlDate]); @@index([status]); @@index([lineId,controlDate]); @@index([productId,lotNumber]) }
-model ControlTemplate { id String @id @default(cuid()); code String @unique; name String; active Boolean @default(true); points ControlPoint[]; controls QualityControl[]; createdAt DateTime @default(now()); updatedAt DateTime @updatedAt }
-model ControlPoint { id String @id @default(cuid()); templateId String; code String; label String; type ControlValueType; required Boolean @default(false); critical Boolean @default(false); minValue Float?; maxValue Float?; choices Json?; unit String?; order Int @default(0); template ControlTemplate @relation(fields:[templateId], references:[id], onDelete:Cascade); results ControlResult[]; @@unique([templateId,code]); @@index([templateId,order]) }
-model ControlResult { id String @id @default(cuid()); controlId String; pointId String; value Json?; compliant Boolean?; comment String?; photoRequired Boolean @default(false); createdById String?; createdAt DateTime @default(now()); control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade); point ControlPoint @relation(fields:[pointId], references:[id], onDelete:Restrict); createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull); @@unique([controlId,pointId]) }
-model QualityControlAttachment { id String @id @default(cuid()); controlId String; attachmentId String; control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade); attachment Attachment @relation(fields:[attachmentId], references:[id], onDelete:Cascade); @@unique([controlId,attachmentId]) }
-model QualityControlSignature { id String @id @default(cuid()); controlId String; userId String?; type SignatureType; signatureData String; signedAt DateTime @default(now()); control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade); user User? @relation(fields:[userId], references:[id], onDelete:SetNull); @@index([controlId]) }
-model Risk { id String @id @default(cuid()); code String @unique; hazard String; activity String?; severity Int; probability Int; control Int @default(1); score Int; status String @default("ACTIVE"); measures String?; reviewedAt DateTime?; createdAt DateTime @default(now()); updatedAt DateTime @updatedAt }
-model HaccpRecord { id String @id @default(cuid()); code String @unique; process String; step String; hazard String; ccp Boolean @default(false); criticalLimit String?; monitoring String?; result String?; correctiveAction String?; recordDate DateTime @default(now()) }
-model QhseAudit { id String @id @default(cuid()); code String @unique; title String; reference String?; auditDate DateTime; auditorId String?; status String @default("PLANNED"); score Float?; findings Json?; auditor User? @relation(fields:[auditorId], references:[id], onDelete:SetNull); createdAt DateTime @default(now()) }
-model EnvironmentRecord { id String @id @default(cuid()); code String @unique; type String; value Float?; unit String?; site String?; recordedAt DateTime @default(now()); notes String? }
-model Training { id String @id @default(cuid()); code String @unique; title String; trainer String?; scheduledAt DateTime; durationHours Float?; status String @default("PLANNED"); participants Json?; expiryAt DateTime? }
-model Equipment { id String @id @default(cuid()); code String @unique; name String; category String?; location String?; status String @default("ACTIVE"); lastInspectionAt DateTime?; nextInspectionAt DateTime?; notes String? }
-model SafetyTalk { id String @id @default(cuid()); weekStart DateTime; weekEnd DateTime; title String; summary String; status SafetyTalkStatus @default(DRAFT); generatedAt DateTime @default(now()); approvedAt DateTime?; createdById String?; createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull); @@unique([weekStart]) }
+// Classification transverse en 5 groupes du référentiel documentaire QHSE
+// (Stratégie/Contexte, Risques/Sécurité/Conformité, Supports/Maîtrise
+// documentaire, Opérations/Maîtrise terrain, Évaluation/Contrôle/Amélioration).
+// Vient EN PLUS du champ "category" existant, sans le remplacer : purement
+// additif, aucune donnée existante n'est modifiée par ce changement de schéma.
+enum DocumentGroup {
+  STRATEGIE_CONTEXTE
+  RISQUES_SECURITE_CONFORMITE
+  SUPPORTS_MAITRISE_DOCUMENTAIRE
+  OPERATIONS_MAITRISE_TERRAIN
+  EVALUATION_CONTROLE_AMELIORATION
+}
+
+model Document {
+  id String @id @default(cuid())
+  code String @unique
+  title String
+  category String
+  documentGroup DocumentGroup?
+  status DocumentStatus @default(DRAFT)
+  currentVersion Int @default(1)
+  createdById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy User? @relation("DocumentCreator", fields:[createdById], references:[id], onDelete:SetNull)
+  versions DocumentVersion[]
+  attachments Attachment[]
+}
+
+model DocumentVersion {
+  id String @id @default(cuid())
+  documentId String
+  version Int
+  fileName String
+  storagePath String
+  checksum String?
+  status DocumentStatus @default(DRAFT)
+  createdAt DateTime @default(now())
+  document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
+  @@unique([documentId,version])
+}
+
+model Epi {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  frequency EpiFrequency
+  unit String @default("piece")
+  annualValidityDays Int?
+  minStock Int @default(0)
+  active Boolean @default(true)
+  movements EpiMovement[]
+  assignments EpiAssignment[]
+}
+
+model Employee {
+  id String @id @default(cuid())
+  matricule String @unique
+  firstName String
+  lastName String
+  department String?
+  position String?
+  active Boolean @default(true)
+  epiAssignments EpiAssignment[]
+  epiMovements EpiMovement[]
+}
+
+model EpiAssignment {
+  id String @id @default(cuid())
+  employeeId String
+  epiId String
+  quantity Int
+  distributedAt DateTime
+  renewalAt DateTime?
+  condition String?
+  reason String?
+  employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade)
+  epi Epi @relation(fields:[epiId], references:[id], onDelete:Restrict)
+  @@index([employeeId,epiId])
+}
+
+model EpiMovement {
+  id String @id @default(cuid())
+  epiId String
+  type EpiMovementType
+  quantity Int
+  employeeId String?
+  distributionDate DateTime @default(now())
+  userId String?
+  note String?
+  epi Epi @relation(fields:[epiId], references:[id], onDelete:Restrict)
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+  @@index([epiId,distributionDate])
+}
+
+model DailyHeadcount {
+  id String @id @default(cuid())
+  date DateTime @unique
+  headcount Int
+  source String?
+  createdAt DateTime @default(now())
+}
+
+model SyncItem {
+  id String @id @default(cuid())
+  clientLocalId String @unique
+  entity String
+  entityId String?
+  operation String
+  payload Json
+  status SyncStatus @default(PENDING)
+  error String?
+  createdAt DateTime @default(now())
+  syncedAt DateTime?
+}
+
+model SafetyEvent {
+  id String @id @default(cuid())
+  type String
+  title String
+  description String?
+  occurredAt DateTime
+  severity Int @default(1)
+  createdAt DateTime @default(now())
+}
+
+model NonConformity {
+  id String @id @default(cuid())
+  code String @unique
+  title String
+  description String?
+  severity Int @default(1)
+  status String @default("OPEN")
+  source String?
+  occurredAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  qualityControlId String?
+  actions Action[]
+  qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
+  @@index([status,occurredAt])
+}
+
+model Action {
+  id String @id @default(cuid())
+  code String @unique
+  title String
+  description String?
+  status String @default("OPEN")
+  priority Int @default(2)
+  dueDate DateTime?
+  completedAt DateTime?
+  responsibleId String?
+  nonConformityId String?
+  responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
+  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status,dueDate])
+}
+
+model Site {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  location String?
+  active Boolean @default(true)
+  lines ProductionLine[]
+  qualityControls QualityControl[]
+  createdAt DateTime @default(now())
+}
+
+model ProductionLine {
+  id String @id @default(cuid())
+  siteId String
+  code String @unique
+  name String
+  area String?
+  active Boolean @default(true)
+  site Site @relation(fields:[siteId], references:[id], onDelete:Restrict)
+  machines Machine[]
+  controls QualityControl[]
+  @@index([siteId])
+}
+
+model Machine {
+  id String @id @default(cuid())
+  lineId String
+  code String @unique
+  name String
+  category String?
+  active Boolean @default(true)
+  line ProductionLine @relation(fields:[lineId], references:[id], onDelete:Restrict)
+  controls QualityControl[]
+}
+
+model Product {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  category String?
+  active Boolean @default(true)
+  formats ProductFormat[]
+  controls QualityControl[]
+}
+
+model ProductFormat {
+  id String @id @default(cuid())
+  productId String
+  code String
+  label String
+  volumeMl Int?
+  product Product @relation(fields:[productId], references:[id], onDelete:Cascade)
+  controls QualityControl[]
+  @@unique([productId,code])
+}
+
+model Shift {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  startTime String?
+  endTime String?
+  active Boolean @default(true)
+  controls QualityControl[]
+}
+
+model QualityControl {
+  id String @id @default(cuid())
+  code String @unique
+  siteId String?
+  lineId String?
+  machineId String?
+  productId String?
+  formatId String?
+  shiftId String?
+  line String?
+  product String?
+  format String?
+  lotNumber String?
+  shift String?
+  controlDate DateTime @default(now())
+  status QualityControlStatus @default(DRAFT)
+  result String?
+  notes String?
+  latitude Float?
+  longitude Float?
+  gpsAccuracy Float?
+  startedAt DateTime?
+  submittedAt DateTime?
+  createdById String?
+  templateId String?
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  productionLine ProductionLine? @relation(fields:[lineId], references:[id], onDelete:SetNull)
+  machine Machine? @relation(fields:[machineId], references:[id], onDelete:SetNull)
+  productRef Product? @relation(fields:[productId], references:[id], onDelete:SetNull)
+  productFormat ProductFormat? @relation(fields:[formatId], references:[id], onDelete:SetNull)
+  shiftRef Shift? @relation(fields:[shiftId], references:[id], onDelete:SetNull)
+  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  template ControlTemplate? @relation(fields:[templateId], references:[id], onDelete:SetNull)
+  nonConformities NonConformity[]
+  results ControlResult[]
+  attachments QualityControlAttachment[]
+  signatures QualityControlSignature[]
+  @@index([controlDate])
+  @@index([status])
+  @@index([lineId,controlDate])
+  @@index([productId,lotNumber])
+}
+
+model ControlTemplate {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  active Boolean @default(true)
+  points ControlPoint[]
+  controls QualityControl[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ControlPoint {
+  id String @id @default(cuid())
+  templateId String
+  code String
+  label String
+  type ControlValueType
+  required Boolean @default(false)
+  critical Boolean @default(false)
+  minValue Float?
+  maxValue Float?
+  choices Json?
+  unit String?
+  order Int @default(0)
+  template ControlTemplate @relation(fields:[templateId], references:[id], onDelete:Cascade)
+  results ControlResult[]
+  @@unique([templateId,code])
+  @@index([templateId,order])
+}
+
+model ControlResult {
+  id String @id @default(cuid())
+  controlId String
+  pointId String
+  value Json?
+  compliant Boolean?
+  comment String?
+  photoRequired Boolean @default(false)
+  createdById String?
+  createdAt DateTime @default(now())
+  control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade)
+  point ControlPoint @relation(fields:[pointId], references:[id], onDelete:Restrict)
+  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  @@unique([controlId,pointId])
+}
+
+model QualityControlAttachment {
+  id String @id @default(cuid())
+  controlId String
+  attachmentId String
+  control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade)
+  attachment Attachment @relation(fields:[attachmentId], references:[id], onDelete:Cascade)
+  @@unique([controlId,attachmentId])
+}
+
+model QualityControlSignature {
+  id String @id @default(cuid())
+  controlId String
+  userId String?
+  type SignatureType
+  signatureData String
+  signedAt DateTime @default(now())
+  control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade)
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+  @@index([controlId])
+}
+
+model Risk {
+  id String @id @default(cuid())
+  code String @unique
+  hazard String
+  activity String?
+  severity Int
+  probability Int
+  control Int @default(1)
+  score Int
+  status String @default("ACTIVE")
+  measures String?
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HaccpRecord {
+  id String @id @default(cuid())
+  code String @unique
+  process String
+  step String
+  hazard String
+  ccp Boolean @default(false)
+  criticalLimit String?
+  monitoring String?
+  result String?
+  correctiveAction String?
+  recordDate DateTime @default(now())
+}
+
+model QhseAudit {
+  id String @id @default(cuid())
+  code String @unique
+  title String
+  reference String?
+  auditDate DateTime
+  auditorId String?
+  status String @default("PLANNED")
+  score Float?
+  findings Json?
+  auditor User? @relation(fields:[auditorId], references:[id], onDelete:SetNull)
+  createdAt DateTime @default(now())
+}
+
+model EnvironmentRecord {
+  id String @id @default(cuid())
+  code String @unique
+  type String
+  value Float?
+  unit String?
+  site String?
+  recordedAt DateTime @default(now())
+  notes String?
+}
+
+model Training {
+  id String @id @default(cuid())
+  code String @unique
+  title String
+  trainer String?
+  scheduledAt DateTime
+  durationHours Float?
+  status String @default("PLANNED")
+  participants Json?
+  expiryAt DateTime?
+}
+
+model Equipment {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  category String?
+  location String?
+  status String @default("ACTIVE")
+  lastInspectionAt DateTime?
+  nextInspectionAt DateTime?
+  notes String?
+}
+
+model SafetyTalk {
+  id String @id @default(cuid())
+  weekStart DateTime
+  weekEnd DateTime
+  title String
+  summary String
+  status SafetyTalkStatus @default(DRAFT)
+  generatedAt DateTime @default(now())
+  approvedAt DateTime?
+  createdById String?
+  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  @@unique([weekStart])
+}
