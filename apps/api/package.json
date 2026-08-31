@@ -14,7 +14,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
     "prisma:status": "prisma migrate status",
-    "prisma:reclassify-docs": "tsx prisma/reclassify-documents.ts"
+    "prisma:reclassify-docs": "tsx prisma/reclassify-documents.ts",
+    "import:documents": "tsx prisma/import-documents.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
