@@ -31,6 +31,7 @@ services:
     ports: ["3000:3000"]
     volumes:
       - qhse_uploads:/app/uploads
+      - ./import:/app/import:ro
 volumes:
   qhse_pgdata:
   qhse_uploads:
