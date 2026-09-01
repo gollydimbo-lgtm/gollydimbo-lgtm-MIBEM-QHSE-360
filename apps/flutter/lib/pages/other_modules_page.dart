@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import 'attachment_helpers.dart';
+import 'ged_page.dart';
 
 // -------------------- Hub --------------------
 class OtherModulesPage extends StatelessWidget {
@@ -11,6 +12,7 @@ class OtherModulesPage extends StatelessWidget {
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _tile(c, Icons.folder_special_outlined, 'Référentiel documentaire (GED)', 'Les 19 documents QHSE classés en 5 groupes ISO', const GedPage()),
         _tile(c, Icons.restaurant_menu, 'HACCP', 'Points critiques (CCP), surveillance, actions correctives', const HaccpPage()),
         _tile(c, Icons.eco, 'Environnement', 'Relevés (eau, déchets, énergie, rejets...)', const EnvironmentPage()),
         _tile(c, Icons.school, 'Formations', 'Planification, échéances, participants', const TrainingsPage()),
