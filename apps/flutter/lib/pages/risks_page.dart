@@ -3,6 +3,7 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
 import 'attachment_helpers.dart';
+import '../theme.dart';
 
 class RisksPage extends StatefulWidget {
   const RisksPage({super.key});
@@ -43,7 +44,7 @@ class _RisksPageState extends State<RisksPage> {
                     itemBuilder: (_, i) {
                       final r = items[i];
                       final score = (r['score'] ?? 0) as num;
-                      final color = score >= 12 ? Colors.red : (score >= 6 ? Colors.orange : Colors.green);
+                      final color = score >= 12 ? QhseColors.red : (score >= 6 ? QhseColors.amber : QhseColors.green);
                       return Card(
                         child: ListTile(
                           leading: CircleAvatar(backgroundColor: color, child: Text('$score', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
@@ -131,7 +132,7 @@ class _NewRiskPageState extends State<NewRiskPage> {
         _slider('Probabilité', probability, (v) => setState(() => probability = v)),
         _slider('Maîtrise actuelle', control, (v) => setState(() => control = v)),
         const SizedBox(height: 8),
-        Text('Score de criticité : $score', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: score >= 12 ? Colors.red : (score >= 6 ? Colors.orange : Colors.green))),
+        Text('Score de criticité : $score', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: score >= 12 ? QhseColors.red : (score >= 6 ? QhseColors.amber : QhseColors.green))),
         const SizedBox(height: 12),
         TextField(controller: measures, maxLines: 3, decoration: const InputDecoration(labelText: 'Mesures de prévention envisagées')),
         const SizedBox(height: 20),
