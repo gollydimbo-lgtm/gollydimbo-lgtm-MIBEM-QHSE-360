@@ -15,6 +15,7 @@ import 'pages/epi_page.dart';
 import 'pages/security_hub_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/other_modules_page.dart';
+import 'theme.dart';
 
 // Clé de navigation globale : permet à Api.onUnauthorized (statique, sans
 // BuildContext) de rediriger vers l'écran de connexion en cas de session expirée.
@@ -31,7 +32,7 @@ void main() {
   runApp(const QhseApp());
 }
 
-class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>MaterialApp(navigatorKey:navigatorKey,title:'QHSE MIBEM',debugShowCheckedModeBanner:false,theme:ThemeData(colorSchemeSeed:Colors.indigo,useMaterial3:true),home:const AuthGate());}
+class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>MaterialApp(navigatorKey:navigatorKey,title:'QHSE MIBEM',debugShowCheckedModeBanner:false,theme:buildQhseTheme(),darkTheme:buildQhseTheme(),themeMode:ThemeMode.dark,home:const AuthGate());}
 
 // Vérifie au démarrage si une session est déjà ouverte (jeton stocké localement)
 // et redirige vers le tableau de bord ou l'écran de connexion.
@@ -177,3 +178,5 @@ Future<void>photo()async{String? name;Uint8List? bytes;String mime='image/jpeg';
 Future<void>submit()async{try{await api.post('/quality/controls/${widget.controlId}/submit',{});await load();}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
 Future<void>sign()async{final controller=TextEditingController();final s=await showDialog<String>(context:context,builder:(_)=>AlertDialog(title:const Text('Signature numérique'),content:TextField(controller:controller,decoration:const InputDecoration(labelText:'Nom / signature')),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Annuler')),FilledButton(onPressed:()=>Navigator.pop(context,controller.text),child:const Text('Signer'))]));if(s!=null&&s.isNotEmpty){await api.post('/quality/controls/${widget.controlId}/signatures',{'type':'CONTROLLER','signatureData':s});}}
 @override Widget build(BuildContext context){if(loading)return const Scaffold(body:Center(child:CircularProgressIndicator()));final pts=List.from(c?['template']?['points']??[]);return Scaffold(appBar:AppBar(title:Text('${c?['code']}')),body:ListView(padding:const EdgeInsets.all(12),children:[Card(child:ListTile(title:Text('${c?['productRef']?['name']??''} • lot ${c?['lotNumber']??''}'),subtitle:Text('${c?['productionLine']?['name']??''} • ${c?['shiftRef']?['name']??''}'))),...pts.map((p)=>Card(child:ListTile(title:Text('${p['label']}${p['required']==true?' *':''}'),subtitle:Text(p['critical']==true?'Point critique':'Point de contrôle'),trailing:p['type']=='BOOLEAN'?Switch(value:vals[p['id']]??false,onChanged:(v){vals[p['id']]=v;result(p);}):const Icon(Icons.edit)))),const SizedBox(height:8),OutlinedButton.icon(onPressed:photo,icon:const Icon(Icons.camera_alt),label:const Text('Ajouter une photo')),OutlinedButton.icon(onPressed:sign,icon:const Icon(Icons.draw),label:const Text('Signer')),FilledButton.icon(onPressed:submit,icon:const Icon(Icons.check_circle),label:const Text('Soumettre et générer les NC'))]));}}
+
+
