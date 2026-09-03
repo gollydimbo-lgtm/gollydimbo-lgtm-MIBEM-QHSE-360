@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../main.dart';
+import '../theme.dart';
 
 class EpiPage extends StatefulWidget {
   const EpiPage({super.key});
@@ -104,14 +105,14 @@ class _EpiPageState extends State<EpiPage> {
     final low = stock <= minStock;
     return Card(
       child: ListTile(
-        leading: Icon(Icons.inventory_2, color: low ? Colors.red : Colors.green),
+        leading: Icon(Icons.inventory_2, color: low ? QhseColors.red : QhseColors.green),
         title: Text('${e['name']}'),
         subtitle: Text(
           e['frequency'] == 'DAILY'
               ? 'Stock restant : $stock • distribués aujourd\'hui : ${e['dailyDistributed'] ?? 0}'
               : 'Stock restant : $stock',
         ),
-        trailing: low ? const Chip(label: Text('Stock bas'), backgroundColor: Color(0xFFFFCDD2)) : null,
+        trailing: low ? Chip(label: const Text('Stock bas'), backgroundColor: QhseColors.red.withOpacity(0.15), labelStyle: const TextStyle(color: QhseColors.red, fontWeight: FontWeight.w600), side: BorderSide.none) : null,
       ),
     );
   }
