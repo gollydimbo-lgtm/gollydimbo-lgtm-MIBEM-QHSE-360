@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import 'attachment_helpers.dart';
 import 'ged_page.dart';
+import '../theme.dart';
 
 // -------------------- Hub --------------------
 class OtherModulesPage extends StatelessWidget {
@@ -77,7 +78,7 @@ class _HaccpPageState extends State<HaccpPage> {
           : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
               final h = items[i];
               return Card(child: ListTile(
-                leading: Icon(Icons.warning_amber, color: h['ccp'] == true ? Colors.red : Colors.grey),
+                leading: Icon(Icons.warning_amber, color: h['ccp'] == true ? QhseColors.red : Colors.grey),
                 title: Text('${h['process']} — ${h['step']}'),
                 subtitle: Text('${h['hazard']}${h['ccp'] == true ? ' • CCP' : ''}'),
               ));
@@ -249,10 +250,10 @@ class _EquipmentPageState extends State<EquipmentPage> {
                 final next = e['nextInspectionAt'] != null ? DateTime.tryParse(e['nextInspectionAt']) : null;
                 final overdue = next != null && next.isBefore(now);
                 return Card(child: ListTile(
-                  leading: Icon(Icons.precision_manufacturing, color: overdue ? Colors.red : Colors.blueGrey),
+                  leading: Icon(Icons.precision_manufacturing, color: overdue ? QhseColors.red : QhseColors.blue),
                   title: Text('${e['name']}'),
                   subtitle: Text('${e['category'] ?? ''} • ${e['location'] ?? ''}${next != null ? ' • prochaine inspection ${next.toIso8601String().substring(0, 10)}' : ''}'),
-                  trailing: overdue ? const Chip(label: Text('En retard'), backgroundColor: Color(0xFFFFCDD2)) : null,
+                  trailing: overdue ? Chip(label: const Text('En retard'), backgroundColor: QhseColors.red.withOpacity(0.15), labelStyle: const TextStyle(color: QhseColors.red, fontWeight: FontWeight.w600), side: BorderSide.none) : null,
                 ));
               }),
       ),
