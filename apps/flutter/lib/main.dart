@@ -32,7 +32,7 @@ void main() {
   runApp(const QhseApp());
 }
 
-class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>MaterialApp(navigatorKey:navigatorKey,title:'QHSE MIBEM',debugShowCheckedModeBanner:false,theme:buildQhseTheme(),darkTheme:buildQhseTheme(),themeMode:ThemeMode.dark,home:const AuthGate());}
+class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>MaterialApp(navigatorKey:navigatorKey,title:'Gestion QHSE 360',debugShowCheckedModeBanner:false,theme:buildQhseTheme(),darkTheme:buildQhseTheme(),themeMode:ThemeMode.dark,home:const AuthGate());}
 
 // Vérifie au démarrage si une session est déjà ouverte (jeton stocké localement)
 // et redirige vers le tableau de bord ou l'écran de connexion.
