@@ -12,9 +12,15 @@ import 'services/sync_queue.dart';
 import 'pages/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/epi_page.dart';
-import 'pages/security_hub_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/other_modules_page.dart';
+import 'pages/ged_page.dart';
+import 'pages/safety_events_page.dart';
+import 'pages/risks_page.dart';
+import 'pages/audits_page.dart';
+import 'pages/non_conformities_page.dart';
+import 'pages/actions_page.dart';
+import 'pages/safety_talk_page.dart';
 import 'theme.dart';
 
 // Clé de navigation globale : permet à Api.onUnauthorized (statique, sans
@@ -63,7 +69,6 @@ class HomeShell extends StatefulWidget {
 }
 class _HomeShellState extends State<HomeShell> {
   final api = Api();
-  int index = 0;
   Map<String, dynamic>? user;
 
   @override
@@ -110,52 +115,182 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  static const titles = ['Tableau de bord', 'Contrôle Qualité', 'Gestion EPI', 'HSE & Sécurité', 'Autres modules'];
-  final pages = const [DashboardPage(), QualityHome(), EpiPage(), SecurityHubPage(), OtherModulesPage()];
+  // Même regroupement que le tableau de bord web (Gestion QHSE 360) : les
+  // modules déjà réels côté app renvoient vers leur écran existant ; ceux qui
+  // n'ont pas encore d'équivalent (même statut que côté web, voir
+  // ROADMAP-CONSOLIDATION.md) ouvrent une page "Bientôt disponible" honnête
+  // plutôt que de cacher leur absence.
+  List<_NavGroup> get navGroups => [
+    _NavGroup('PILOTAGE', [_NavItem('Tableau de bord', Icons.dashboard_outlined, null)]),
+    _NavGroup('QUALITÉ (ISO 9001:2015)', [
+      _NavItem('Contrôles qualité', Icons.fact_check_outlined, const QualityHome()),
+      _NavItem('Processus & indicateurs', Icons.assignment_outlined, const ComingSoonPage(title: 'Processus & indicateurs')),
+      _NavItem('Réclamations clients', Icons.notifications_outlined, const ComingSoonPage(title: 'Réclamations clients')),
+      _NavItem('Fournisseurs', Icons.science_outlined, const ComingSoonPage(title: 'Fournisseurs')),
+    ]),
+    _NavGroup('SÉCURITÉ (ISO 45001:2018)', [
+      _NavItem('Accidents & incidents', Icons.warning_amber_outlined, const SafetyEventsPage()),
+      _NavItem('EPI, formations, permis', Icons.health_and_safety_outlined, const EpiPage()),
+      _NavItem('Hygiène au travail', Icons.favorite_outline, const ComingSoonPage(title: 'Hygiène au travail')),
+    ]),
+    _NavGroup('ENVIRONNEMENT (ISO 14001:2026)', [_NavItem('Environnement', Icons.eco_outlined, const EnvironmentPage())]),
+    _NavGroup('RISQUES & AUDITS', [
+      _NavItem('Registre des risques', Icons.report_problem_outlined, const RisksPage()),
+      _NavItem('Audits', Icons.assignment_turned_in_outlined, const AuditsPage()),
+      _NavItem('Non-conformités', Icons.error_outline, const NonConformitiesPage()),
+      _NavItem('Actions CAPA', Icons.build_outlined, const ActionsPage()),
+    ]),
+    _NavGroup('SYSTÈME', [
+      _NavItem('Documentation (GED)', Icons.folder_open_outlined, const GedPage()),
+      _NavItem("Quart d'heure sécurité", Icons.shield_outlined, const SafetyTalkPage()),
+      _NavItem('HACCP', Icons.restaurant_menu_outlined, const HaccpPage()),
+      _NavItem('Équipements', Icons.precision_manufacturing_outlined, const EquipmentPage()),
+      _NavItem('Veille réglementaire', Icons.search_outlined, const ComingSoonPage(title: 'Veille réglementaire')),
+      _NavItem('Objectifs QHSE', Icons.flag_outlined, const ComingSoonPage(title: 'Objectifs QHSE')),
+    ]),
+  ];
+
+  void openItem(_NavItem item) {
+    if (item.page == null) return; // Tableau de bord = déjà affiché
+    Navigator.push(context, MaterialPageRoute(builder: (_) => item.page!));
+  }
+
+  Widget _syncAction() => Stack(clipBehavior: Clip.none, children: [
+        IconButton(
+          icon: syncing
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(pendingSync > 0 ? Icons.cloud_off : Icons.cloud_done_outlined),
+          tooltip: pendingSync > 0 ? '$pendingSync élément(s) en attente de synchronisation' : 'Tout est synchronisé',
+          onPressed: () => syncNow(),
+        ),
+        if (pendingSync > 0)
+          Positioned(
+            right: 6, top: 6,
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text('$pendingSync', style: const TextStyle(color: Colors.white, fontSize: 10), textAlign: TextAlign.center),
+            ),
+          ),
+      ]);
+
+  Widget _sidebarContent(BuildContext c, {required bool inDrawer}) => Container(
+        width: 260,
+        color: QhseColors.bg,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(color: QhseColors.blue, borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.shield, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Gestion QHSE 360', style: TextStyle(color: QhseColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Qualité · Sécurité · Hygiène · Environnement', style: TextStyle(color: QhseColors.textSecondary, fontSize: 10)),
+                    ]),
+                  ),
+                ]),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  children: [
+                    for (final group in navGroups) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
+                        child: Text(group.label, style: const TextStyle(color: QhseColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+                      ),
+                      for (final item in group.items)
+                        ListTile(
+                          dense: true,
+                          leading: Icon(item.icon, size: 18, color: item.page == null ? QhseColors.blue : QhseColors.textSecondary),
+                          title: Text(item.label, style: TextStyle(fontSize: 13, color: item.page == null ? QhseColors.blue : QhseColors.textPrimary)),
+                          selected: item.page == null,
+                          selectedTileColor: QhseColors.blue.withOpacity(0.12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          onTap: () { if (inDrawer) Navigator.pop(c); openItem(item); },
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+              const Divider(color: QhseColors.border, height: 1),
+              ListTile(
+                leading: const Icon(Icons.settings_outlined, size: 18, color: QhseColors.textSecondary),
+                title: const Text('Réglages', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
+                onTap: () { if (inDrawer) Navigator.pop(c); Navigator.push(c, MaterialPageRoute(builder: (_) => const SettingsPage())); },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout, size: 18, color: QhseColors.textSecondary),
+                title: const Text('Déconnexion', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
+                onTap: logout,
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      );
 
   @override
-  Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(
-      title: Text(titles[index]),
+  Widget build(BuildContext c) {
+    final wide = MediaQuery.of(c).size.width >= 900;
+    final appBar = AppBar(
+      title: const Text('Tableau de bord'),
       actions: [
         if (user != null)
           Padding(padding: const EdgeInsets.only(right: 8), child: Center(child: Text('${user!['firstName'] ?? ''}', style: const TextStyle(fontSize: 13)))),
-        Stack(clipBehavior: Clip.none, children: [
-          IconButton(
-            icon: syncing
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(pendingSync > 0 ? Icons.cloud_off : Icons.cloud_done_outlined),
-            tooltip: pendingSync > 0 ? '$pendingSync élément(s) en attente de synchronisation' : 'Tout est synchronisé',
-            onPressed: () => syncNow(),
-          ),
-          if (pendingSync > 0)
-            Positioned(
-              right: 6, top: 6,
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                child: Text('$pendingSync', style: const TextStyle(color: Colors.white, fontSize: 10), textAlign: TextAlign.center),
-              ),
-            ),
+        _syncAction(),
+      ],
+    );
+    if (wide) {
+      return Scaffold(
+        body: Row(children: [
+          _sidebarContent(c, inDrawer: false),
+          const VerticalDivider(width: 1, color: QhseColors.border),
+          Expanded(child: Scaffold(appBar: appBar, body: const DashboardPage())),
         ]),
-        IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Réglages', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const SettingsPage()))),
-        IconButton(icon: const Icon(Icons.logout), tooltip: 'Déconnexion', onPressed: logout),
-      ],
-    ),
-    body: IndexedStack(index: index, children: pages),
-    bottomNavigationBar: NavigationBar(
-      selectedIndex: index,
-      onDestinationSelected: (i) { setState(() => index = i); refreshPendingCount(); },
-      destinations: const [
-        NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-        NavigationDestination(icon: Icon(Icons.fact_check_outlined), selectedIcon: Icon(Icons.fact_check), label: 'Qualité'),
-        NavigationDestination(icon: Icon(Icons.health_and_safety_outlined), selectedIcon: Icon(Icons.health_and_safety), label: 'EPI'),
-        NavigationDestination(icon: Icon(Icons.shield_outlined), selectedIcon: Icon(Icons.shield), label: 'Sécurité'),
-        NavigationDestination(icon: Icon(Icons.apps_outlined), selectedIcon: Icon(Icons.apps), label: 'Modules'),
-      ],
-    ),
-  );
+      );
+    }
+    return Scaffold(
+      appBar: appBar,
+      drawer: Drawer(child: _sidebarContent(c, inDrawer: true)),
+      body: const DashboardPage(),
+    );
+  }
+}
+
+class _NavGroup { final String label; final List<_NavItem> items; _NavGroup(this.label, this.items); }
+class _NavItem { final String label; final IconData icon; final Widget? page; _NavItem(this.label, this.icon, this.page); }
+
+// Page honnête pour les modules qui n'ont pas encore de table dédiée côté
+// API (voir ROADMAP-CONSOLIDATION.md) — jamais d'écran vide silencieux.
+class ComingSoonPage extends StatelessWidget {
+  final String title;
+  const ComingSoonPage({super.key, required this.title});
+  @override
+  Widget build(BuildContext c) => Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.hourglass_empty, size: 48, color: QhseColors.textSecondary),
+              const SizedBox(height: 16),
+              Text('$title n\'est pas encore connecté', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: QhseColors.textPrimary), textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              const Text('Ce module nécessite une nouvelle table dans la base — il sera activé lors d\'une prochaine mise à jour.', style: TextStyle(fontSize: 13, color: QhseColors.textSecondary), textAlign: TextAlign.center),
+            ]),
+          ),
+        ),
+      );
 }
 
 class QualityHome extends StatefulWidget{const QualityHome({super.key});@override State<QualityHome> createState()=>_QualityHomeState();}
