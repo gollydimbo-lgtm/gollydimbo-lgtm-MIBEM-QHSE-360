@@ -637,3 +637,92 @@ model SafetyTalk {
   createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
   @@unique([weekStart])
 }
+
+// ============================================================================
+// Modules ajoutés pour compléter la parité avec la maquette Gestion QHSE 360
+// (Qualité : processus/indicateurs, Réclamations, Fournisseurs, Hygiène,
+// Veille réglementaire, Objectifs QHSE). Purement additif : aucun modèle
+// existant ci-dessus n'est modifié.
+// ============================================================================
+model Processus {
+  id String @id @default(cuid())
+  code String @unique
+  nom String
+  proprietaire String?
+  objectifs String?
+  kpi String?
+  createdAt DateTime @default(now())
+}
+
+model IndicateurQualite {
+  id String @id @default(cuid())
+  code String @unique
+  indicateur String
+  actuel Float
+  cible Float
+  unite String?
+  sensInverse Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Reclamation {
+  id String @id @default(cuid())
+  code String @unique
+  client String
+  motif String
+  description String?
+  date DateTime @default(now())
+  gravite String @default("Faible")
+  statut String @default("OPEN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Fournisseur {
+  id String @id @default(cuid())
+  code String @unique
+  nom String
+  categorie String?
+  scoreQualite Int?
+  derniereEvaluation DateTime?
+  statut String @default("HOMOLOGUE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VisiteMedicale {
+  id String @id @default(cuid())
+  code String @unique
+  employeNom String
+  poste String?
+  aptitude String?
+  statut String @default("A_VENIR")
+  prochaineVisite DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VeilleReglementaire {
+  id String @id @default(cuid())
+  code String @unique
+  texte String
+  domaine String?
+  dateApplication DateTime?
+  statut String @default("A_TRAITER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ObjectifQhse {
+  id String @id @default(cuid())
+  code String @unique
+  titre String
+  pilier String?
+  cible Float
+  actuel Float @default(0)
+  unite String?
+  echeance DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
