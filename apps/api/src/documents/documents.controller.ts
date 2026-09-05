@@ -1,8 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { DocumentGroup } from '@prisma/client';
 import { createHash } from 'crypto';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
 function saveFile(fileName: string, base64: string) {
@@ -64,5 +64,18 @@ export class DocumentsController {
     const { storagePath, checksum } = saveFile(d.fileName, d.base64);
     await this.db.documentVersion.create({ data: { documentId: id, version: nextVersion, fileName: d.fileName, storagePath, checksum, status: 'ACTIVE' } });
     return this.db.document.update({ where: { id }, data: { currentVersion: nextVersion, status: 'ACTIVE' }, include: { versions: { orderBy: { version: 'desc' } } } });
+  }
+
+  // Supprime un document et toutes ses versions — y compris les fichiers
+  // physiques sur le disque, pas seulement les lignes en base.
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    const doc = await this.db.document.findUnique({ where: { id }, include: { versions: true } });
+    if (!doc) throw new BadRequestException('Document introuvable');
+    for (const v of doc.versions) {
+      if (existsSync(v.storagePath)) unlinkSync(v.storagePath);
+    }
+    // Les versions sont supprimées automatiquement (onDelete: Cascade côté schéma).
+    return this.db.document.delete({ where: { id } });
   }
 }
