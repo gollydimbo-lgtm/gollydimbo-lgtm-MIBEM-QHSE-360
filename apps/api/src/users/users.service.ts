@@ -15,4 +15,5 @@ import { Injectable, BadRequestException } from '@nestjs/common'; import { Prism
   await this.db.user.update({where:{id},data:{passwordHash}});
   return {success:true};
  }
+ remove(id:string){return this.db.user.delete({where:{id}})}
 }
