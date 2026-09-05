@@ -1,2 +1,11 @@
-import { Injectable,UnauthorizedException } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; import { JwtService } from '@nestjs/jwt'; import * as bcrypt from 'bcrypt'; import { LoginDto } from './dto';
-@Injectable() export class AuthService{constructor(private db:PrismaService,private jwt:JwtService){} async login(d:LoginDto){const u=await this.db.user.findUnique({where:{email:d.email.toLowerCase()},include:{roles:{include:{role:{include:{permissions:{include:{permission:true}}}}}}}}); if(!u||u.status!=='ACTIVE'||!(await bcrypt.compare(d.password,u.passwordHash))) throw new UnauthorizedException('Identifiants invalides'); const permissions=[...new Set(u.roles.flatMap(r=>r.role.permissions.map(p=>p.permission.code)))]; const accessToken=this.jwt.sign({sub:u.id,email:u.email,roles:u.roles.map(r=>r.role.name),permissions}); return {accessToken,user:{id:u.id,email:u.email,firstName:u.firstName,lastName:u.lastName,roles:u.roles.map(r=>r.role.name),permissions}};}}
+import { Injectable,UnauthorizedException,BadRequestException } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; import { JwtService } from '@nestjs/jwt'; import * as bcrypt from 'bcrypt'; import { LoginDto } from './dto';
+@Injectable() export class AuthService{constructor(private db:PrismaService,private jwt:JwtService){} async login(d:LoginDto){const u=await this.db.user.findUnique({where:{email:d.email.toLowerCase()},include:{roles:{include:{role:{include:{permissions:{include:{permission:true}}}}}}}}); if(!u||u.status!=='ACTIVE'||!(await bcrypt.compare(d.password,u.passwordHash))) throw new UnauthorizedException('Identifiants invalides'); const permissions=[...new Set(u.roles.flatMap(r=>r.role.permissions.map(p=>p.permission.code)))]; const accessToken=this.jwt.sign({sub:u.id,email:u.email,roles:u.roles.map(r=>r.role.name),permissions}); return {accessToken,user:{id:u.id,email:u.email,firstName:u.firstName,lastName:u.lastName,roles:u.roles.map(r=>r.role.name),permissions}};}
+ async changePassword(email:string,currentPassword:string,newPassword:string){
+  if(!newPassword||newPassword.length<8) throw new BadRequestException('Le nouveau mot de passe doit contenir au moins 8 caractères');
+  const u=await this.db.user.findUnique({where:{email:email.toLowerCase()}});
+  if(!u||!(await bcrypt.compare(currentPassword,u.passwordHash))) throw new UnauthorizedException('Mot de passe actuel incorrect');
+  const passwordHash=await bcrypt.hash(newPassword,10);
+  await this.db.user.update({where:{id:u.id},data:{passwordHash}});
+  return {success:true};
+ }
+}
