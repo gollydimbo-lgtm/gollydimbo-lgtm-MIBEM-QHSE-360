@@ -1,7 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm install --fetch-retries=8 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 COPY . .
 RUN npx prisma generate && npm run build
 
@@ -13,10 +13,7 @@ COPY --from=build /app/package*.json ./
 # `docker compose exec api npx prisma db seed`. Sans eux, npx devrait les
 # retélécharger à chaque appel — lent, et impossible sans accès au
 # registre npm depuis le conteneur en production.
-# IMPORTANT : npm install doit s'exécuter AVANT de fixer NODE_ENV=production,
-# sinon npm ignore silencieusement les devDependencies (tsx, prisma) même
-# sans --omit=dev explicite, ce qui casse "prisma db seed" au runtime.
-RUN npm install
+RUN npm install --fetch-retries=8 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
