@@ -30,7 +30,8 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "@prisma/client": "^6.14.0",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
@@ -41,7 +42,8 @@
     "@types/passport-jwt": "^4.0.1",
     "prisma": "^6.14.0",
     "tsx": "^4.20.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/jsonwebtoken": "^9.0.7"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
