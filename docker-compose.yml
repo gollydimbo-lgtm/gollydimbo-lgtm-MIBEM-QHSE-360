@@ -32,6 +32,24 @@ services:
     volumes:
       - qhse_uploads:/app/uploads
       - ./import:/app/import:ro
+  backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: qhse-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: qhse
+      POSTGRES_USER: qhse
+      POSTGRES_PASSWORD: EDKAQMkn4okBDpcZZTiS76xStEXc5NC-
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - ./backups:/backups
 volumes:
   qhse_pgdata:
   qhse_uploads:
