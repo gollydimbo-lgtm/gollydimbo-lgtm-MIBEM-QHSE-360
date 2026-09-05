@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: qhse
-      POSTGRES_PASSWORD: qhse_dev_password
+      POSTGRES_PASSWORD: EDKAQMkn4okBDpcZZTiS76xStEXc5NC-
       POSTGRES_DB: qhse
     ports: ["5432:5432"]
     volumes: ["qhse_pgdata:/var/lib/postgresql/data"]
@@ -22,10 +22,10 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://qhse:qhse_dev_password@db:5432/qhse?schema=public
-      JWT_SECRET: change-me-in-production
+      DATABASE_URL: postgresql://qhse:EDKAQMkn4okBDpcZZTiS76xStEXc5NC-@db:5432/qhse?schema=public
+      JWT_SECRET: d5cce86eee4082d32d2ee5be9995f3600c7a424737f281ab1814d54a4a0c0472
       JWT_EXPIRES_IN: 15m
-      REFRESH_SECRET: change-me-refresh-in-production
+      REFRESH_SECRET: a53ef949757f3fa5d6c7c92eb964ee7723d47449f94152bd511946913e2b820b
       PORT: 3000
       UPLOAD_DIR: /app/uploads
     ports: ["3000:3000"]
