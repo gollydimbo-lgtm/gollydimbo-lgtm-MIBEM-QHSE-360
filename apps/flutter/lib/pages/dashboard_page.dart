@@ -15,6 +15,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final api = Api();
   Map<String, dynamic>? data;
+  Map<String, int> otherCounts = {};
   bool loading = true;
   String? error;
 
@@ -28,6 +29,27 @@ class _DashboardPageState extends State<DashboardPage> {
       data = Map<String, dynamic>.from(r);
     } catch (e) {
       error = 'Impossible de charger le tableau de bord';
+    }
+    // Résumé des modules ajoutés plus récemment (Processus, Réclamations,
+    // Fournisseurs, Hygiène, Veille, Objectifs) — récupérés séparément,
+    // chacun avec échec silencieux individuel pour ne jamais bloquer
+    // l'affichage du reste du tableau de bord si l'un d'eux est indisponible.
+    final endpoints = {
+      'processus': '/business/processus',
+      'indicateurs': '/business/indicateurs-qualite',
+      'reclamations': '/business/reclamations',
+      'fournisseurs': '/business/fournisseurs',
+      'visitesMedicales': '/business/visites-medicales',
+      'veille': '/business/veille-reglementaire',
+      'objectifs': '/business/objectifs-qhse',
+    };
+    for (final entry in endpoints.entries) {
+      try {
+        final r = await api.get(entry.value);
+        otherCounts[entry.key] = (r as List).length;
+      } catch (_) {
+        otherCounts[entry.key] = -1; // -1 = indisponible, affiché comme "—"
+      }
     }
     setState(() => loading = false);
   }
@@ -140,10 +162,27 @@ class _DashboardPageState extends State<DashboardPage> {
                         )).toList(),
                   ),
           ),
+
+          const SizedBox(height: 20),
+          _panel(
+            title: 'Autres modules',
+            subtitle: 'Résumé des modules Qualité, RH et conformité',
+            child: Wrap(spacing: 10, runSpacing: 10, children: [
+              _kpi('Processus', _cnt('processus'), 'cartographiés', QhseColors.blue, Icons.account_tree_outlined),
+              _kpi('Indicateurs qualité', _cnt('indicateurs'), 'suivis', QhseColors.blue, Icons.insights_outlined),
+              _kpi('Réclamations', _cnt('reclamations'), 'clients', QhseColors.amber, Icons.notifications_outlined),
+              _kpi('Fournisseurs', _cnt('fournisseurs'), 'évalués', QhseColors.blue, Icons.local_shipping_outlined),
+              _kpi('Visites médicales', _cnt('visitesMedicales'), 'suivies', QhseColors.green, Icons.favorite_outline),
+              _kpi('Veille réglementaire', _cnt('veille'), 'textes suivis', QhseColors.blue, Icons.search_outlined),
+              _kpi('Objectifs QHSE', _cnt('objectifs'), 'suivis', QhseColors.blue, Icons.flag_outlined),
+            ]),
+          ),
         ],
       ),
     );
   }
+
+  String _cnt(String key) => otherCounts[key] == null ? '—' : (otherCounts[key] == -1 ? '—' : '${otherCounts[key]}');
 
   Widget _panel({required String title, String? subtitle, required Widget child}) => Container(
         width: double.infinity,
