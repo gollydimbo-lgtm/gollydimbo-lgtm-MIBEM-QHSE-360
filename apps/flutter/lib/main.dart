@@ -14,6 +14,7 @@ import 'pages/dashboard_page.dart';
 import 'pages/epi_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/users_page.dart';
+import 'pages/referentiel_pages.dart';
 import 'pages/other_modules_page.dart';
 import 'pages/ged_page.dart';
 import 'pages/safety_events_page.dart';
@@ -125,14 +126,15 @@ class _HomeShellState extends State<HomeShell> {
     _NavGroup('PILOTAGE', [_NavItem('Tableau de bord', Icons.dashboard_outlined, null)]),
     _NavGroup('QUALITÉ (ISO 9001:2015)', [
       _NavItem('Contrôles qualité', Icons.fact_check_outlined, const QualityHome()),
-      _NavItem('Processus & indicateurs', Icons.assignment_outlined, const ComingSoonPage(title: 'Processus & indicateurs')),
-      _NavItem('Réclamations clients', Icons.notifications_outlined, const ComingSoonPage(title: 'Réclamations clients')),
-      _NavItem('Fournisseurs', Icons.science_outlined, const ComingSoonPage(title: 'Fournisseurs')),
+      _NavItem('Processus', Icons.assignment_outlined, const ProcessusPage()),
+      _NavItem('Indicateurs qualité', Icons.insights_outlined, const IndicateursQualitePage()),
+      _NavItem('Réclamations clients', Icons.notifications_outlined, const ReclamationsPage()),
+      _NavItem('Fournisseurs', Icons.science_outlined, const FournisseursPage()),
     ]),
     _NavGroup('SÉCURITÉ (ISO 45001:2018)', [
       _NavItem('Accidents & incidents', Icons.warning_amber_outlined, const SafetyEventsPage()),
       _NavItem('EPI, formations, permis', Icons.health_and_safety_outlined, const EpiPage()),
-      _NavItem('Hygiène au travail', Icons.favorite_outline, const ComingSoonPage(title: 'Hygiène au travail')),
+      _NavItem('Hygiène au travail', Icons.favorite_outline, const VisitesMedicalesPage()),
     ]),
     _NavGroup('ENVIRONNEMENT (ISO 14001:2026)', [_NavItem('Environnement', Icons.eco_outlined, const EnvironmentPage())]),
     _NavGroup('RISQUES & AUDITS', [
@@ -146,8 +148,8 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem("Quart d'heure sécurité", Icons.shield_outlined, const SafetyTalkPage()),
       _NavItem('HACCP', Icons.restaurant_menu_outlined, const HaccpPage()),
       _NavItem('Équipements', Icons.precision_manufacturing_outlined, const EquipmentPage()),
-      _NavItem('Veille réglementaire', Icons.search_outlined, const ComingSoonPage(title: 'Veille réglementaire')),
-      _NavItem('Objectifs QHSE', Icons.flag_outlined, const ComingSoonPage(title: 'Objectifs QHSE')),
+      _NavItem('Veille réglementaire', Icons.search_outlined, const VeilleReglementairePage()),
+      _NavItem('Objectifs QHSE', Icons.flag_outlined, const ObjectifsQhsePage()),
       _NavItem('Utilisateurs', Icons.people_outline, const UsersPage()),
     ]),
   ];
