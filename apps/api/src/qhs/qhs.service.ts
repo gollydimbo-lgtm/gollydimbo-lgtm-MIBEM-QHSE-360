@@ -69,6 +69,10 @@ export class QhsService {
     return this.db.safetyTalk.update({ where: { id }, data: { status: 'DELIVERED' } });
   }
 
+  remove(id: string) {
+    return this.db.safetyTalk.delete({ where: { id } });
+  }
+
   private labelType(t: string) {
     return ({
       ACCIDENT: 'accidents',
