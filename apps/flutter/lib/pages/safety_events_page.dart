@@ -30,6 +30,27 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
     setState(() => loading = false);
   }
 
+  Future<void> delete(Map e) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: Text('Supprimer définitivement « ${e['title']} » ? Cette action est irréversible.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await api.delete('/business/safety-events/${e['id']}');
+      load();
+    } catch (err) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$err')));
+    }
+  }
+
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Accidents & situations dangereuses')),
@@ -56,6 +77,7 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                           title: Text('${e['title']}'),
                           subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])}'),
                           trailing: severityChip(e['severity'] ?? 1, prefix: ''),
+                          onLongPress: () => delete(e),
                         ),
                       );
                     },
