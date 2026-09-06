@@ -24,7 +24,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() { busy = true; error = null; });
     try {
       final r = await api.post('/auth/login', {'email': email.text.trim(), 'password': password.text});
-      await api.saveSession(r['accessToken'], Map<String, dynamic>.from(r['user']));
+      await api.saveSession(r['accessToken'], r['refreshToken'] as String?, Map<String, dynamic>.from(r['user']));
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const HomeShell()),
