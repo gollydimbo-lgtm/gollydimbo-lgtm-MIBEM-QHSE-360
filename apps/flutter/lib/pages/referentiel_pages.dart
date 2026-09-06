@@ -27,10 +27,11 @@ class SimpleCrudPage extends StatefulWidget {
   final String Function(Map item) subtitleOf;
   final Color Function(Map item)? chipColor;
   final String Function(Map item)? chipLabel;
+  final List<KpiStat> Function(List<dynamic> items)? kpiBuilder;
 
   const SimpleCrudPage({
     super.key, required this.title, required this.endpoint, required this.codePrefix, required this.fields,
-    required this.titleOf, required this.subtitleOf, this.chipColor, this.chipLabel,
+    required this.titleOf, required this.subtitleOf, this.chipColor, this.chipLabel, this.kpiBuilder,
   });
 
   @override
@@ -184,33 +185,38 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
           ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(error!, style: const TextStyle(color: QhseColors.red))))
           : items == null
               ? const Center(child: CircularProgressIndicator())
-              : items!.isEmpty
-                  ? const Center(child: Text('Aucun élément pour le moment', style: TextStyle(color: QhseColors.textSecondary)))
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: items!.length,
-                        itemBuilder: (c, i) {
-                          final item = items![i] as Map;
-                          return Card(
-                            child: ListTile(
-                              title: Text(widget.titleOf(item)),
-                              subtitle: Text(widget.subtitleOf(item), style: const TextStyle(color: QhseColors.textSecondary)),
-                              trailing: widget.chipLabel != null
-                                  ? Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(color: (widget.chipColor?.call(item) ?? QhseColors.blue).withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-                                      child: Text(widget.chipLabel!(item), style: TextStyle(color: widget.chipColor?.call(item) ?? QhseColors.blue, fontSize: 11, fontWeight: FontWeight.w600)),
-                                    )
-                                  : null,
-                              onTap: () => _openForm(record: item),
-                              onLongPress: () => _confirmDelete(item),
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: Column(children: [
+                    if (widget.kpiBuilder != null) Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(widget.kpiBuilder!(items!))),
+                    Expanded(
+                      child: items!.isEmpty
+                          ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun élément pour le moment', style: TextStyle(color: QhseColors.textSecondary))))])
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(12),
+                              itemCount: items!.length,
+                              itemBuilder: (c, i) {
+                                final item = items![i] as Map;
+                                return Card(
+                                  child: ListTile(
+                                    title: Text(widget.titleOf(item)),
+                                    subtitle: Text(widget.subtitleOf(item), style: const TextStyle(color: QhseColors.textSecondary)),
+                                    trailing: widget.chipLabel != null
+                                        ? Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(color: (widget.chipColor?.call(item) ?? QhseColors.blue).withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                                            child: Text(widget.chipLabel!(item), style: TextStyle(color: widget.chipColor?.call(item) ?? QhseColors.blue, fontSize: 11, fontWeight: FontWeight.w600)),
+                                          )
+                                        : null,
+                                    onTap: () => _openForm(record: item),
+                                    onLongPress: () => _confirmDelete(item),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
                     ),
+                  ]),
+                ),
     );
   }
 }
@@ -229,6 +235,10 @@ class ProcessusPage extends StatelessWidget {
           FieldSpec('kpi', 'KPI'),
         ],
         titleOf: (i) => i['nom'] ?? '—', subtitleOf: (i) => i['proprietaire'] ?? 'Propriétaire non défini',
+        kpiBuilder: (items) => [
+          KpiStat('Processus cartographiés', '${items.length}', color: QhseColors.blue, icon: Icons.account_tree_outlined),
+          KpiStat('Avec propriétaire', '${items.where((i) => (i['proprietaire'] ?? '').toString().isNotEmpty).length}', color: QhseColors.green, icon: Icons.person_outline),
+        ],
       );
 }
 
@@ -246,6 +256,18 @@ class IndicateursQualitePage extends StatelessWidget {
         ],
         titleOf: (i) => i['indicateur'] ?? '—',
         subtitleOf: (i) => '${i['actuel']}${i['unite'] ?? ''} / ${i['cible']}${i['unite'] ?? ''}',
+        kpiBuilder: (items) {
+          final dansLaCible = items.where((i) {
+            final actuel = (i['actuel'] as num?) ?? 0;
+            final cible = (i['cible'] as num?) ?? 0;
+            return i['sensInverse'] == true ? actuel <= cible : actuel >= cible;
+          }).length;
+          return [
+            KpiStat('Indicateurs suivis', '${items.length}', color: QhseColors.blue, icon: Icons.insights_outlined),
+            KpiStat('Dans la cible', '$dansLaCible', color: QhseColors.green, icon: Icons.check_circle_outline),
+            KpiStat('Hors cible', '${items.length - dansLaCible}', color: QhseColors.red, icon: Icons.error_outline),
+          ];
+        },
       );
 }
 
@@ -265,6 +287,11 @@ class ReclamationsPage extends StatelessWidget {
         titleOf: (i) => i['client'] ?? '—', subtitleOf: (i) => i['motif'] ?? '',
         chipLabel: (i) => i['statut'] == 'CLOSED' ? 'Clôturée' : 'Ouverte',
         chipColor: (i) => i['statut'] == 'CLOSED' ? QhseColors.green : QhseColors.amber,
+        kpiBuilder: (items) => [
+          KpiStat('Réclamations', '${items.length}', color: QhseColors.amber, icon: Icons.notifications_outlined),
+          KpiStat('En cours', '${items.where((i) => i['statut'] != 'CLOSED').length}', color: QhseColors.blue, icon: Icons.hourglass_empty),
+          KpiStat('Gravité élevée', '${items.where((i) => i['gravite'] == 'Élevée').length}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+        ],
       );
 }
 
@@ -283,6 +310,10 @@ class FournisseursPage extends StatelessWidget {
         titleOf: (i) => i['nom'] ?? '—', subtitleOf: (i) => i['categorie'] ?? '',
         chipLabel: (i) => i['statut'] == 'HOMOLOGUE' ? 'Conforme' : i['statut'] == 'SOUS_SURVEILLANCE' ? 'Surveillance' : 'Non conforme',
         chipColor: (i) => i['statut'] == 'HOMOLOGUE' ? QhseColors.green : i['statut'] == 'SOUS_SURVEILLANCE' ? QhseColors.amber : QhseColors.red,
+        kpiBuilder: (items) => [
+          KpiStat('Fournisseurs évalués', '${items.length}', color: QhseColors.blue, icon: Icons.local_shipping_outlined),
+          KpiStat('Sous surveillance', '${items.where((i) => i['statut'] != 'HOMOLOGUE').length}', color: QhseColors.amber, icon: Icons.warning_amber_outlined),
+        ],
       );
 }
 
@@ -301,6 +332,15 @@ class VisitesMedicalesPage extends StatelessWidget {
         subtitleOf: (i) => i['prochaineVisite'] != null ? 'Prochaine visite : ${DateTime.parse(i['prochaineVisite']).day}/${DateTime.parse(i['prochaineVisite']).month}/${DateTime.parse(i['prochaineVisite']).year}' : 'Aucune visite planifiée',
         chipLabel: (i) => i['aptitude'] ?? '—',
         chipColor: (i) => i['aptitude'] == 'Inapte' ? QhseColors.red : i['aptitude'] == 'Apte avec réserves' ? QhseColors.amber : QhseColors.green,
+        kpiBuilder: (items) {
+          final now = DateTime.now();
+          final enRetard = items.where((i) => i['prochaineVisite'] != null && DateTime.parse(i['prochaineVisite']).isBefore(now)).length;
+          return [
+            KpiStat('Visites enregistrées', '${items.length}', color: QhseColors.blue, icon: Icons.favorite_outline),
+            KpiStat('En retard', '$enRetard', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+            KpiStat('Inaptes', '${items.where((i) => i['aptitude'] == 'Inapte').length}', color: QhseColors.red, icon: Icons.block),
+          ];
+        },
       );
 }
 
@@ -318,6 +358,11 @@ class VeilleReglementairePage extends StatelessWidget {
         titleOf: (i) => i['texte'] ?? '—', subtitleOf: (i) => i['domaine'] ?? '',
         chipLabel: (i) => i['statut'] == 'A_TRAITER' ? 'À traiter' : i['statut'] == 'EN_COURS' ? 'En cours' : 'Intégrée',
         chipColor: (i) => i['statut'] == 'A_TRAITER' ? QhseColors.red : i['statut'] == 'EN_COURS' ? QhseColors.blue : QhseColors.green,
+        kpiBuilder: (items) => [
+          KpiStat('Textes suivis', '${items.length}', color: QhseColors.blue, icon: Icons.search_outlined),
+          KpiStat('À traiter', '${items.where((i) => i['statut'] == 'A_TRAITER').length}', color: QhseColors.red, icon: Icons.priority_high),
+          KpiStat('Intégrés', '${items.where((i) => i['statut'] == 'INTEGREE').length}', color: QhseColors.green, icon: Icons.check_circle_outline),
+        ],
       );
 }
 
@@ -336,5 +381,16 @@ class ObjectifsQhsePage extends StatelessWidget {
         ],
         titleOf: (i) => i['titre'] ?? '—',
         subtitleOf: (i) => '${i['actuel']}${i['unite'] ?? ''} / ${i['cible']}${i['unite'] ?? ''}',
+        kpiBuilder: (items) {
+          final atteints = items.where((i) {
+            final actuel = (i['actuel'] as num?) ?? 0;
+            final cible = (i['cible'] as num?) ?? 1;
+            return cible == 0 ? actuel == 0 : (actuel / cible) >= 0.9;
+          }).length;
+          return [
+            KpiStat('Objectifs suivis', '${items.length}', color: QhseColors.blue, icon: Icons.flag_outlined),
+            KpiStat('Atteints (≥90%)', '$atteints', color: QhseColors.green, icon: Icons.emoji_events_outlined),
+          ];
+        },
       );
 }
