@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
+import '../theme.dart';
 import 'attachment_helpers.dart';
 
 const _types = {
@@ -51,6 +52,16 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
     }
   }
 
+  List<KpiStat> get kpis {
+    final moyenne = events.isEmpty ? 0.0 : events.fold<num>(0, (s, e) => s + ((e['severity'] ?? 1) as num)) / events.length;
+    final typesDistincts = events.map((e) => e['type']).toSet().length;
+    return [
+      KpiStat('Événements', '${events.length}', color: QhseColors.blue, icon: Icons.warning_amber_outlined),
+      KpiStat('Sévérité moyenne', moyenne.toStringAsFixed(1), color: QhseColors.amber, icon: Icons.trending_up),
+      KpiStat('Types distincts', '$typesDistincts', color: QhseColors.blue, icon: Icons.category_outlined),
+    ];
+  }
+
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Accidents & situations dangereuses')),
@@ -63,25 +74,30 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
         ? const Center(child: CircularProgressIndicator())
         : RefreshIndicator(
             onRefresh: load,
-            child: events.isEmpty
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun événement déclaré')))])
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: events.length,
-                    itemBuilder: (_, i) {
-                      final e = events[i];
-                      final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
-                      return Card(
-                        child: ListTile(
-                          leading: Icon(meta.$2, color: meta.$3, size: 32),
-                          title: Text('${e['title']}'),
-                          subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])}'),
-                          trailing: severityChip(e['severity'] ?? 1, prefix: ''),
-                          onLongPress: () => delete(e),
-                        ),
-                      );
-                    },
-                  ),
+            child: Column(children: [
+              Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(kpis)),
+              Expanded(
+                child: events.isEmpty
+                    ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun événement déclaré')))])
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: events.length,
+                        itemBuilder: (_, i) {
+                          final e = events[i];
+                          final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
+                          return Card(
+                            child: ListTile(
+                              leading: Icon(meta.$2, color: meta.$3, size: 32),
+                              title: Text('${e['title']}'),
+                              subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])}'),
+                              trailing: severityChip(e['severity'] ?? 1, prefix: ''),
+                              onLongPress: () => delete(e),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ]),
           ),
   );
 
