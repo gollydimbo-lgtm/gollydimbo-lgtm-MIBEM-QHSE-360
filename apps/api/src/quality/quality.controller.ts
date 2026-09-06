@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { QualityService } from './quality.service';
 @Controller('quality')
 export class QualityController {
@@ -14,4 +14,5 @@ export class QualityController {
   @Post('controls/:id/attachments') attachment(@Param('id')id:string,@Body()body:any){return this.service.addAttachment(id,body);}
   @Post('controls/:id/signatures') sign(@Param('id')id:string,@Body()body:any){return this.service.sign(id,body);}
   @Post('controls/:id/submit') submit(@Param('id')id:string){return this.service.submit(id);}
+  @Delete('controls/:id') remove(@Param('id')id:string){return this.service.removeControl(id);}
 }
