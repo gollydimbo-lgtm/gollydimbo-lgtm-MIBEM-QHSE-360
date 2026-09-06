@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
-import 'attachment_helpers.dart';
-import 'ged_page.dart';
 import '../theme.dart';
+import 'attachment_helpers.dart';
 
 // -------------------- Hub --------------------
 class OtherModulesPage extends StatelessWidget {
@@ -13,7 +12,6 @@ class OtherModulesPage extends StatelessWidget {
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _tile(c, Icons.folder_special_outlined, 'Référentiel documentaire (GED)', 'Les 19 documents QHSE classés en 5 groupes ISO', const GedPage()),
         _tile(c, Icons.restaurant_menu, 'HACCP', 'Points critiques (CCP), surveillance, actions correctives', const HaccpPage()),
         _tile(c, Icons.eco, 'Environnement', 'Relevés (eau, déchets, énergie, rejets...)', const EnvironmentPage()),
         _tile(c, Icons.school, 'Formations', 'Planification, échéances, participants', const TrainingsPage()),
@@ -78,7 +76,7 @@ class _HaccpPageState extends State<HaccpPage> {
           : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
               final h = items[i];
               return Card(child: ListTile(
-                leading: Icon(Icons.warning_amber, color: h['ccp'] == true ? QhseColors.red : Colors.grey),
+                leading: Icon(Icons.warning_amber, color: h['ccp'] == true ? Colors.red : Colors.grey),
                 title: Text('${h['process']} — ${h['step']}'),
                 subtitle: Text('${h['hazard']}${h['ccp'] == true ? ' • CCP' : ''}'),
               ));
@@ -127,16 +125,24 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
     floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: const Text('Nouveau relevé')),
     body: loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
       onRefresh: load,
-      child: items.isEmpty
-          ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun relevé enregistré')))])
-          : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
-              final e = items[i];
-              return Card(child: ListTile(
-                leading: const Icon(Icons.eco, color: Colors.green),
-                title: Text('${e['type']} — ${e['value'] ?? '-'} ${e['unit'] ?? ''}'),
-                subtitle: Text('${e['site'] ?? ''} • ${_date(e['recordedAt'])}'),
-              ));
-            }),
+      child: Column(children: [
+        Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar([
+          KpiStat('Relevés enregistrés', '${items.length}', color: QhseColors.blue, icon: Icons.eco_outlined),
+          KpiStat('Types distincts', '${items.map((e) => e['type']).toSet().length}', color: QhseColors.green, icon: Icons.category_outlined),
+        ])),
+        Expanded(
+          child: items.isEmpty
+              ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun relevé enregistré')))])
+              : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
+                  final e = items[i];
+                  return Card(child: ListTile(
+                    leading: const Icon(Icons.eco, color: Colors.green),
+                    title: Text('${e['type']} — ${e['value'] ?? '-'} ${e['unit'] ?? ''}'),
+                    subtitle: Text('${e['site'] ?? ''} • ${_date(e['recordedAt'])}'),
+                  ));
+                }),
+        ),
+      ]),
     ),
   );
   String _date(dynamic v) => v == null ? '' : v.toString().substring(0, 10);
@@ -250,10 +256,10 @@ class _EquipmentPageState extends State<EquipmentPage> {
                 final next = e['nextInspectionAt'] != null ? DateTime.tryParse(e['nextInspectionAt']) : null;
                 final overdue = next != null && next.isBefore(now);
                 return Card(child: ListTile(
-                  leading: Icon(Icons.precision_manufacturing, color: overdue ? QhseColors.red : QhseColors.blue),
+                  leading: Icon(Icons.precision_manufacturing, color: overdue ? Colors.red : Colors.blueGrey),
                   title: Text('${e['name']}'),
                   subtitle: Text('${e['category'] ?? ''} • ${e['location'] ?? ''}${next != null ? ' • prochaine inspection ${next.toIso8601String().substring(0, 10)}' : ''}'),
-                  trailing: overdue ? Chip(label: const Text('En retard'), backgroundColor: QhseColors.red.withOpacity(0.15), labelStyle: const TextStyle(color: QhseColors.red, fontWeight: FontWeight.w600), side: BorderSide.none) : null,
+                  trailing: overdue ? const Chip(label: Text('En retard'), backgroundColor: Color(0xFFFFCDD2)) : null,
                 ));
               }),
       ),
