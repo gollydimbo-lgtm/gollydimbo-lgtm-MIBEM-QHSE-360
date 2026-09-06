@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { QhsService } from './qhs.service';
 
 @Controller('safety-talks')
@@ -8,4 +8,5 @@ export class QhsController {
   @Get() list() { return this.s.list(); }
   @Post(':id/approve') approve(@Param('id') id: string) { return this.s.approve(id); }
   @Post(':id/deliver') deliver(@Param('id') id: string) { return this.s.deliver(id); }
+  @Delete(':id') remove(@Param('id') id: string) { return this.s.remove(id); }
 }
