@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
-import 'attachment_helpers.dart';
 import '../theme.dart';
+import 'attachment_helpers.dart';
 
 class RisksPage extends StatefulWidget {
   const RisksPage({super.key});
@@ -24,6 +24,16 @@ class _RisksPageState extends State<RisksPage> {
     setState(() => loading = false);
   }
 
+  List<KpiStat> get kpis {
+    final critiques = items.where((r) => ((r['score'] ?? 0) as num) >= 12).length;
+    final scoreMoyen = items.isEmpty ? 0 : (items.fold<num>(0, (s, r) => s + ((r['score'] ?? 0) as num)) / items.length).round();
+    return [
+      KpiStat('Risques recensés', '${items.length}', color: QhseColors.blue, icon: Icons.warning_amber_outlined),
+      KpiStat('Critiques (≥12)', '$critiques', color: QhseColors.red, icon: Icons.error_outline),
+      KpiStat('Score moyen', '$scoreMoyen', color: QhseColors.amber, icon: Icons.insights_outlined),
+    ];
+  }
+
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Risques (DUERP)')),
@@ -36,25 +46,30 @@ class _RisksPageState extends State<RisksPage> {
         ? const Center(child: CircularProgressIndicator())
         : RefreshIndicator(
             onRefresh: load,
-            child: items.isEmpty
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun risque enregistré')))])
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: items.length,
-                    itemBuilder: (_, i) {
-                      final r = items[i];
-                      final score = (r['score'] ?? 0) as num;
-                      final color = score >= 12 ? QhseColors.red : (score >= 6 ? QhseColors.amber : QhseColors.green);
-                      return Card(
-                        child: ListTile(
-                          leading: CircleAvatar(backgroundColor: color, child: Text('$score', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                          title: Text('${r['code']} — ${r['hazard']}'),
-                          subtitle: Text('${r['activity'] ?? ''} • G${r['severity']}×P${r['probability']}×M${r['control']}'),
-                          onTap: () => captureAndLinkPhoto(context, api, 'RISK', r['id']),
-                        ),
-                      );
-                    },
-                  ),
+            child: Column(children: [
+              Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(kpis)),
+              Expanded(
+                child: items.isEmpty
+                    ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun risque enregistré')))])
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: items.length,
+                        itemBuilder: (_, i) {
+                          final r = items[i];
+                          final score = (r['score'] ?? 0) as num;
+                          final color = score >= 12 ? Colors.red : (score >= 6 ? Colors.orange : Colors.green);
+                          return Card(
+                            child: ListTile(
+                              leading: CircleAvatar(backgroundColor: color, child: Text('$score', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                              title: Text('${r['code']} — ${r['hazard']}'),
+                              subtitle: Text('${r['activity'] ?? ''} • G${r['severity']}×P${r['probability']}×M${r['control']}'),
+                              onTap: () => captureAndLinkPhoto(context, api, 'RISK', r['id']),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ]),
           ),
   );
 }
@@ -132,7 +147,7 @@ class _NewRiskPageState extends State<NewRiskPage> {
         _slider('Probabilité', probability, (v) => setState(() => probability = v)),
         _slider('Maîtrise actuelle', control, (v) => setState(() => control = v)),
         const SizedBox(height: 8),
-        Text('Score de criticité : $score', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: score >= 12 ? QhseColors.red : (score >= 6 ? QhseColors.amber : QhseColors.green))),
+        Text('Score de criticité : $score', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: score >= 12 ? Colors.red : (score >= 6 ? Colors.orange : Colors.green))),
         const SizedBox(height: 12),
         TextField(controller: measures, maxLines: 3, decoration: const InputDecoration(labelText: 'Mesures de prévention envisagées')),
         const SizedBox(height: 20),
