@@ -312,10 +312,43 @@ Widget _drop(String label,String? value,List<DropdownMenuItem<String>> items,Val
 }
 
 class ControlPage extends StatefulWidget{final String controlId;const ControlPage({super.key,required this.controlId});@override State<ControlPage> createState()=>_ControlPageState();}
-class _ControlPageState extends State<ControlPage>{final api=Api();Map<String,dynamic>? c;Map<String,bool?> vals={};bool loading=true;@override void initState(){super.initState();load();}Future<void>load()async{try{c=Map<String,dynamic>.from(await api.get('/quality/controls/${widget.controlId}'));}catch(e){}setState(()=>loading=false);}Future<void>result(dynamic p)async{bool? v=vals[p['id']];try{final x=await api.post('/quality/controls/${widget.controlId}/results',{'pointId':p['id'],'value':v,'compliant':v});vals[p['id']]=v;setState((){});}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
-Future<void>photo()async{String? name;Uint8List? bytes;String mime='image/jpeg';if(kIsWeb||defaultTargetPlatform==TargetPlatform.windows){final r=await FilePicker.platform.pickFiles(type:FileType.image,withData:true);if(r==null||r.files.single.bytes==null)return;name=r.files.single.name;bytes=r.files.single.bytes;}else{final x=await ImagePicker().pickImage(source:ImageSource.camera,imageQuality:75);if(x==null)return;name=x.name;bytes=await x.readAsBytes();}try{final a=await api.post('/attachments/base64',{'fileName':name,'mimeType':mime,'base64':base64Encode(bytes!)});await api.post('/quality/controls/${widget.controlId}/attachments',{'attachmentId':a['id']});ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Photo ajoutée au contrôle')));}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
-Future<void>submit()async{try{await api.post('/quality/controls/${widget.controlId}/submit',{});await load();}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
+class _ControlPageState extends State<ControlPage>{final api=Api();Map<String,dynamic>? c;Map<String,dynamic> vals={};Map<String,TextEditingController> textCtrls={};bool loading=true;bool submitting=false;
+@override void initState(){super.initState();load();}
+Future<void>load()async{try{c=Map<String,dynamic>.from(await api.get('/quality/controls/${widget.controlId}'));for(final r in List.from(c?['results']??[])){vals[r['pointId']]=r['value'];}}catch(e){}setState(()=>loading=false);}
+Future<void>result(dynamic p,dynamic value)async{try{await api.post('/quality/controls/${widget.controlId}/results',{'pointId':p['id'],'value':value});vals[p['id']]=value;setState((){});}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
+Future<void>photo()async{String? name;Uint8List? bytes;String mime='image/jpeg';if(kIsWeb||defaultTargetPlatform==TargetPlatform.windows){final r=await FilePicker.platform.pickFiles(type:FileType.image,withData:true);if(r==null||r.files.single.bytes==null)return;name=r.files.single.name;bytes=r.files.single.bytes;}else{final x=await ImagePicker().pickImage(source:ImageSource.camera,imageQuality:75);if(x==null)return;name=x.name;bytes=await x.readAsBytes();}try{final a=await api.post('/attachments/base64',{'fileName':name,'mimeType':mime,'base64':base64Encode(bytes!)});await api.post('/quality/controls/${widget.controlId}/attachments',{'attachmentId':a['id']});if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Photo ajoutée au contrôle')));}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
+bool get closed=>['COMPLIANT','NON_COMPLIANT','CANCELLED'].contains(c?['status']);
+List get missingRequired{final pts=List.from(c?['template']?['points']??[]);return pts.where((p)=>p['required']==true&&vals[p['id']]==null).toList();}
+Future<void>submit()async{setState(()=>submitting=true);try{await api.post('/quality/controls/${widget.controlId}/submit',{});await load();}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}setState(()=>submitting=false);}
 Future<void>sign()async{final controller=TextEditingController();final s=await showDialog<String>(context:context,builder:(_)=>AlertDialog(title:const Text('Signature numérique'),content:TextField(controller:controller,decoration:const InputDecoration(labelText:'Nom / signature')),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Annuler')),FilledButton(onPressed:()=>Navigator.pop(context,controller.text),child:const Text('Signer'))]));if(s!=null&&s.isNotEmpty){await api.post('/quality/controls/${widget.controlId}/signatures',{'type':'CONTROLLER','signatureData':s});}}
-@override Widget build(BuildContext context){if(loading)return const Scaffold(body:Center(child:CircularProgressIndicator()));final pts=List.from(c?['template']?['points']??[]);return Scaffold(appBar:AppBar(title:Text('${c?['code']}')),body:ListView(padding:const EdgeInsets.all(12),children:[Card(child:ListTile(title:Text('${c?['productRef']?['name']??''} • lot ${c?['lotNumber']??''}'),subtitle:Text('${c?['productionLine']?['name']??''} • ${c?['shiftRef']?['name']??''}'))),...pts.map((p)=>Card(child:ListTile(title:Text('${p['label']}${p['required']==true?' *':''}'),subtitle:Text(p['critical']==true?'Point critique':'Point de contrôle'),trailing:p['type']=='BOOLEAN'?Switch(value:vals[p['id']]??false,onChanged:(v){vals[p['id']]=v;result(p);}):const Icon(Icons.edit)))),const SizedBox(height:8),OutlinedButton.icon(onPressed:photo,icon:const Icon(Icons.camera_alt),label:const Text('Ajouter une photo')),OutlinedButton.icon(onPressed:sign,icon:const Icon(Icons.draw),label:const Text('Signer')),FilledButton.icon(onPressed:submit,icon:const Icon(Icons.check_circle),label:const Text('Soumettre et générer les NC'))]));}}
+Future<void>delete()async{final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Confirmer la suppression'),content:Text('Supprimer définitivement le contrôle ${c?['code']} ? Cette action est irréversible.'),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Annuler')),TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Supprimer',style: TextStyle(color: QhseColors.red)))]));if(ok!=true)return;try{await api.delete('/quality/controls/${widget.controlId}');if(mounted)Navigator.pop(context);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
+Widget _pointInput(Map p){final id=p['id'];final closed_=closed;
+switch(p['type']){
+case 'NUMERIC':
+textCtrls[id]??=TextEditingController(text:vals[id]?.toString()??'');
+return TextField(controller:textCtrls[id],enabled:!closed_,keyboardType:TextInputType.number,decoration: InputDecoration(labelText:p['unit']??'Valeur'),onSubmitted:(v)=>result(p,num.tryParse(v)));
+case 'CHOICE':
+final choices=List<String>.from(p['choices']??[]);
+return DropdownButtonFormField<String>(value:vals[id] as String?,items:choices.map((ch)=>DropdownMenuItem(value:ch,child:Text(ch))).toList(),onChanged:closed_?null:(v){if(v!=null)result(p,v);},decoration:const InputDecoration(labelText:'Choix'));
+case 'TEXT':case 'PHOTO':
+textCtrls[id]??=TextEditingController(text:vals[id]?.toString()??'');
+return TextField(controller:textCtrls[id],enabled:!closed_,decoration:const InputDecoration(labelText:'Réponse'),onSubmitted:(v)=>result(p,v));
+default:
+return Switch(value:vals[id]==true,onChanged:closed_?null:(v){result(p,v);});
+}}
+@override Widget build(BuildContext context){if(loading)return const Scaffold(body:Center(child:CircularProgressIndicator()));final pts=List.from(c?['template']?['points']??[]);final missing=missingRequired;
+return Scaffold(appBar:AppBar(title:Text('${c?['code']}'),actions:[IconButton(icon:const Icon(Icons.delete_outline),tooltip:'Supprimer',onPressed:delete)]),body:ListView(padding:const EdgeInsets.all(12),children:[
+Card(child:ListTile(title:Text('${c?['productRef']?['name']??''} • lot ${c?['lotNumber']??''}'),subtitle:Text('${c?['productionLine']?['name']??''} • ${c?['shiftRef']?['name']??''} • ${c?['status']}'))),
+...pts.map((p)=>Card(child:Padding(padding:const EdgeInsets.all(8),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+Text('${p['label']}${p['required']==true?' *':''}${p['critical']==true?'  ⚠ critique':''}',style:const TextStyle(fontWeight:FontWeight.w600)),
+const SizedBox(height:6),_pointInput(p),
+])))),
+const SizedBox(height:8),
+if(!closed)OutlinedButton.icon(onPressed:photo,icon:const Icon(Icons.camera_alt),label:const Text('Ajouter une photo')),
+if(!closed)OutlinedButton.icon(onPressed:sign,icon:const Icon(Icons.draw),label:const Text('Signer')),
+if(!closed&&missing.isNotEmpty)Padding(padding:const EdgeInsets.symmetric(vertical:8),child:Text('${missing.length} point(s) obligatoire(s) restant(s) avant de pouvoir soumettre.',style:const TextStyle(color:QhseColors.amber,fontSize:12))),
+if(!closed)FilledButton.icon(onPressed:(submitting||missing.isNotEmpty)?null:submit,icon:const Icon(Icons.check_circle),label:Text(submitting?'Soumission...':'Soumettre et générer les NC')),
+if(closed)const Padding(padding:EdgeInsets.symmetric(vertical:12),child:Text('Ce contrôle est clôturé — plus aucune modification possible.',style:TextStyle(color:QhseColors.textSecondary))),
+]));}}
 
 
