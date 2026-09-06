@@ -15,6 +15,7 @@ import 'pages/epi_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/users_page.dart';
 import 'pages/referentiel_pages.dart';
+import 'pages/rapports_page.dart';
 import 'pages/other_modules_page.dart';
 import 'pages/ged_page.dart';
 import 'pages/safety_events_page.dart';
@@ -150,6 +151,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem('Équipements', Icons.precision_manufacturing_outlined, const EquipmentPage()),
       _NavItem('Veille réglementaire', Icons.search_outlined, const VeilleReglementairePage()),
       _NavItem('Objectifs QHSE', Icons.flag_outlined, const ObjectifsQhsePage()),
+      _NavItem('Rapports', Icons.description_outlined, const RapportsPage()),
       _NavItem('Utilisateurs', Icons.people_outline, const UsersPage()),
     ]),
   ];
