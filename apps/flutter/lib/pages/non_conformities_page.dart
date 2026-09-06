@@ -31,6 +31,27 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     setState(() => loading = false);
   }
 
+  Future<void> delete(Map n) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: Text('Supprimer définitivement « ${n['code']} — ${n['title']} » ? Cette action est irréversible.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await api.delete('/business/non-conformities/${n['id']}');
+      load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Non-conformités')),
@@ -67,6 +88,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
                               subtitle: Text('${_ncStatusLabels[n['status']] ?? n['status']} • ${actions.length} action(s)'),
                               trailing: severityChip(n['severity'] ?? 1, prefix: ''),
                               onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => NonConformityDetailPage(nc: n))).then((_) => load()),
+                              onLongPress: () => delete(n),
                             ),
                           );
                         },
