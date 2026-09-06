@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../main.dart';
+import '../theme.dart';
 import 'attachment_helpers.dart';
 
 const _auditStatusLabels = {'PLANNED': 'Planifié', 'IN_PROGRESS': 'En cours', 'DONE': 'Terminé'};
@@ -24,6 +25,16 @@ class _AuditsPageState extends State<AuditsPage> {
     setState(() => loading = false);
   }
 
+  List<KpiStat> get kpis {
+    final planifies = items.where((a) => a['status'] == 'PLANNED').length;
+    final termines = items.where((a) => a['status'] == 'DONE').length;
+    return [
+      KpiStat('Audits au programme', '${items.length}', color: QhseColors.blue, icon: Icons.assignment_turned_in_outlined),
+      KpiStat('Planifiés', '$planifies', color: QhseColors.amber, icon: Icons.schedule),
+      KpiStat('Terminés', '$termines', color: QhseColors.green, icon: Icons.check_circle_outline),
+    ];
+  }
+
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Audits QHSE')),
@@ -36,23 +47,28 @@ class _AuditsPageState extends State<AuditsPage> {
         ? const Center(child: CircularProgressIndicator())
         : RefreshIndicator(
             onRefresh: load,
-            child: items.isEmpty
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun audit planifié')))])
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: items.length,
-                    itemBuilder: (_, i) {
-                      final a = items[i];
-                      return Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.assignment_turned_in, size: 32),
-                          title: Text('${a['code']} — ${a['title']}'),
-                          subtitle: Text('${_auditStatusLabels[a['status']] ?? a['status']} • ${_date(a['auditDate'])}'),
-                          onTap: () => captureAndLinkPhoto(context, api, 'AUDIT', a['id']),
-                        ),
-                      );
-                    },
-                  ),
+            child: Column(children: [
+              Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(kpis)),
+              Expanded(
+                child: items.isEmpty
+                    ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun audit planifié')))])
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: items.length,
+                        itemBuilder: (_, i) {
+                          final a = items[i];
+                          return Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.assignment_turned_in, size: 32),
+                              title: Text('${a['code']} — ${a['title']}'),
+                              subtitle: Text('${_auditStatusLabels[a['status']] ?? a['status']} • ${_date(a['auditDate'])}'),
+                              onTap: () => captureAndLinkPhoto(context, api, 'AUDIT', a['id']),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ]),
           ),
   );
 
