@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
+import '../theme.dart';
 import 'attachment_helpers.dart';
 
 const _ncStatuses = ['OPEN', 'IN_PROGRESS', 'CLOSED'];
@@ -67,6 +68,14 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
           ChoiceChip(label: const Text('Toutes'), selected: filter == null, onSelected: (_) { filter = null; load(); }),
           for (final s in _ncStatuses)
             ChoiceChip(label: Text(_ncStatusLabels[s]!), selected: filter == s, onSelected: (_) { filter = s; load(); }),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: KpiBar([
+          KpiStat('Non-conformités', '${items.length}', color: QhseColors.red, icon: Icons.error_outline),
+          KpiStat('Ouvertes', '${items.where((n) => n['status'] != 'CLOSED').length}', color: QhseColors.amber, icon: Icons.hourglass_empty),
+          KpiStat('Sources distinctes', '${items.map((n) => n['source']).toSet().length}', color: QhseColors.blue, icon: Icons.category_outlined),
         ]),
       ),
       Expanded(
