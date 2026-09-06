@@ -13,6 +13,7 @@ import 'pages/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/epi_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/users_page.dart';
 import 'pages/other_modules_page.dart';
 import 'pages/ged_page.dart';
 import 'pages/safety_events_page.dart';
@@ -147,6 +148,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem('Équipements', Icons.precision_manufacturing_outlined, const EquipmentPage()),
       _NavItem('Veille réglementaire', Icons.search_outlined, const ComingSoonPage(title: 'Veille réglementaire')),
       _NavItem('Objectifs QHSE', Icons.flag_outlined, const ComingSoonPage(title: 'Objectifs QHSE')),
+      _NavItem('Utilisateurs', Icons.people_outline, const UsersPage()),
     ]),
   ];
 
