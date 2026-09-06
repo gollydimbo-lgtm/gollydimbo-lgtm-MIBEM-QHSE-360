@@ -65,3 +65,53 @@ ThemeData buildQhseTheme() {
     chipTheme: base.chipTheme.copyWith(backgroundColor: QhseColors.cardAlt, side: const BorderSide(color: QhseColors.border)),
   );
 }
+
+/// Une carte chiffrée unique — brique de base des mini-tableaux de bord.
+class KpiStat {
+  final String label;
+  final String value;
+  final Color color;
+  final IconData icon;
+  const KpiStat(this.label, this.value, {this.color = QhseColors.blue, this.icon = Icons.insights_outlined});
+}
+
+/// Rangée de cartes KPI en haut d'une page — l'équivalent Flutter des cartes
+/// du tableau de bord web. Se place tout en haut d'un ListView, avant le
+/// contenu détaillé de la page.
+class KpiBar extends StatelessWidget {
+  final List<KpiStat> stats;
+  const KpiBar(this.stats, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 92,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        itemCount: stats.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (c, i) {
+          final s = stats[i];
+          return Container(
+            width: 150,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: s.color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: s.color.withOpacity(0.25)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Expanded(child: Text(s.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: s.color), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                Icon(s.icon, size: 16, color: s.color),
+              ]),
+              Text(s.value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+}
+
