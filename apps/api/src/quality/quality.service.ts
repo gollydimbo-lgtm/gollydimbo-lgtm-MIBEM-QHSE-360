@@ -83,4 +83,8 @@ export class QualityService {
       return updated;
     });
   }
+
+  removeControl(id: string) {
+    return this.db.qualityControl.delete({ where: { id } });
+  }
 }
