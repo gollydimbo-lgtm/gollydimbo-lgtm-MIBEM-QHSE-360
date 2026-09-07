@@ -21,13 +21,17 @@ class SafetyEventsPage extends StatefulWidget {
 class _SafetyEventsPageState extends State<SafetyEventsPage> {
   final api = Api();
   List events = [];
+  List workedHours = [];
   bool loading = true;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    try { events = List.from(await api.get('/business/safety-events')); } catch (_) {}
+    try {
+      events = List.from(await api.get('/business/safety-events'));
+      workedHours = List.from(await api.get('/business/worked-hours'));
+    } catch (_) {}
     setState(() => loading = false);
   }
 
@@ -52,19 +56,86 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
     }
   }
 
+  Future<void> _openWorkedHoursDialog(BuildContext context) async {
+    final hours = TextEditingController();
+    final site = TextEditingController();
+    DateTime periodStart = DateTime(DateTime.now().year, 1, 1);
+    DateTime periodEnd = DateTime.now();
+    String? formError;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: const Text('Heures travaillées'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              title: Text('Début : ${periodStart.day}/${periodStart.month}/${periodStart.year}'),
+              trailing: const Icon(Icons.edit_calendar),
+              onTap: () async {
+                final d = await showDatePicker(context: context, initialDate: periodStart, firstDate: DateTime(2020), lastDate: DateTime(2035));
+                if (d != null) setD(() => periodStart = d);
+              },
+            ),
+            ListTile(
+              title: Text('Fin : ${periodEnd.day}/${periodEnd.month}/${periodEnd.year}'),
+              trailing: const Icon(Icons.edit_calendar),
+              onTap: () async {
+                final d = await showDatePicker(context: context, initialDate: periodEnd, firstDate: DateTime(2020), lastDate: DateTime(2035));
+                if (d != null) setD(() => periodEnd = d);
+              },
+            ),
+            TextField(controller: hours, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Heures travaillées (total)')),
+            TextField(controller: site, decoration: const InputDecoration(labelText: 'Site (optionnel)')),
+            if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await api.post('/business/worked-hours', {
+                  'code': 'HT-${DateTime.now().millisecondsSinceEpoch}',
+                  'periodStart': periodStart.toIso8601String(), 'periodEnd': periodEnd.toIso8601String(),
+                  'hours': double.tryParse(hours.text) ?? 0, 'site': site.text.trim().isEmpty ? null : site.text.trim(),
+                });
+                if (context.mounted) Navigator.pop(c);
+                load();
+              } catch (e) {
+                setD(() => formError = '$e');
+              }
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      )),
+    );
+  }
+
   List<KpiStat> get kpis {
     final moyenne = events.isEmpty ? 0.0 : events.fold<num>(0, (s, e) => s + ((e['severity'] ?? 1) as num)) / events.length;
     final typesDistincts = events.map((e) => e['type']).toSet().length;
+    final yearStart = DateTime(DateTime.now().year, 1, 1);
+    final eventsThisYear = events.where((e) => DateTime.parse(e['occurredAt']).isAfter(yearStart)).toList();
+    final hoursThisYear = workedHours.where((h) => DateTime.parse(h['periodEnd']).isAfter(yearStart));
+    final totalHours = hoursThisYear.fold<num>(0, (s, h) => s + ((h['hours'] ?? 0) as num));
+    final accidentsAvecArret = eventsThisYear.where((e) => e['withLostTime'] == true).length;
+    final joursPerdus = eventsThisYear.fold<num>(0, (s, e) => s + (e['withLostTime'] == true ? ((e['lostDays'] ?? 0) as num) : 0));
+    final tf = totalHours > 0 ? (accidentsAvecArret * 1000000 / totalHours) : null;
+    final tg = totalHours > 0 ? (joursPerdus * 1000 / totalHours) : null;
     return [
       KpiStat('Événements', '${events.length}', color: QhseColors.blue, icon: Icons.warning_amber_outlined),
       KpiStat('Sévérité moyenne', moyenne.toStringAsFixed(1), color: QhseColors.amber, icon: Icons.trending_up),
-      KpiStat('Types distincts', '$typesDistincts', color: QhseColors.blue, icon: Icons.category_outlined),
+      KpiStat('Taux de Fréquence', tf == null ? '—' : tf.toStringAsFixed(1), color: QhseColors.red, icon: Icons.speed),
+      KpiStat('Taux de Gravité', tg == null ? '—' : tg.toStringAsFixed(2), color: QhseColors.red, icon: Icons.trending_down),
     ];
   }
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Accidents & situations dangereuses')),
+    appBar: AppBar(title: const Text('Accidents & situations dangereuses'), actions: [
+      IconButton(icon: const Icon(Icons.schedule), tooltip: 'Heures travaillées', onPressed: () => _openWorkedHoursDialog(c)),
+    ]),
     floatingActionButton: FloatingActionButton.extended(
       onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NewSafetyEventPage())).then((_) => load()),
       icon: const Icon(Icons.add),
@@ -116,6 +187,8 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
   final description = TextEditingController();
   String type = 'ACCIDENT';
   int severity = 2;
+  bool withLostTime = false;
+  int lostDays = 0;
   double? lat, lon;
   bool busy = false;
   String? createdId;
@@ -139,6 +212,8 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
       'description': desc.isEmpty ? null : desc,
       'occurredAt': DateTime.now().toIso8601String(),
       'severity': severity,
+      'withLostTime': withLostTime,
+      'lostDays': withLostTime ? lostDays : null,
     };
     try {
       final r = await api.post('/business/safety-events', payload);
@@ -179,6 +254,21 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
         const SizedBox(height: 12),
         Text('Sévérité : $severity', style: const TextStyle(fontWeight: FontWeight.bold)),
         Slider(value: severity.toDouble(), min: 1, max: 5, divisions: 4, label: '$severity', onChanged: createdId == null ? (v) => setState(() => severity = v.round()) : null),
+        const SizedBox(height: 8),
+        CheckboxListTile(
+          value: withLostTime,
+          title: const Text('Accident avec arrêt de travail'),
+          controlAffinity: ListTileControlAffinity.leading,
+          onChanged: createdId == null ? (v) => setState(() => withLostTime = v ?? false) : null,
+        ),
+        if (withLostTime)
+          TextFormField(
+            initialValue: '$lostDays',
+            enabled: createdId == null,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Nombre de journées perdues'),
+            onChanged: (v) => lostDays = int.tryParse(v) ?? 0,
+          ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: createdId == null ? gps : null,
