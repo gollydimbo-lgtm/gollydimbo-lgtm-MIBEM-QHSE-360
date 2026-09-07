@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaService } from './common/prisma.service';
+import { JwtAuthGuard } from './common/jwt-auth.guard';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AuditModule } from './audit/audit.module';
@@ -14,4 +16,4 @@ import { AttachmentsModule } from './attachments/attachments.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { HealthController } from './health.controller';
-@Module({imports:[ConfigModule.forRoot({isGlobal:true}),AuthModule,UsersModule,AuditModule,EpiModule,SyncModule,DocumentsModule,QhsModule,BusinessModule,QualityModule,AttachmentsModule,DashboardModule,RecommendationsModule],controllers:[HealthController],providers:[PrismaService]}) export class AppModule {}
+@Module({imports:[ConfigModule.forRoot({isGlobal:true}),AuthModule,UsersModule,AuditModule,EpiModule,SyncModule,DocumentsModule,QhsModule,BusinessModule,QualityModule,AttachmentsModule,DashboardModule,RecommendationsModule],controllers:[HealthController],providers:[PrismaService,{provide:APP_GUARD,useClass:JwtAuthGuard}]}) export class AppModule {}
