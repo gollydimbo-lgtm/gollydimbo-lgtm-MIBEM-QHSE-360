@@ -332,7 +332,24 @@ model SafetyEvent {
   description String?
   occurredAt DateTime
   severity Int @default(1)
+  withLostTime Boolean @default(false)
+  lostDays Int?
   createdAt DateTime @default(now())
+}
+
+// Heures travaillées par période, nécessaires au calcul du Taux de Fréquence
+// (TF) et du Taux de Gravité (TG) des accidents du travail :
+//   TF = (accidents avec arrêt × 1 000 000) / heures travaillées
+//   TG = (journées perdues × 1 000) / heures travaillées
+model WorkedHours {
+  id String @id @default(cuid())
+  code String @unique
+  periodStart DateTime
+  periodEnd DateTime
+  hours Float
+  site String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model NonConformity {
