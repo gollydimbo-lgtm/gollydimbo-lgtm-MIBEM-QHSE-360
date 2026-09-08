@@ -80,9 +80,9 @@ class _DashboardPageState extends State<DashboardPage> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Tableau de bord QHSE', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text('Tableau de bord QHSE', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           const SizedBox(height: 4),
-          const Text('Pilotez la conformité, en temps réel.', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+          Text('Pilotez la conformité, en temps réel.', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
           const SizedBox(height: 16),
 
           Wrap(spacing: 10, runSpacing: 10, children: [
@@ -101,7 +101,7 @@ class _DashboardPageState extends State<DashboardPage> {
             child: SizedBox(
               height: 200,
               child: (ncSeries.isEmpty && eventSeries.isEmpty)
-                  ? const Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                  ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
                   : _TrendLineChart(ncSeries: ncSeries, eventSeries: eventSeries),
             ),
           ),
@@ -115,7 +115,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: SizedBox(
                   height: 180,
                   child: severityBreakdown.isEmpty
-                      ? const Center(child: Text('Aucun événement', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                      ? Center(child: Text('Aucun événement', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
                       : _SeverityDonut(data: severityBreakdown),
                 ),
               ),
@@ -142,7 +142,7 @@ class _DashboardPageState extends State<DashboardPage> {
           _panel(
             title: 'Actions prioritaires',
             child: alerts.isEmpty
-                ? const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte en cours 🎉', style: TextStyle(color: QhseColors.textSecondary)))
+                ? Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte en cours 🎉', style: TextStyle(color: QhseColors.textSecondary)))
                 : Column(
                     children: alerts.map<Widget>((a) => Container(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -153,11 +153,11 @@ class _DashboardPageState extends State<DashboardPage> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text('${a['title'] ?? ''}', style: const TextStyle(color: QhseColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
-                                Text('${a['domain'] ?? ''} • ${a['detail'] ?? ''}', style: const TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+                                Text('${a['title'] ?? ''}', style: TextStyle(color: QhseColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+                                Text('${a['domain'] ?? ''} • ${a['detail'] ?? ''}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
                               ]),
                             ),
-                            if (a['code'] != null) Text('${a['code']}', style: const TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                            if (a['code'] != null) Text('${a['code']}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
                           ]),
                         )).toList(),
                   ),
@@ -189,8 +189,8 @@ class _DashboardPageState extends State<DashboardPage> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(color: QhseColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: QhseColors.border)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: const TextStyle(color: QhseColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          if (subtitle != null) Text(subtitle, style: const TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+          Text(title, style: TextStyle(color: QhseColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+          if (subtitle != null) Text(subtitle, style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
           const SizedBox(height: 10),
           child,
         ]),
@@ -206,9 +206,9 @@ class _DashboardPageState extends State<DashboardPage> {
             Icon(icon, size: 15, color: color),
           ]),
           const SizedBox(height: 6),
-          Text('${value ?? 0}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text('${value ?? 0}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           const SizedBox(height: 2),
-          Text(objectif, style: const TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
+          Text(objectif, style: TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
         ]),
       );
 
@@ -218,7 +218,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final pct = suffix == '%' ? (numeric / 100).clamp(0.0, 1.0) : (numeric / 30).clamp(0.0, 1.0);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(title, style: const TextStyle(fontSize: 12, color: QhseColors.textPrimary, fontWeight: FontWeight.w500)),
+        Text(title, style: TextStyle(fontSize: 12, color: QhseColors.textPrimary, fontWeight: FontWeight.w500)),
         Text(display, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
       ]),
       const SizedBox(height: 4),
@@ -227,7 +227,7 @@ class _DashboardPageState extends State<DashboardPage> {
         child: LinearProgressIndicator(value: pct, minHeight: 5, backgroundColor: QhseColors.border, valueColor: AlwaysStoppedAnimation(color)),
       ),
       const SizedBox(height: 2),
-      Text(label, style: const TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
+      Text(label, style: TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
     ]);
   }
 }
@@ -256,15 +256,15 @@ class _TrendLineChart extends StatelessWidget {
     final labelSeries = ncSeries.isNotEmpty ? ncSeries : eventSeries;
     return LineChart(
       LineChartData(
-        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => const FlLine(color: QhseColors.border, strokeWidth: 1)),
+        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: QhseColors.border, strokeWidth: 1)),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 26, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 9, color: QhseColors.textSecondary)))),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 26, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)))),
           bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, interval: 1, getTitlesWidget: (v, m) => Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(_weekLabel(labelSeries, v.toInt()), style: const TextStyle(fontSize: 9, color: QhseColors.textSecondary)),
+                child: Text(_weekLabel(labelSeries, v.toInt()), style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)),
               ))),
         ),
         lineBarsData: [
@@ -320,7 +320,7 @@ class _SeverityDonut extends StatelessWidget {
               child: Row(children: [
                 Container(width: 8, height: 8, decoration: BoxDecoration(color: _colorFor((s['severity'] ?? 1) as int), shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                Text('Sévérité ${s['severity']}', style: const TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
+                Text('Sévérité ${s['severity']}', style: TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
               ]),
             ),
         ],
