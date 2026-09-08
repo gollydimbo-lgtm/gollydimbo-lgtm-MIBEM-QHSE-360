@@ -8,4 +8,6 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Get('epi-inspections') epiInspectionList(){return this.s.epiInspectionList()} @Post('epi-inspections') epiInspectionCreate(@Body()b:any){return this.s.epiInspectionCreate(b)}
 @Get('epc-inspections') epcInspectionList(){return this.s.epcInspectionList()} @Post('epc-inspections') epcInspectionCreate(@Body()b:any){return this.s.epcInspectionCreate(b)}
 @Get('job-risk-protection') jobRiskProtectionList(){return this.s.jobRiskProtectionList()} @Post('job-risk-protection') jobRiskProtectionCreate(@Body()b:any){return this.s.jobRiskProtectionCreate(b)} @Patch('job-risk-protection/:id') jobRiskProtectionUpdate(@Param('id')id:string,@Body()b:any){return this.s.jobRiskProtectionUpdate(id,b)} @Delete('job-risk-protection/:id') jobRiskProtectionDelete(@Param('id')id:string){return this.s.jobRiskProtectionDelete(id)}
+@Get('assignments') assignmentList(){return this.s.assignmentList()} @Get('assignments/:id') assignmentGet(@Param('id')id:string){return this.s.assignmentGet(id)} @Post('assignments') assignmentCreate(@Body()b:any){return this.s.assignmentCreate(b)} @Patch('assignments/:id') assignmentUpdate(@Param('id')id:string,@Body()b:any){return this.s.assignmentUpdate(id,b)}
+@Get('renewal-buckets') renewalBuckets(){return this.s.renewalBuckets()}
 }
