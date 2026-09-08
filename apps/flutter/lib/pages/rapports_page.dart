@@ -70,7 +70,7 @@ class _RapportsPageState extends State<RapportsPage> {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          const Text('Génère un export CSV réel (ouvrable dans Excel) à partir des données actuelles, et propose de le partager ou de l\'enregistrer.', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+          Text('Génère un export CSV réel (ouvrable dans Excel) à partir des données actuelles, et propose de le partager ou de l\'enregistrer.', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
           const SizedBox(height: 12),
           ..._reports.map((r) => Card(
                 child: ListTile(
@@ -85,7 +85,7 @@ class _RapportsPageState extends State<RapportsPage> {
             const SizedBox(height: 16),
             const Text('Derniers rapports générés', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 6),
-            ...history.map((h) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(h, style: const TextStyle(fontSize: 12, color: QhseColors.textSecondary)))),
+            ...history.map((h) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(h, style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)))),
           ],
         ],
       ),
