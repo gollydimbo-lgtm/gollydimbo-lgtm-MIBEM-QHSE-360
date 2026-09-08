@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
-import '../main.dart';
 import '../theme.dart';
+import 'epi_epc_pages.dart';
 
 class EpiPage extends StatefulWidget {
   const EpiPage({super.key});
@@ -9,18 +9,25 @@ class EpiPage extends StatefulWidget {
   State<EpiPage> createState() => _EpiPageState();
 }
 
-class _EpiPageState extends State<EpiPage> {
+class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
   final api = Api();
   Map<String, dynamic>? dashboard;
   List renewals = [];
   bool loading = true;
   String? error;
+  late final TabController _tabController;
+
+  static const _tabs = ['Stock EPI', 'Bibliothèque EPC', 'Catégories', 'Inspections', 'Matrice Poste/Risque', 'Personnel', 'Renouvellements'];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: _tabs.length, vsync: this);
     load();
   }
+
+  @override
+  void dispose() { _tabController.dispose(); super.dispose(); }
 
   Future<void> load() async {
     setState(() { loading = true; error = null; });
@@ -40,7 +47,7 @@ class _EpiPageState extends State<EpiPage> {
     if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Gestion EPI')),
+        appBar: AppBar(title: const Text('Gestion EPI/EPC')),
         body: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(error!, style: const TextStyle(color: Colors.red)),
@@ -64,40 +71,65 @@ class _EpiPageState extends State<EpiPage> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Gestion EPI')),
-      body: RefreshIndicator(
-        onRefresh: load,
-        child: ListView(
-          padding: const EdgeInsets.only(top: 12, bottom: 12),
-          children: [
-            KpiBar(kpis),
-            const SizedBox(height: 16),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('EPI journaliers (gants, cache-nez, charlotte…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 6),
-            ...daily.map((e) => _epiCard(e)),
-            if (daily.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucun EPI journalier configuré')),
-            const SizedBox(height: 16),
-            const Text('EPI annuels (chaussures, tenue, lunettes, casque…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 6),
-            ...annual.map((e) => _epiCard(e)),
-            if (annual.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucun EPI annuel configuré')),
-            const SizedBox(height: 20),
-            const Text('Renouvellements à prévoir (30 jours)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 6),
-            if (renewals.isEmpty)
-              const Padding(padding: EdgeInsets.all(8), child: Text('Aucun renouvellement à prévoir 👍')),
-            ...renewals.map((r) => Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.event_repeat, color: Colors.orange),
-                    title: Text('${r['employee']?['firstName'] ?? ''} ${r['employee']?['lastName'] ?? ''}'),
-                    subtitle: Text('${r['epi']?['name'] ?? ''} • échéance ${_date(r['renewalAt'])}'),
-                  ),
-                )),
-            ])),
-          ],
-        ),
+      appBar: AppBar(
+        title: const Text('Gestion EPI/EPC'),
+        bottom: TabBar(controller: _tabController, isScrollable: true, tabs: _tabs.map((t) => Tab(text: t)).toList()),
       ),
+      body: Column(children: [
+        Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(kpis)),
+        Expanded(
+          child: TabBarView(controller: _tabController, children: [
+            RefreshIndicator(
+              onRefresh: load,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  const Text('EPI journaliers (gants, cache-nez, charlotte…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 6),
+                  ...daily.map((e) => _epiCard(e)),
+                  if (daily.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucun EPI journalier configuré')),
+                  const SizedBox(height: 16),
+                  const Text('EPI annuels (chaussures, tenue, lunettes, casque…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 6),
+                  ...annual.map((e) => _epiCard(e)),
+                  if (annual.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucun EPI annuel configuré')),
+                ],
+              ),
+            ),
+            const EpcLibraryTab(),
+            DefaultTabController(
+              length: 2,
+              child: Column(children: [
+                const TabBar(tabs: [Tab(text: 'Catégories EPI'), Tab(text: 'Catégories EPC')]),
+                const Expanded(child: TabBarView(children: [
+                  CategoryListTab(endpoint: '/epi/epi-categories', label: 'EPI'),
+                  CategoryListTab(endpoint: '/epi/epc-categories', label: 'EPC'),
+                ])),
+              ]),
+            ),
+            const InspectionsTab(),
+            const MatrixTab(),
+            const EmployeeTab(),
+            RefreshIndicator(
+              onRefresh: load,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  if (renewals.isEmpty)
+                    const Padding(padding: EdgeInsets.all(8), child: Text('Aucun renouvellement à prévoir 👍')),
+                  ...renewals.map((r) => Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.event_repeat, color: Colors.orange),
+                          title: Text('${r['employee']?['firstName'] ?? ''} ${r['employee']?['lastName'] ?? ''}'),
+                          subtitle: Text('${r['epi']?['name'] ?? ''} • échéance ${_date(r['renewalAt'])}'),
+                        ),
+                      )),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
 
