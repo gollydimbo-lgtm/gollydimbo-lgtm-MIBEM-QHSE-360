@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/api.dart';
 import 'services/sync_queue.dart';
 import 'pages/login_page.dart';
@@ -30,7 +31,11 @@ import 'theme.dart';
 // BuildContext) de rediriger vers l'écran de connexion en cas de session expirée.
 final navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final savedDark = prefs.getBool('dark_mode');
+  if (savedDark != null) { isDarkMode.value = savedDark; QhseColors.apply(savedDark); }
   Api.onUnauthorized = () {
     Api().logout();
     navigatorKey.currentState?.pushAndRemoveUntil(
@@ -41,7 +46,7 @@ void main() {
   runApp(const QhseApp());
 }
 
-class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>MaterialApp(navigatorKey:navigatorKey,title:'Gestion QHSE 360',debugShowCheckedModeBanner:false,theme:buildQhseTheme(),darkTheme:buildQhseTheme(),themeMode:ThemeMode.dark,home:const AuthGate());}
+class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>ValueListenableBuilder<bool>(valueListenable:isDarkMode,builder:(context,dark,_){QhseColors.apply(dark);final theme=buildQhseTheme();return MaterialApp(navigatorKey:navigatorKey,title:'Gestion QHSE 360',debugShowCheckedModeBanner:false,theme:theme,darkTheme:theme,themeMode:dark?ThemeMode.dark:ThemeMode.light,home:const AuthGate());});}
 
 // Vérifie au démarrage si une session est déjà ouverte (jeton stocké localement)
 // et redirige vers le tableau de bord ou l'écran de connexion.
@@ -212,7 +217,7 @@ class _HomeShellState extends State<HomeShell> {
                     for (final group in navGroups) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
-                        child: Text(group.label, style: const TextStyle(color: QhseColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+                        child: Text(group.label, style: TextStyle(color: QhseColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
                       ),
                       for (final item in group.items)
                         ListTile(
@@ -228,15 +233,15 @@ class _HomeShellState extends State<HomeShell> {
                   ],
                 ),
               ),
-              const Divider(color: QhseColors.border, height: 1),
+              Divider(color: QhseColors.border, height: 1),
               ListTile(
-                leading: const Icon(Icons.settings_outlined, size: 18, color: QhseColors.textSecondary),
-                title: const Text('Réglages', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
+                leading: Icon(Icons.settings_outlined, size: 18, color: QhseColors.textSecondary),
+                title: Text('Réglages', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
                 onTap: () { if (inDrawer) Navigator.pop(c); Navigator.push(c, MaterialPageRoute(builder: (_) => const SettingsPage())); },
               ),
               ListTile(
-                leading: const Icon(Icons.logout, size: 18, color: QhseColors.textSecondary),
-                title: const Text('Déconnexion', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
+                leading: Icon(Icons.logout, size: 18, color: QhseColors.textSecondary),
+                title: Text('Déconnexion', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
                 onTap: logout,
               ),
               const SizedBox(height: 8),
@@ -253,6 +258,18 @@ class _HomeShellState extends State<HomeShell> {
       actions: [
         if (user != null)
           Padding(padding: const EdgeInsets.only(right: 8), child: Center(child: Text('${user!['firstName'] ?? ''}', style: const TextStyle(fontSize: 13)))),
+        ValueListenableBuilder<bool>(
+          valueListenable: isDarkMode,
+          builder: (context, dark, _) => IconButton(
+            icon: Icon(dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+            tooltip: dark ? 'Passer en mode clair' : 'Passer en mode sombre',
+            onPressed: () async {
+              isDarkMode.value = !isDarkMode.value;
+              final p = await SharedPreferences.getInstance();
+              await p.setBool('dark_mode', isDarkMode.value);
+            },
+          ),
+        ),
         _syncAction(),
       ],
     );
@@ -260,7 +277,7 @@ class _HomeShellState extends State<HomeShell> {
       return Scaffold(
         body: Row(children: [
           _sidebarContent(c, inDrawer: false),
-          const VerticalDivider(width: 1, color: QhseColors.border),
+          VerticalDivider(width: 1, color: QhseColors.border),
           Expanded(child: Scaffold(appBar: appBar, body: const DashboardPage())),
         ]),
       );
@@ -288,11 +305,11 @@ class ComingSoonPage extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.hourglass_empty, size: 48, color: QhseColors.textSecondary),
+              Icon(Icons.hourglass_empty, size: 48, color: QhseColors.textSecondary),
               const SizedBox(height: 16),
-              Text('$title n\'est pas encore connecté', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: QhseColors.textPrimary), textAlign: TextAlign.center),
+              Text('$title n\'est pas encore connecté', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: QhseColors.textPrimary), textAlign: TextAlign.center),
               const SizedBox(height: 8),
-              const Text('Ce module nécessite une nouvelle table dans la base — il sera activé lors d\'une prochaine mise à jour.', style: TextStyle(fontSize: 13, color: QhseColors.textSecondary), textAlign: TextAlign.center),
+              Text('Ce module nécessite une nouvelle table dans la base — il sera activé lors d\'une prochaine mise à jour.', style: TextStyle(fontSize: 13, color: QhseColors.textSecondary), textAlign: TextAlign.center),
             ]),
           ),
         ),
@@ -353,7 +370,7 @@ if(!closed)OutlinedButton.icon(onPressed:photo,icon:const Icon(Icons.camera_alt)
 if(!closed)OutlinedButton.icon(onPressed:sign,icon:const Icon(Icons.draw),label:const Text('Signer')),
 if(!closed&&missing.isNotEmpty)Padding(padding:const EdgeInsets.symmetric(vertical:8),child:Text('${missing.length} point(s) obligatoire(s) restant(s) avant de pouvoir soumettre.',style:const TextStyle(color:QhseColors.amber,fontSize:12))),
 if(!closed)FilledButton.icon(onPressed:(submitting||missing.isNotEmpty)?null:submit,icon:const Icon(Icons.check_circle),label:Text(submitting?'Soumission...':'Soumettre et générer les NC')),
-if(closed)const Padding(padding:EdgeInsets.symmetric(vertical:12),child:Text('Ce contrôle est clôturé — plus aucune modification possible.',style:TextStyle(color:QhseColors.textSecondary))),
+if(closed)Padding(padding:EdgeInsets.symmetric(vertical:12),child:Text('Ce contrôle est clôturé — plus aucune modification possible.',style:TextStyle(color:QhseColors.textSecondary))),
 ]));}}
 
 
