@@ -73,7 +73,7 @@ class _CategoryListTabState extends State<CategoryListTab> {
         children: [
           Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('Catégorie'))),
           const SizedBox(height: 8),
-          if (items.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucune catégorie', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucune catégorie', style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((c) => Card(child: ListTile(title: Text(c['name'] ?? ''), onTap: () => _openForm(record: c)))),
         ],
       ),
@@ -160,7 +160,7 @@ class _EmployeeTabState extends State<EmployeeTab> {
         children: [
           Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.person_add_alt_1, size: 16), label: const Text('Employé'))),
           const SizedBox(height: 8),
-          if (items.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucun employé enregistré', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucun employé enregistré', style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((e) => Card(child: ListTile(
                 title: Text('${e['firstName']} ${e['lastName']}'),
                 subtitle: Text('${e['matricule']} • ${e['department'] ?? '—'} • ${e['position'] ?? '—'}'),
@@ -268,7 +268,7 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
         children: [
           Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('EPC'))),
           const SizedBox(height: 8),
-          if (items.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucun EPC enregistré', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucun EPC enregistré', style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((e) => Card(child: ListTile(
                 title: Text('${e['code']} — ${e['name']}'),
                 subtitle: Text('${e['category']?['name'] ?? '—'} • ${e['location'] ?? '—'}'),
@@ -370,7 +370,7 @@ class _InspectionsTabState extends State<InspectionsTab> {
             FilledButton.icon(onPressed: () => _openForm(isEpi: true), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle')),
           ]),
           const SizedBox(height: 6),
-          if (epiInsp.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucune inspection EPI', style: TextStyle(color: QhseColors.textSecondary))),
+          if (epiInsp.isEmpty) Padding(padding: EdgeInsets.all(8), child: Text('Aucune inspection EPI', style: TextStyle(color: QhseColors.textSecondary))),
           ...epiInsp.map((i) => Card(child: ListTile(
                 title: Text(i['epi']?['name'] ?? '—'),
                 subtitle: Text(i['observations'] ?? ''),
@@ -382,7 +382,7 @@ class _InspectionsTabState extends State<InspectionsTab> {
             FilledButton.icon(onPressed: () => _openForm(isEpi: false), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle')),
           ]),
           const SizedBox(height: 6),
-          if (epcInsp.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucune inspection EPC', style: TextStyle(color: QhseColors.textSecondary))),
+          if (epcInsp.isEmpty) Padding(padding: EdgeInsets.all(8), child: Text('Aucune inspection EPC', style: TextStyle(color: QhseColors.textSecondary))),
           ...epcInsp.map((i) => Card(child: ListTile(
                 title: Text(i['epc']?['name'] ?? '—'),
                 subtitle: Text(i['observations'] ?? ''),
@@ -487,7 +487,7 @@ class _MatrixTabState extends State<MatrixTab> {
         children: [
           Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('Ligne'))),
           const SizedBox(height: 8),
-          if (items.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucune ligne enregistrée', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucune ligne enregistrée', style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((m) => Card(child: ListTile(
                 title: Text('${m['jobTitle']} — ${m['hazard']}'),
                 subtitle: Text('${m['riskDescription'] ?? ''} • EPI: ${m['epi']?['name'] ?? '—'} • EPC: ${m['epc']?['name'] ?? '—'}'),
@@ -527,7 +527,7 @@ class SignatureCanvasState extends State<SignatureCanvas> {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(widget.label, style: const TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Text(widget.label, style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
         TextButton(onPressed: clear, child: const Text('Effacer', style: TextStyle(fontSize: 12))),
       ]),
       RepaintBoundary(
@@ -667,7 +667,7 @@ class _AttributionTabState extends State<AttributionTab> {
         children: [
           Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: _openForm, icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle dotation'))),
           const SizedBox(height: 8),
-          if (items.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucune dotation enregistrée', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucune dotation enregistrée', style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((a) => Card(child: ListTile(
                 title: Text('${a['code']} — ${a['employee']?['firstName'] ?? ''} ${a['employee']?['lastName'] ?? ''}'),
                 subtitle: Text('${a['epi']?['name'] ?? '—'} • qté ${a['quantity']} • ${(a['distributedAt'] ?? '').toString().substring(0, 10)}'),
@@ -703,7 +703,7 @@ class _RenewalBucketsTabState extends State<RenewalBucketsTab> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color)),
       const SizedBox(height: 6),
-      if (list.isEmpty) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text('Aucune dotation dans ce palier', style: const TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
+      if (list.isEmpty) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text('Aucune dotation dans ce palier', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
       ...list.map((r) => Card(child: ListTile(
             title: Text('${r['employee']?['firstName'] ?? ''} ${r['employee']?['lastName'] ?? ''}'),
             subtitle: Text(r['epi']?['name'] ?? '—'),
