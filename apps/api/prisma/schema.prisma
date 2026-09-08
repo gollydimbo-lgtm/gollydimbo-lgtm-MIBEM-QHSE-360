@@ -45,6 +45,8 @@ enum EpiMovementType {
   LOSS
   DAMAGE
   ADJUSTMENT
+  RETURN
+  REFORM
 }
 
 enum SyncStatus {
@@ -121,6 +123,9 @@ model User {
   controlResults ControlResult[]
   audits QhseAudit[]
   refreshTokens RefreshToken[]
+  epcResponsible Epc[]
+  epcInspections EpcInspection[]
+  epiInspections EpiInspection[]
 }
 
 model Role {
@@ -250,6 +255,14 @@ model DocumentVersion {
   @@unique([documentId,version])
 }
 
+// Catégories EPI — table gérable par l'administrateur, jamais une liste
+// figée en dur (le cahier des charges l'exige explicitement).
+model EpiCategory {
+  id String @id @default(cuid())
+  name String @unique
+  epis Epi[]
+}
+
 model Epi {
   id String @id @default(cuid())
   code String @unique
@@ -261,6 +274,29 @@ model Epi {
   active Boolean @default(true)
   movements EpiMovement[]
   assignments EpiAssignment[]
+  categoryId String?
+  category EpiCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
+  reference String?
+  subcategory String?
+  description String?
+  manufacturer String?
+  model String?
+  size String?
+  color String?
+  material String?
+  standard String?
+  // Mode de durée d'utilisation — jamais une valeur universelle : configurable
+  // équipement par équipement, selon le fabricant, la réglementation,
+  // l'analyse des risques, l'usage et l'état constaté en inspection.
+  durationMode String?
+  durationValueDays Int?
+  disposable Boolean @default(false)
+  shared Boolean @default(false)
+  maxStock Int?
+  location String?
+  status String @default("ACTIVE")
+  inspections EpiInspection[]
+  jobRiskProtections JobRiskProtection[]
 }
 
 model Employee {
@@ -273,6 +309,7 @@ model Employee {
   active Boolean @default(true)
   epiAssignments EpiAssignment[]
   epiMovements EpiMovement[]
+  epiInspections EpiInspection[]
 }
 
 model EpiAssignment {
@@ -302,6 +339,85 @@ model EpiMovement {
   employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
   user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
   @@index([epiId,distributionDate])
+}
+
+// Checklist d'inspection EPI (casque, harnais, chaussures...) — résultat
+// standardisé, jamais une simple case cochée/décochée.
+model EpiInspection {
+  id String @id @default(cuid())
+  epiId String
+  epi Epi @relation(fields:[epiId], references:[id], onDelete:Cascade)
+  employeeId String?
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  inspectedAt DateTime @default(now())
+  result String
+  observations String?
+  inspectedById String?
+  inspectedBy User? @relation(fields:[inspectedById], references:[id], onDelete:SetNull)
+}
+
+// Catégories EPC — table gérable par l'administrateur, comme pour les EPI.
+model EpcCategory {
+  id String @id @default(cuid())
+  name String @unique
+  epcs Epc[]
+}
+
+model Epc {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  categoryId String?
+  category EpcCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
+  location String?
+  zone String?
+  description String?
+  manufacturer String?
+  model String?
+  reference String?
+  installedAt DateTime?
+  responsibleId String?
+  responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
+  condition String?
+  status String @default("ACTIVE")
+  inspectionFrequencyDays Int?
+  lastInspectionAt DateTime?
+  nextInspectionAt DateTime?
+  notes String?
+  inspections EpcInspection[]
+  jobRiskProtections JobRiskProtection[]
+}
+
+model EpcInspection {
+  id String @id @default(cuid())
+  epcId String
+  epc Epc @relation(fields:[epcId], references:[id], onDelete:Cascade)
+  inspectedAt DateTime @default(now())
+  result String
+  observations String?
+  inspectedById String?
+  inspectedBy User? @relation(fields:[inspectedById], references:[id], onDelete:SetNull)
+}
+
+// La matrice Poste → Activité → Danger → Risque → Mesure de prévention →
+// EPC/EPI → Fréquence d'utilisation → Critère de contrôle, exigée dans le
+// cahier des charges. Chaque ligne relie un poste à un équipement — jamais
+// une durée ou une exigence figée en dur.
+model JobRiskProtection {
+  id String @id @default(cuid())
+  code String @unique
+  jobTitle String
+  activity String?
+  hazard String
+  riskDescription String?
+  preventionMeasure String?
+  epiId String?
+  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
+  epcId String?
+  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
+  usageFrequency String?
+  controlCriteria String?
+  createdAt DateTime @default(now())
 }
 
 model DailyHeadcount {
