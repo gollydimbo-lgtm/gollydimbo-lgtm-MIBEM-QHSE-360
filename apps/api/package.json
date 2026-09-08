@@ -15,7 +15,8 @@
     "db:reset": "prisma migrate reset --force",
     "prisma:status": "prisma migrate status",
     "prisma:reclassify-docs": "tsx prisma/reclassify-documents.ts",
-    "import:documents": "tsx prisma/import-documents.ts"
+    "import:documents": "tsx prisma/import-documents.ts",
+    "seed:epi-epc-categories": "tsx prisma/seed-epi-epc-categories.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
