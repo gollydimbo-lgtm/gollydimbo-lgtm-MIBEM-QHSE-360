@@ -126,6 +126,7 @@ model User {
   epcResponsible Epc[]
   epcInspections EpcInspection[]
   epiInspections EpiInspection[]
+  epiAssignmentsResponsible EpiAssignment[]
 }
 
 model Role {
@@ -314,15 +315,25 @@ model Employee {
 
 model EpiAssignment {
   id String @id @default(cuid())
+  code String @unique
   employeeId String
   epiId String
   quantity Int
+  size String?
   distributedAt DateTime
   renewalAt DateTime?
+  expectedDurationDays Int?
   condition String?
   reason String?
+  status String @default("ACTIVE")
+  responsibleId String?
+  // Signatures électroniques — stockées en base64 (image PNG dessinée),
+  // jamais un simple champ texte "signé par" : preuve réelle de la remise.
+  employeeSignature String?
+  responsibleSignature String?
   employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade)
   epi Epi @relation(fields:[epiId], references:[id], onDelete:Restrict)
+  responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   @@index([employeeId,epiId])
 }
 
