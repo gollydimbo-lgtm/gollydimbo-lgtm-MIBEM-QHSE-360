@@ -17,7 +17,7 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
   String? error;
   late final TabController _tabController;
 
-  static const _tabs = ['Stock EPI', 'Bibliothèque EPC', 'Catégories', 'Inspections', 'Matrice Poste/Risque', 'Personnel', 'Renouvellements'];
+  static const _tabs = ['Stock EPI', 'Bibliothèque EPC', 'Catégories', 'Attribution', 'Inspections', 'Matrice Poste/Risque', 'Personnel', 'Renouvellements'];
 
   @override
   void initState() {
@@ -107,26 +107,11 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
                 ])),
               ]),
             ),
+            const AttributionTab(),
             const InspectionsTab(),
             const MatrixTab(),
             const EmployeeTab(),
-            RefreshIndicator(
-              onRefresh: load,
-              child: ListView(
-                padding: const EdgeInsets.all(12),
-                children: [
-                  if (renewals.isEmpty)
-                    const Padding(padding: EdgeInsets.all(8), child: Text('Aucun renouvellement à prévoir 👍')),
-                  ...renewals.map((r) => Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.event_repeat, color: Colors.orange),
-                          title: Text('${r['employee']?['firstName'] ?? ''} ${r['employee']?['lastName'] ?? ''}'),
-                          subtitle: Text('${r['epi']?['name'] ?? ''} • échéance ${_date(r['renewalAt'])}'),
-                        ),
-                      )),
-                ],
-              ),
-            ),
+            const RenewalBucketsTab(),
           ]),
         ),
       ]),
