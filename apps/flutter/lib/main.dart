@@ -202,7 +202,7 @@ class _HomeShellState extends State<HomeShell> {
                     child: const Icon(Icons.shield, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('Gestion QHSE 360', style: TextStyle(color: QhseColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
                       Text('Qualité · Sécurité · Hygiène · Environnement', style: TextStyle(color: QhseColors.textSecondary, fontSize: 10)),
