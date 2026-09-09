@@ -3,9 +3,10 @@ import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
 import '../theme.dart';
 
-/// Tableau de bord — reprend le langage visuel du dashboard web (dark
-/// premium, code couleur QHSE strict) mais branché sur les vraies données
-/// de l'API (/dashboard), pas des données fictives.
+/// Tableau de bord — reproduit exactement la disposition du tableau de bord
+/// web (Gestion QHSE 360) : mêmes cartes KPI, même graphique de tendance,
+/// même indice composite, mêmes 3 panneaux de répartition. Branché sur les
+/// mêmes routes réelles, pas de données fictives.
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
   @override
@@ -15,7 +16,9 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final api = Api();
   Map<String, dynamic>? data;
-  Map<String, int> otherCounts = {};
+  List audits = [];
+  List actions = [];
+  List nonConformities = [];
   bool loading = true;
   String? error;
 
@@ -27,31 +30,39 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final r = await api.get('/dashboard');
       data = Map<String, dynamic>.from(r);
+      audits = List.from(await api.get('/business/audits'));
+      actions = List.from(await api.get('/business/actions'));
+      nonConformities = List.from(await api.get('/business/non-conformities'));
     } catch (e) {
       error = 'Impossible de charger le tableau de bord';
     }
-    // Résumé des modules ajoutés plus récemment (Processus, Réclamations,
-    // Fournisseurs, Hygiène, Veille, Objectifs) — récupérés séparément,
-    // chacun avec échec silencieux individuel pour ne jamais bloquer
-    // l'affichage du reste du tableau de bord si l'un d'eux est indisponible.
-    final endpoints = {
-      'processus': '/business/processus',
-      'indicateurs': '/business/indicateurs-qualite',
-      'reclamations': '/business/reclamations',
-      'fournisseurs': '/business/fournisseurs',
-      'visitesMedicales': '/business/visites-medicales',
-      'veille': '/business/veille-reglementaire',
-      'objectifs': '/business/objectifs-qhse',
-    };
-    for (final entry in endpoints.entries) {
-      try {
-        final r = await api.get(entry.value);
-        otherCounts[entry.key] = (r as List).length;
-      } catch (_) {
-        otherCounts[entry.key] = -1; // -1 = indisponible, affiché comme "—"
-      }
-    }
     setState(() => loading = false);
+  }
+
+  // --- Mêmes formules que le tableau de bord web, à l'identique ---
+  bool _isOverdue(dynamic dueDate, dynamic status) {
+    if (status == 'CLOSED' || dueDate == null) return false;
+    final d = DateTime.tryParse('$dueDate');
+    return d != null && d.isBefore(DateTime.now());
+  }
+
+  Map<String, int> _capaStats() {
+    final total = actions.length;
+    final terminees = actions.where((a) => a['status'] == 'CLOSED').length;
+    final enRetard = actions.where((a) => _isOverdue(a['dueDate'], a['status'])).length;
+    final enCours = total - terminees - enRetard;
+    return {'total': total, 'terminees': terminees, 'enCours': enCours, 'enRetard': enRetard};
+  }
+
+  List<MapEntry<String, int>> _ncBySource() {
+    final counts = <String, int>{};
+    for (final n in nonConformities) {
+      final source = (n['source'] ?? '').toString().trim();
+      final key = source.isEmpty ? 'Source non renseignée' : source;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    final entries = counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return entries;
   }
 
   @override
@@ -69,11 +80,26 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final counters = Map<String, dynamic>.from(data?['overview']?['counters'] ?? {});
     final indicators = Map<String, dynamic>.from(data?['overview']?['indicators'] ?? {});
-    final alerts = List.from(data?['alerts'] ?? []);
     final trends = Map<String, dynamic>.from(data?['trends'] ?? {});
     final ncSeries = List.from(trends['nonConformitesParSemaine'] ?? []);
     final eventSeries = List.from(trends['evenementsSecuriteParSemaine'] ?? []);
     final severityBreakdown = List.from(counters['safetyEventsBySeverity'] ?? []);
+
+    final auditsPlanifies = audits.where((a) => a['status'] == 'PLANNED').length;
+    final auditsTotal = audits.length;
+    final capa = _capaStats();
+    final ncBySource = _ncBySource();
+
+    final tauxConformite = indicators['qualite']?['tauxConformite'];
+    int? composite;
+    if (tauxConformite != null) {
+      final actionsOverdue = (counters['actionsOverdue'] ?? 0) as num;
+      final risksHigh = (counters['risksHigh'] ?? 0) as num;
+      composite = (((tauxConformite as num) * 0.5) +
+              (100 - actionsOverdue * 8).clamp(0, 100) * 0.3 +
+              (100 - risksHigh * 10).clamp(0, 100) * 0.2)
+          .round();
+    }
 
     return RefreshIndicator(
       onRefresh: load,
@@ -85,16 +111,17 @@ class _DashboardPageState extends State<DashboardPage> {
           Text('Pilotez la conformité, en temps réel.', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
           const SizedBox(height: 16),
 
+          // Les 5 mêmes cartes KPI que le web, dans le même ordre.
           Wrap(spacing: 10, runSpacing: 10, children: [
-            _kpi('NC ouvertes', counters['nonConformitiesOpen'], 'Objectif : 0', QhseColors.red, Icons.report_gmailerrorred),
-            _kpi('Actions en retard', counters['actionsOverdue'], 'Objectif : 0', QhseColors.red, Icons.schedule),
+            _kpi('NC ouvertes', counters['nonConformitiesOpen'], "${counters['nonConformitiesCritical'] ?? 0} critique(s)", QhseColors.red, Icons.report_gmailerrorred),
+            _kpi('Actions en retard', counters['actionsOverdue'], "${counters['actionsOpen'] ?? 0} ouverte(s) au total", QhseColors.red, Icons.schedule),
             _kpi('Événements sécurité', counters['safetyEvents30d'], '30 derniers jours', QhseColors.amber, Icons.warning_amber_rounded),
-            _kpi('Risques élevés', counters['risksHigh'], 'Score ≥ 9', QhseColors.red, Icons.dangerous_outlined),
-            _kpi('Audits planifiés', counters['auditsPlanned'], '${counters['auditsUpcoming7d'] ?? 0} sous 7 jours', QhseColors.blue, Icons.fact_check_outlined),
-            _kpi('Documents à valider', counters['documentsPendingApproval'], 'GED', QhseColors.blue, Icons.folder_outlined),
+            _kpi('Audits', '${auditsTotal - auditsPlanifies} / $auditsTotal', "$auditsPlanifies planifié(s)", QhseColors.blue, Icons.fact_check_outlined),
+            _kpi('Taux de conformité', tauxConformite != null ? '$tauxConformite%' : '—', '30 derniers jours', QhseColors.green, Icons.verified_outlined),
           ]),
           const SizedBox(height: 20),
 
+          // Même rangée que le web : graphique de tendance + indice composite.
           _panel(
             title: 'Évolution des non-conformités & événements sécurité',
             subtitle: '8 dernières semaines',
@@ -106,83 +133,59 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
           const SizedBox(height: 16),
-
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(
-              child: _panel(
-                title: 'Répartition des événements sécurité',
-                subtitle: 'Par sévérité (30j)',
-                child: SizedBox(
-                  height: 180,
-                  child: severityBreakdown.isEmpty
-                      ? Center(child: Text('Aucun événement', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
-                      : _SeverityDonut(data: severityBreakdown),
-                ),
+          _panel(
+            title: composite != null ? 'Indice composite (estimation) : $composite%' : 'Indice composite',
+            subtitle: 'Qualité 50% · Actions à jour 30% · Risques maîtrisés 20%',
+            child: SizedBox(
+              height: 140,
+              child: Center(
+                child: composite != null
+                    ? Text('$composite%', style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold, color: composite >= 80 ? QhseColors.green : composite >= 60 ? QhseColors.amber : QhseColors.red))
+                    : Text('Pas assez de contrôles qualité soumis sur 30 jours pour calculer un taux de conformité.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _panel(
-                title: 'Indicateurs QHSE',
-                subtitle: 'Vue synthétique',
-                child: Column(children: [
-                  _indicatorBar('Qualité', 'Conformité 30j', indicators['qualite']?['tauxConformite'], '%', QhseColors.green),
-                  const SizedBox(height: 10),
-                  _indicatorBar('Sécurité', 'Événements 30j', indicators['securite']?['evenements30j'], '', QhseColors.amber),
-                  const SizedBox(height: 10),
-                  _indicatorBar('Environnement', 'Relevés 30j', indicators['environnement']?['releves30j'], '', QhseColors.blue),
-                  const SizedBox(height: 10),
-                  _indicatorBar('RH', 'EPI à renouveler', indicators['rh']?['epiARenouvelerSous30j'], '', QhseColors.red),
-                ]),
-              ),
-            ),
-          ]),
+          ),
           const SizedBox(height: 16),
 
+          // Même rangée que le web : NC par source / sévérité / statut CAPA.
           _panel(
-            title: 'Actions prioritaires',
-            child: alerts.isEmpty
-                ? Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte en cours 🎉', style: TextStyle(color: QhseColors.textSecondary)))
-                : Column(
-                    children: alerts.map<Widget>((a) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: QhseColors.cardAlt, borderRadius: BorderRadius.circular(10), border: Border.all(color: QhseColors.border)),
-                          child: Row(children: [
-                            Text(a['icon'] ?? '🔵', style: const TextStyle(fontSize: 18)),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text('${a['title'] ?? ''}', style: TextStyle(color: QhseColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
-                                Text('${a['domain'] ?? ''} • ${a['detail'] ?? ''}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
-                              ]),
-                            ),
-                            if (a['code'] != null) Text('${a['code']}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
-                          ]),
-                        )).toList(),
-                  ),
+            title: 'Non-conformités par source',
+            child: SizedBox(
+              height: 180,
+              child: ncBySource.isEmpty
+                  ? Center(child: Text('Aucune non-conformité enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                  : _LabeledDonut(entries: ncBySource, colors: [QhseColors.red, QhseColors.amber, QhseColors.blue, QhseColors.green, const Color(0xFF8B5CF6), QhseColors.textSecondary]),
+            ),
           ),
-
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           _panel(
-            title: 'Autres modules',
-            subtitle: 'Résumé des modules Qualité, RH et conformité',
-            child: Wrap(spacing: 10, runSpacing: 10, children: [
-              _kpi('Processus', _cnt('processus'), 'cartographiés', QhseColors.blue, Icons.account_tree_outlined),
-              _kpi('Indicateurs qualité', _cnt('indicateurs'), 'suivis', QhseColors.blue, Icons.insights_outlined),
-              _kpi('Réclamations', _cnt('reclamations'), 'clients', QhseColors.amber, Icons.notifications_outlined),
-              _kpi('Fournisseurs', _cnt('fournisseurs'), 'évalués', QhseColors.blue, Icons.local_shipping_outlined),
-              _kpi('Visites médicales', _cnt('visitesMedicales'), 'suivies', QhseColors.green, Icons.favorite_outline),
-              _kpi('Veille réglementaire', _cnt('veille'), 'textes suivis', QhseColors.blue, Icons.search_outlined),
-              _kpi('Objectifs QHSE', _cnt('objectifs'), 'suivis', QhseColors.blue, Icons.flag_outlined),
-            ]),
+            title: 'Répartition des événements sécurité par sévérité',
+            child: SizedBox(
+              height: 180,
+              child: severityBreakdown.isEmpty
+                  ? Center(child: Text('Aucun événement sur 30 jours', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                  : _SeverityDonut(data: severityBreakdown),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _panel(
+            title: 'Statut des actions correctives',
+            child: SizedBox(
+              height: 180,
+              child: _LabeledDonut(
+                entries: [
+                  MapEntry('Terminées', capa['terminees']!),
+                  MapEntry('En cours', capa['enCours']!),
+                  MapEntry('En retard', capa['enRetard']!),
+                ],
+                colors: const [QhseColors.green, QhseColors.blue, QhseColors.red],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-
-  String _cnt(String key) => otherCounts[key] == null ? '—' : (otherCounts[key] == -1 ? '—' : '${otherCounts[key]}');
 
   Widget _panel({required String title, String? subtitle, required Widget child}) => Container(
         width: double.infinity,
@@ -211,25 +214,6 @@ class _DashboardPageState extends State<DashboardPage> {
           Text(objectif, style: TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
         ]),
       );
-
-  Widget _indicatorBar(String title, String label, dynamic value, String suffix, Color color) {
-    final display = value == null ? '-' : '$value$suffix';
-    final numeric = (value is num) ? value.toDouble() : 0.0;
-    final pct = suffix == '%' ? (numeric / 100).clamp(0.0, 1.0) : (numeric / 30).clamp(0.0, 1.0);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(title, style: TextStyle(fontSize: 12, color: QhseColors.textPrimary, fontWeight: FontWeight.w500)),
-        Text(display, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
-      ]),
-      const SizedBox(height: 4),
-      ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: LinearProgressIndicator(value: pct, minHeight: 5, backgroundColor: QhseColors.border, valueColor: AlwaysStoppedAnimation(color)),
-      ),
-      const SizedBox(height: 2),
-      Text(label, style: TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
-    ]);
-  }
 }
 
 /// Courbe NC / événements sécurité sur 8 semaines (fl_chart LineChart).
@@ -324,6 +308,60 @@ class _SeverityDonut extends StatelessWidget {
               ]),
             ),
         ],
+      ),
+    ]);
+  }
+}
+
+/// Anneau générique avec légende, réutilisé pour "Non-conformités par
+/// source" et "Statut des actions correctives" — même principe que les
+/// donuts du tableau de bord web (DonutChart), version Flutter.
+class _LabeledDonut extends StatelessWidget {
+  final List<MapEntry<String, int>> entries;
+  final List<Color> colors;
+  const _LabeledDonut({required this.entries, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = entries.where((e) => e.value > 0).toList();
+    if (filtered.isEmpty) {
+      return Center(child: Text('Aucune donnée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
+    }
+    return Row(children: [
+      Expanded(
+        child: PieChart(
+          PieChartData(
+            sectionsSpace: 2,
+            centerSpaceRadius: 34,
+            sections: [
+              for (int i = 0; i < filtered.length; i++)
+                PieChartSectionData(
+                  value: filtered[i].value.toDouble(),
+                  color: colors[i % colors.length],
+                  radius: 34,
+                  title: '${filtered[i].value}',
+                  titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (int i = 0; i < filtered.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: colors[i % colors.length], shape: BoxShape.circle)),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(filtered[i].key, style: TextStyle(fontSize: 10, color: QhseColors.textSecondary), overflow: TextOverflow.ellipsis)),
+                ]),
+              ),
+          ],
+        ),
       ),
     ]);
   }
