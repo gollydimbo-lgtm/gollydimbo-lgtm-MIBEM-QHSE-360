@@ -39,4 +39,17 @@ import { Injectable } from '@nestjs/common'; import { PrismaService } from '../c
    within90:all.filter(a=>a.renewalAt! > in60 && a.renewalAt! <= in90),
   };
  }
+ maintenanceList(epcId?:string){return this.db.epcMaintenance.findMany({where:epcId?{epcId}:undefined,include:{epc:true,performedBy:true},orderBy:{date:'desc'}})}
+ // Enregistrer une maintenance met aussi à jour automatiquement la fiche
+ // EPC (dernière intervention, et prochaine échéance si renseignée) —
+ // pas besoin de le faire deux fois séparément.
+ async maintenanceCreate(b:any){
+  return this.db.$transaction(async(tx)=>{
+   const m=await tx.epcMaintenance.create({data:{...b,cost:b.cost!==undefined&&b.cost!==null?Number(b.cost):null}});
+   await tx.epc.update({where:{id:b.epcId},data:{lastInspectionAt:m.date,...(b.nextMaintenanceAt?{nextInspectionAt:b.nextMaintenanceAt}:{})}});
+   return m;
+  });
+ }
+ maintenanceUpdate(id:string,b:any){return this.db.epcMaintenance.update({where:{id},data:{...b,...(b.cost!==undefined?{cost:b.cost===null?null:Number(b.cost)}:{})}})}
+ maintenanceDelete(id:string){return this.db.epcMaintenance.delete({where:{id}})}
 }
