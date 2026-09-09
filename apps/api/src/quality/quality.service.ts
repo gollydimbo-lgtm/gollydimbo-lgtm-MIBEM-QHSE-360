@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 
+const CONTROL_INCLUDE = {
+  template:{include:{points:true}}, productionLine:true, machine:true, productRef:true, productFormat:true, shiftRef:true,
+  type:true, epi:true, epc:true, risk:true, fournisseur:true, employee:true,
+};
+
 @Injectable()
 export class QualityService {
   constructor(private readonly db: PrismaService) {}
@@ -14,16 +19,36 @@ export class QualityService {
     ]);
   }
 
-  listTemplates() { return this.db.controlTemplate.findMany({ where:{active:true}, include:{points:{orderBy:{order:'asc'}}}, orderBy:{name:'asc'} }); }
+  // --- Types de contrôle (catalogue configurable, jamais figé en dur) ---
+  listTypes(domain?:string) { return this.db.controlType.findMany({ where:domain?{domain}:undefined, orderBy:{name:'asc'} }); }
+  createType(data:any) {
+    if (!data.code || !data.name) throw new BadRequestException('code et name sont obligatoires');
+    return this.db.controlType.create({data:{code:data.code,name:data.name,domain:data.domain||'QUALITE',description:data.description,active:data.active??true}});
+  }
+  updateType(id:string,data:any) { return this.db.controlType.update({where:{id},data}); }
+  deleteType(id:string) { return this.db.controlType.delete({where:{id}}); }
+
+  listTemplates(domain?:string) { return this.db.controlTemplate.findMany({ where:{active:true,...(domain?{domain}:{})}, include:{points:{orderBy:{order:'asc'}},type:true}, orderBy:{name:'asc'} }); }
 
   createTemplate(data:any) {
     if (!data.code || !data.name) throw new BadRequestException('code et name sont obligatoires');
-    return this.db.controlTemplate.create({data:{code:data.code,name:data.name,points:{create:(data.points||[]).map((p:any,i:number)=>({code:p.code,label:p.label,type:p.type||'BOOLEAN',required:!!p.required,critical:!!p.critical,minValue:p.minValue,maxValue:p.maxValue,choices:p.choices,unit:p.unit,order:p.order??i}))}},include:{points:true}});
+    return this.db.controlTemplate.create({data:{
+      code:data.code,name:data.name,domain:data.domain||'QUALITE',typeId:data.typeId,
+      points:{create:(data.points||[]).map((p:any,i:number)=>({code:p.code,label:p.label,type:p.type||'BOOLEAN',required:!!p.required,critical:!!p.critical,minValue:p.minValue,maxValue:p.maxValue,choices:p.choices,unit:p.unit,order:p.order??i}))}
+    },include:{points:true,type:true}});
   }
 
   async createControl(data:any) {
     if (!data.code) throw new BadRequestException('code obligatoire');
-    if (!data.lineId || !data.productId || !data.shiftId || !data.lotNumber) throw new BadRequestException('ligne, produit, quart et lot sont obligatoires');
+    const domain = data.domain || 'QUALITE';
+    // La validation stricte (ligne/produit/quart/lot) ne s'applique qu'au
+    // domaine Qualité — c'est exactement ce qu'utilise déjà l'application
+    // mobile de conditionnement. Les autres domaines (sécurité, hygiène,
+    // EPI/EPC...) n'ont pas ce contexte de ligne de production et ne
+    // doivent pas être bloqués par cette exigence.
+    if (domain === 'QUALITE' && (!data.lineId || !data.productId || !data.shiftId || !data.lotNumber)) {
+      throw new BadRequestException('ligne, produit, quart et lot sont obligatoires');
+    }
     if (data.templateId) {
       const t=await this.db.controlTemplate.findUnique({where:{id:data.templateId}});
       if(!t) throw new NotFoundException('Template introuvable');
@@ -33,13 +58,14 @@ export class QualityService {
       formatId:data.formatId, shiftId:data.shiftId, line:data.line, product:data.product, format:data.format,
       lotNumber:data.lotNumber, shift:data.shift, controlDate:data.controlDate?new Date(data.controlDate):new Date(),
       notes:data.notes, latitude:data.latitude, longitude:data.longitude, gpsAccuracy:data.gpsAccuracy,
-      startedAt:new Date(), status:'IN_PROGRESS', createdById:data.createdById, templateId:data.templateId
-    },include:{template:{include:{points:true}},productionLine:true,machine:true,productRef:true,productFormat:true,shiftRef:true}});
+      startedAt:new Date(), status:'IN_PROGRESS', createdById:data.createdById, templateId:data.templateId,
+      domain, typeId:data.typeId, epiId:data.epiId, epcId:data.epcId, riskId:data.riskId, fournisseurId:data.fournisseurId, employeeId:data.employeeId,
+    },include:CONTROL_INCLUDE});
   }
 
-  listControls() { return this.db.qualityControl.findMany({include:{template:{include:{points:true}},productionLine:true,machine:true,productRef:true,productFormat:true,shiftRef:true,results:{include:{point:true}},nonConformities:{include:{actions:true}},attachments:{include:{attachment:true}},signatures:true,createdBy:true},orderBy:{controlDate:'desc'}}); }
+  listControls(domain?:string) { return this.db.qualityControl.findMany({where:domain?{domain}:undefined,include:{...CONTROL_INCLUDE,results:{include:{point:true}},nonConformities:{include:{actions:true}},attachments:{include:{attachment:true}},signatures:true,createdBy:true},orderBy:{controlDate:'desc'}}); }
 
-  getControl(id:string) { return this.db.qualityControl.findUnique({where:{id},include:{template:{include:{points:true}},productionLine:true,machine:true,productRef:true,productFormat:true,shiftRef:true,results:{include:{point:true}},nonConformities:{include:{actions:true}},attachments:{include:{attachment:true}},signatures:{include:{user:true}},createdBy:true}}); }
+  getControl(id:string) { return this.db.qualityControl.findUnique({where:{id},include:{...CONTROL_INCLUDE,results:{include:{point:true}},nonConformities:{include:{actions:true}},attachments:{include:{attachment:true}},signatures:{include:{user:true}},createdBy:true}}); }
 
   async recordResult(controlId:string, pointId:string, data:any) {
     const control=await this.db.qualityControl.findUnique({where:{id:controlId}});
@@ -77,8 +103,19 @@ export class QualityService {
     return this.db.$transaction(async tx=>{
       const updated=await tx.qualityControl.update({where:{id},data:{status:failed.length?'NON_COMPLIANT':'COMPLIANT',result:failed.length?'FAIL':'PASS',submittedAt:new Date()}});
       for(const r of failed){
-        const nc=await tx.nonConformity.create({data:{code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,title:`Écart contrôle ${c.code}`,description:r.comment||`Point: ${r.point?.label||r.pointId}`,severity:r.point?.critical?3:1,source:'QUALITY_CONTROL',qualityControlId:id}});
-        await tx.action.create({data:{code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,title:`Traiter ${nc.code}`,description:`Analyser et corriger l'écart du contrôle ${c.code}`,priority:r.point?.critical?1:2,nonConformityId:nc.id}});
+        const critical = r.point?.critical;
+        // Fusion des liens : la non-conformité générée hérite des liens
+        // du contrôle qui l'a produite (EPI, EPC...), pour rester
+        // reliée au bon élément quel que soit le domaine du contrôle.
+        const nc=await tx.nonConformity.create({data:{
+          code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+          title:`Écart contrôle ${c.code}`,description:r.comment||`Point: ${r.point?.label||r.pointId}`,
+          severity:critical?3:1,
+          classification: critical ? 'NC_CRITIQUE' : 'NC_MINEURE',
+          source:c.domain==='QUALITE'?'QUALITY_CONTROL':c.domain,
+          qualityControlId:id, epiId:c.epiId, epcId:c.epcId,
+        }});
+        await tx.action.create({data:{code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,title:`Traiter ${nc.code}`,description:`Analyser et corriger l'écart du contrôle ${c.code}`,priority:critical?1:2,nonConformityId:nc.id}});
       }
       return updated;
     });
