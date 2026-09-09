@@ -127,6 +127,7 @@ model User {
   epcInspections EpcInspection[]
   epiInspections EpiInspection[]
   epiAssignmentsResponsible EpiAssignment[]
+  epcMaintenancesPerformed EpcMaintenance[]
 }
 
 model Role {
@@ -298,6 +299,7 @@ model Epi {
   status String @default("ACTIVE")
   inspections EpiInspection[]
   jobRiskProtections JobRiskProtection[]
+  nonConformities NonConformity[]
 }
 
 model Employee {
@@ -397,6 +399,8 @@ model Epc {
   notes String?
   inspections EpcInspection[]
   jobRiskProtections JobRiskProtection[]
+  nonConformities NonConformity[]
+  maintenances EpcMaintenance[]
 }
 
 model EpcInspection {
@@ -408,6 +412,22 @@ model EpcInspection {
   observations String?
   inspectedById String?
   inspectedBy User? @relation(fields:[inspectedById], references:[id], onDelete:SetNull)
+}
+
+// Historique de maintenance EPC — préventive ou corrective, avec la
+// prochaine échéance pour pouvoir la suivre dans le temps.
+model EpcMaintenance {
+  id String @id @default(cuid())
+  epcId String
+  epc Epc @relation(fields:[epcId], references:[id], onDelete:Cascade)
+  date DateTime @default(now())
+  type String
+  description String?
+  cost Float?
+  performedById String?
+  performedBy User? @relation(fields:[performedById], references:[id], onDelete:SetNull)
+  nextMaintenanceAt DateTime?
+  status String @default("DONE")
 }
 
 // La matrice Poste → Activité → Danger → Risque → Mesure de prévention →
@@ -490,8 +510,12 @@ model NonConformity {
   occurredAt DateTime @default(now())
   createdAt DateTime @default(now())
   qualityControlId String?
+  epiId String?
+  epcId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
+  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
+  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
   @@index([status,occurredAt])
 }
 
