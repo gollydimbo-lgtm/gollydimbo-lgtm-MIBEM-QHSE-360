@@ -17,7 +17,7 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
   String? error;
   late final TabController _tabController;
 
-  static const _tabs = ['Stock EPI', 'Bibliothèque EPC', 'Catégories', 'Attribution', 'Inspections', 'Matrice Poste/Risque', 'Personnel', 'Renouvellements'];
+  static const _tabs = ['Stock EPI', 'Bibliothèque EPC', 'Catégories', 'Attribution', 'Inspections', 'Maintenance EPC', 'Matrice Poste/Risque', 'Personnel', 'Renouvellements'];
 
   @override
   void initState() {
@@ -93,6 +93,7 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
             ),
             const AttributionTab(),
             const InspectionsTab(),
+            const EpcMaintenanceTab(),
             const MatrixTab(),
             const EmployeeTab(),
             const RenewalBucketsTab(),
