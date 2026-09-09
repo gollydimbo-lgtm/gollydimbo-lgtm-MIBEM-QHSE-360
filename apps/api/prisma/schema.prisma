@@ -77,6 +77,11 @@ enum ControlValueType {
   TEXT
   CHOICE
   PHOTO
+  DATE
+  TIME
+  PERCENTAGE
+  SIGNATURE
+  RATING
 }
 
 enum SignatureType {
@@ -300,6 +305,7 @@ model Epi {
   inspections EpiInspection[]
   jobRiskProtections JobRiskProtection[]
   nonConformities NonConformity[]
+  qualityControls QualityControl[]
 }
 
 model Employee {
@@ -313,6 +319,7 @@ model Employee {
   epiAssignments EpiAssignment[]
   epiMovements EpiMovement[]
   epiInspections EpiInspection[]
+  qualityControls QualityControl[]
 }
 
 model EpiAssignment {
@@ -401,6 +408,7 @@ model Epc {
   jobRiskProtections JobRiskProtection[]
   nonConformities NonConformity[]
   maintenances EpcMaintenance[]
+  qualityControls QualityControl[]
 }
 
 model EpcInspection {
@@ -507,6 +515,10 @@ model NonConformity {
   severity Int @default(1)
   status String @default("OPEN")
   source String?
+  // Classification configurable (observation, écart mineur, NC mineure/
+  // majeure/critique, danger immédiat, anomalie...) — texte libre plutôt
+  // qu'un enum figé, pour rester personnalisable sans toucher au code.
+  classification String?
   occurredAt DateTime @default(now())
   createdAt DateTime @default(now())
   qualityControlId String?
@@ -628,6 +640,19 @@ model QualityControl {
   submittedAt DateTime?
   createdById String?
   templateId String?
+  // Le même moteur de contrôle sert désormais à tous les modules — ce
+  // champ indique juste dans quel domaine ce contrôle-ci a été réalisé,
+  // sans jamais renommer ni dupliquer l'entité elle-même.
+  domain String @default("QUALITE")
+  typeId String?
+  // Liens universels vers les autres modules déjà existants — un
+  // contrôle peut porter sur un EPI, un EPC, un risque, un fournisseur
+  // ou un employé, en plus des liens qualité déjà en place.
+  epiId String?
+  epcId String?
+  riskId String?
+  fournisseurId String?
+  employeeId String?
   site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
   productionLine ProductionLine? @relation(fields:[lineId], references:[id], onDelete:SetNull)
   machine Machine? @relation(fields:[machineId], references:[id], onDelete:SetNull)
@@ -636,6 +661,12 @@ model QualityControl {
   shiftRef Shift? @relation(fields:[shiftId], references:[id], onDelete:SetNull)
   createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
   template ControlTemplate? @relation(fields:[templateId], references:[id], onDelete:SetNull)
+  type ControlType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
+  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
+  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
+  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
   nonConformities NonConformity[]
   results ControlResult[]
   attachments QualityControlAttachment[]
@@ -644,6 +675,23 @@ model QualityControl {
   @@index([status])
   @@index([lineId,controlDate])
   @@index([productId,lotNumber])
+  @@index([domain,controlDate])
+}
+
+// Catalogue des types de contrôle (contrôle qualité, réception, machine,
+// hygiène, EPI/EPC...) — géré par l'administrateur, jamais une liste
+// figée en dur. Un modèle de contrôle (ControlTemplate) appartient à un
+// type ; un contrôle peut aussi référencer directement son type.
+model ControlType {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  domain String @default("QUALITE")
+  description String?
+  active Boolean @default(true)
+  templates ControlTemplate[]
+  controls QualityControl[]
+  createdAt DateTime @default(now())
 }
 
 model ControlTemplate {
@@ -651,6 +699,9 @@ model ControlTemplate {
   code String @unique
   name String
   active Boolean @default(true)
+  domain String @default("QUALITE")
+  typeId String?
+  type ControlType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
   points ControlPoint[]
   controls QualityControl[]
   createdAt DateTime @default(now())
@@ -727,6 +778,7 @@ model Risk {
   reviewedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  qualityControls QualityControl[]
 }
 
 model HaccpRecord {
@@ -857,6 +909,7 @@ model Fournisseur {
   statut String @default("HOMOLOGUE")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  qualityControls QualityControl[]
 }
 
 model VisiteMedicale {
