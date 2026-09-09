@@ -177,8 +177,8 @@ class _UsersPageState extends State<UsersPage> {
                               ),
                             ]),
                             const SizedBox(height: 4),
-                            Text(u['email'] ?? '', style: const TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
-                            Text(roles, style: const TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
+                            Text(u['email'] ?? '', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
+                            Text(roles, style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
                             const SizedBox(height: 8),
                             Wrap(spacing: 12, children: [
                               InkWell(onTap: () => _openResetPasswordDialog(u), child: const Text('Réinitialiser mdp', style: TextStyle(color: QhseColors.blue, fontSize: 12))),

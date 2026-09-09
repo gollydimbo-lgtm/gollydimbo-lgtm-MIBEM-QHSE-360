@@ -191,7 +191,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
                     if (widget.kpiBuilder != null) Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(widget.kpiBuilder!(items!))),
                     Expanded(
                       child: items!.isEmpty
-                          ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun élément pour le moment', style: TextStyle(color: QhseColors.textSecondary))))])
+                          ? ListView(children:  [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun élément pour le moment', style: TextStyle(color: QhseColors.textSecondary))))])
                           : ListView.builder(
                               padding: const EdgeInsets.all(12),
                               itemCount: items!.length,
@@ -200,7 +200,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
                                 return Card(
                                   child: ListTile(
                                     title: Text(widget.titleOf(item)),
-                                    subtitle: Text(widget.subtitleOf(item), style: const TextStyle(color: QhseColors.textSecondary)),
+                                    subtitle: Text(widget.subtitleOf(item), style: TextStyle(color: QhseColors.textSecondary)),
                                     trailing: widget.chipLabel != null
                                         ? Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

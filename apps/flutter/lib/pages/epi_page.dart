@@ -79,23 +79,7 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
         Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(kpis)),
         Expanded(
           child: TabBarView(controller: _tabController, children: [
-            RefreshIndicator(
-              onRefresh: load,
-              child: ListView(
-                padding: const EdgeInsets.all(12),
-                children: [
-                  const Text('EPI journaliers (gants, cache-nez, charlotte…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(height: 6),
-                  ...daily.map((e) => _epiCard(e)),
-                  if (daily.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucun EPI journalier configuré')),
-                  const SizedBox(height: 16),
-                  const Text('EPI annuels (chaussures, tenue, lunettes, casque…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(height: 6),
-                  ...annual.map((e) => _epiCard(e)),
-                  if (annual.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucun EPI annuel configuré')),
-                ],
-              ),
-            ),
+            const EpiLibraryTab(),
             const EpcLibraryTab(),
             DefaultTabController(
               length: 2,
