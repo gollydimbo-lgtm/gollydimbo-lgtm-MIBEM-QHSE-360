@@ -522,6 +522,44 @@ class _InspectionsTabState extends State<InspectionsTab> {
 
   Color _resultColor(String? r) => r == 'NON_CONFORME' || r == 'A_REFORMER' ? QhseColors.red : r == 'A_SURVEILLER' ? QhseColors.amber : QhseColors.green;
   String _resultLabel(String? r) => {'CONFORME': 'Conforme', 'NON_CONFORME': 'Non conforme', 'A_SURVEILLER': 'À surveiller', 'A_REFORMER': 'À réformer'}[r] ?? '$r';
+  bool _isBad(String? r) => r == 'NON_CONFORME' || r == 'A_REFORMER';
+
+  Future<void> _createNcQuick({required String title, String? description, required String source, required int severity, String? epiId, String? epcId}) async {
+    final titleCtrl = TextEditingController(text: title);
+    final descCtrl = TextEditingController(text: description ?? '');
+    String? formError;
+    bool saving = false;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: const Text('Nouvelle non-conformité'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Titre')),
+            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description'), maxLines: 2),
+            if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(
+            onPressed: saving ? null : () async {
+              setD(() => saving = true);
+              try {
+                await api.post('/business/non-conformities', {
+                  'code': 'NC-${DateTime.now().millisecondsSinceEpoch}',
+                  'title': titleCtrl.text, 'description': descCtrl.text, 'source': source, 'severity': severity,
+                  'occurredAt': DateTime.now().toIso8601String(), 'epiId': epiId, 'epcId': epcId,
+                });
+                if (context.mounted) Navigator.pop(c);
+              } catch (e) { setD(() { saving = false; formError = '$e'; }); }
+            },
+            child: Text(saving ? 'Enregistrement…' : 'Créer'),
+          ),
+        ],
+      )),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -536,11 +574,23 @@ class _InspectionsTabState extends State<InspectionsTab> {
             FilledButton.icon(onPressed: () => _openForm(isEpi: true), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle')),
           ]),
           const SizedBox(height: 6),
-          if (epiInsp.isEmpty) Padding(padding: EdgeInsets.all(8), child: Text('Aucune inspection EPI', style: TextStyle(color: QhseColors.textSecondary))),
+          if (epiInsp.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucune inspection EPI', style: TextStyle(color: QhseColors.textSecondary))),
           ...epiInsp.map((i) => Card(child: ListTile(
                 title: Text(i['epi']?['name'] ?? '—'),
                 subtitle: Text(i['observations'] ?? ''),
-                trailing: Text(_resultLabel(i['result']), style: TextStyle(color: _resultColor(i['result']), fontSize: 12, fontWeight: FontWeight.w600)),
+                trailing: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text(_resultLabel(i['result']), style: TextStyle(color: _resultColor(i['result']), fontSize: 12, fontWeight: FontWeight.w600)),
+                  if (_isBad(i['result']))
+                    TextButton(
+                      style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 24)),
+                      onPressed: () => _createNcQuick(
+                        title: 'EPI non conforme — ${i['epi']?['name'] ?? ''}',
+                        description: i['observations'],
+                        source: 'EPI', severity: i['result'] == 'A_REFORMER' ? 3 : 2, epiId: i['epiId'],
+                      ),
+                      child: const Text('Créer une NC', style: TextStyle(fontSize: 11, color: QhseColors.red)),
+                    ),
+                ]),
               ))),
           const SizedBox(height: 20),
           Row(children: [
@@ -548,11 +598,23 @@ class _InspectionsTabState extends State<InspectionsTab> {
             FilledButton.icon(onPressed: () => _openForm(isEpi: false), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle')),
           ]),
           const SizedBox(height: 6),
-          if (epcInsp.isEmpty) Padding(padding: EdgeInsets.all(8), child: Text('Aucune inspection EPC', style: TextStyle(color: QhseColors.textSecondary))),
+          if (epcInsp.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucune inspection EPC', style: TextStyle(color: QhseColors.textSecondary))),
           ...epcInsp.map((i) => Card(child: ListTile(
                 title: Text(i['epc']?['name'] ?? '—'),
                 subtitle: Text(i['observations'] ?? ''),
-                trailing: Text(_resultLabel(i['result']), style: TextStyle(color: _resultColor(i['result']), fontSize: 12, fontWeight: FontWeight.w600)),
+                trailing: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text(_resultLabel(i['result']), style: TextStyle(color: _resultColor(i['result']), fontSize: 12, fontWeight: FontWeight.w600)),
+                  if (_isBad(i['result']))
+                    TextButton(
+                      style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 24)),
+                      onPressed: () => _createNcQuick(
+                        title: 'EPC non conforme — ${i['epc']?['name'] ?? ''}',
+                        description: i['observations'],
+                        source: 'EPC', severity: i['result'] == 'A_REFORMER' ? 3 : 2, epcId: i['epcId'],
+                      ),
+                      child: const Text('Créer une NC', style: TextStyle(fontSize: 11, color: QhseColors.red)),
+                    ),
+                ]),
               ))),
         ],
       ),
@@ -560,7 +622,115 @@ class _InspectionsTabState extends State<InspectionsTab> {
   }
 }
 
-// --- Matrice Poste / Risque / EPI / EPC ---
+// --- Maintenance EPC ---
+class EpcMaintenanceTab extends StatefulWidget {
+  const EpcMaintenanceTab({super.key});
+  @override
+  State<EpcMaintenanceTab> createState() => _EpcMaintenanceTabState();
+}
+
+class _EpcMaintenanceTabState extends State<EpcMaintenanceTab> {
+  final api = Api();
+  List items = [], epcs = [];
+  bool loading = true;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    try {
+      items = List.from(await api.get('/epi/maintenance'));
+      epcs = List.from(await api.get('/epi/epc'));
+    } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  Future<void> _openForm() async {
+    String? epcId;
+    String type = 'PREVENTIVE';
+    final description = TextEditingController();
+    final cost = TextEditingController();
+    DateTime? nextMaintenanceAt;
+    String? formError;
+    bool saving = false;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: const Text('Nouvelle intervention de maintenance'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              value: epcId, isExpanded: true,
+              items: epcs.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text('${e['code']} — ${e['name']}'))).toList(),
+              onChanged: (v) => setD(() => epcId = v),
+              decoration: const InputDecoration(labelText: 'Équipement'),
+            ),
+            DropdownButtonFormField<String>(
+              value: type,
+              items: const [DropdownMenuItem(value: 'PREVENTIVE', child: Text('Préventive')), DropdownMenuItem(value: 'CORRECTIVE', child: Text('Corrective'))],
+              onChanged: (v) => setD(() => type = v ?? 'PREVENTIVE'),
+              decoration: const InputDecoration(labelText: "Type d'intervention"),
+            ),
+            TextField(controller: description, decoration: const InputDecoration(labelText: 'Description'), maxLines: 2),
+            TextField(controller: cost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Coût (optionnel)')),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(nextMaintenanceAt == null ? 'Prochaine échéance (optionnel)' : 'Échéance : ${nextMaintenanceAt!.day}/${nextMaintenanceAt!.month}/${nextMaintenanceAt!.year}'),
+              trailing: const Icon(Icons.edit_calendar),
+              onTap: () async {
+                final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035));
+                if (d != null) setD(() => nextMaintenanceAt = d);
+              },
+            ),
+            if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(
+            onPressed: saving ? null : () async {
+              if (epcId == null) { setD(() => formError = 'Sélectionnez un équipement'); return; }
+              setD(() => saving = true);
+              try {
+                await api.post('/epi/maintenance', {
+                  'epcId': epcId, 'type': type, 'description': description.text,
+                  'cost': cost.text.isEmpty ? null : double.tryParse(cost.text),
+                  'nextMaintenanceAt': nextMaintenanceAt?.toIso8601String(),
+                });
+                if (context.mounted) Navigator.pop(c);
+                load();
+              } catch (e) { setD(() { saving = false; formError = '$e'; }); }
+            },
+            child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
+          ),
+        ],
+      )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const Center(child: CircularProgressIndicator());
+    return RefreshIndicator(
+      onRefresh: load,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: _openForm, icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle intervention'))),
+          const SizedBox(height: 8),
+          if (items.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text('Aucune intervention enregistrée', style: TextStyle(color: QhseColors.textSecondary))),
+          ...items.map((m) => Card(child: ListTile(
+                leading: Icon(Icons.build, color: m['type'] == 'CORRECTIVE' ? QhseColors.red : QhseColors.blue),
+                title: Text(m['epc']?['name'] ?? '—'),
+                subtitle: Text('${m['type'] == 'PREVENTIVE' ? 'Préventive' : 'Corrective'} • ${(m['date'] ?? '').toString().substring(0, 10)}${m['description'] != null && m['description'] != '' ? ' • ${m['description']}' : ''}'),
+                trailing: m['nextMaintenanceAt'] != null ? Text('Échéance\n${(m['nextMaintenanceAt']).toString().substring(0, 10)}', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)) : null,
+              ))),
+        ],
+      ),
+    );
+  }
+}
+
 class MatrixTab extends StatefulWidget {
   const MatrixTab({super.key});
   @override
