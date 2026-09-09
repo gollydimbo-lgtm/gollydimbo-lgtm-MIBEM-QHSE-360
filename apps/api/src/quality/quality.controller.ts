@@ -1,12 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { QualityService } from './quality.service';
 @Controller('quality')
 export class QualityController {
   constructor(private readonly service:QualityService){}
   @Get('catalogs') catalogs(){return this.service.listCatalogs();}
-  @Get('templates') listTemplates(){return this.service.listTemplates();}
+  @Get('types') listTypes(@Query('domain')domain?:string){return this.service.listTypes(domain);}
+  @Post('types') createType(@Body() body:any){return this.service.createType(body);}
+  @Patch('types/:id') updateType(@Param('id')id:string,@Body()body:any){return this.service.updateType(id,body);}
+  @Delete('types/:id') deleteType(@Param('id')id:string){return this.service.deleteType(id);}
+  @Get('templates') listTemplates(@Query('domain')domain?:string){return this.service.listTemplates(domain);}
   @Post('templates') createTemplate(@Body() body:any){return this.service.createTemplate(body);}
-  @Get('controls') listControls(){return this.service.listControls();}
+  @Get('controls') listControls(@Query('domain')domain?:string){return this.service.listControls(domain);}
   @Get('controls/:id') getControl(@Param('id') id:string){return this.service.getControl(id);}
   @Post('controls') createControl(@Body() body:any){return this.service.createControl(body);}
   @Patch('controls/:id') update(@Param('id')id:string,@Body()body:any){return this.service.updateControl(id,body);}
