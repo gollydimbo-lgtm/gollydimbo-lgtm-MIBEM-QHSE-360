@@ -282,6 +282,172 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
 }
 
 // --- Inspections EPI + EPC ---
+// --- Stock / bibliothèque EPI — fusion : les champs riches et la
+// création/suppression du web, plus le regroupement journalier/annuel
+// qui n'existe que côté Flutter. ---
+class EpiLibraryTab extends StatefulWidget {
+  const EpiLibraryTab({super.key});
+  @override
+  State<EpiLibraryTab> createState() => _EpiLibraryTabState();
+}
+
+class _EpiLibraryTabState extends State<EpiLibraryTab> {
+  final api = Api();
+  List stock = [];
+  List categories = [];
+  bool loading = true;
+  String? error;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final d = await api.get('/epi/dashboard');
+      stock = List.from(d['stock'] ?? []);
+      categories = List.from(await api.get('/epi/epi-categories'));
+    } catch (e) {
+      error = 'Impossible de charger le catalogue EPI';
+    }
+    setState(() => loading = false);
+  }
+
+  Future<void> _openForm({Map? record}) async {
+    final code = TextEditingController(text: record?['code'] ?? '');
+    final name = TextEditingController(text: record?['name'] ?? '');
+    final manufacturer = TextEditingController(text: record?['manufacturer'] ?? '');
+    final model = TextEditingController(text: record?['model'] ?? '');
+    final standard = TextEditingController(text: record?['standard'] ?? '');
+    final location = TextEditingController(text: record?['location'] ?? '');
+    final minStock = TextEditingController(text: '${record?['minStock'] ?? 0}');
+    final maxStock = TextEditingController(text: record?['maxStock'] != null ? '${record?['maxStock']}' : '');
+    String frequency = record?['frequency'] ?? 'DAILY';
+    String? categoryId = record?['categoryId'];
+    bool disposable = record?['disposable'] ?? false;
+    bool shared = record?['shared'] ?? false;
+    String? formError;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: Text(record == null ? 'Nouvel EPI' : "Modifier l'EPI"),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: code, enabled: record == null, decoration: const InputDecoration(labelText: 'Code')),
+            TextField(controller: name, decoration: const InputDecoration(labelText: 'Désignation')),
+            DropdownButtonFormField<String>(
+              value: categoryId, isExpanded: true,
+              items: categories.map<DropdownMenuItem<String>>((cat) => DropdownMenuItem(value: cat['id'] as String, child: Text(cat['name']))).toList(),
+              onChanged: (v) => setD(() => categoryId = v),
+              decoration: const InputDecoration(labelText: 'Catégorie'),
+            ),
+            DropdownButtonFormField<String>(
+              value: frequency,
+              items: const [DropdownMenuItem(value: 'DAILY', child: Text('Quotidienne')), DropdownMenuItem(value: 'ANNUAL', child: Text('Annuelle'))],
+              onChanged: (v) => setD(() => frequency = v ?? 'DAILY'),
+              decoration: const InputDecoration(labelText: 'Fréquence de distribution'),
+            ),
+            Row(children: [
+              Expanded(child: TextField(controller: manufacturer, decoration: const InputDecoration(labelText: 'Fabricant'))),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: model, decoration: const InputDecoration(labelText: 'Modèle'))),
+            ]),
+            TextField(controller: standard, decoration: const InputDecoration(labelText: 'Norme applicable')),
+            TextField(controller: location, decoration: const InputDecoration(labelText: 'Emplacement')),
+            Row(children: [
+              Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock minimum'))),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: maxStock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock maximum'))),
+            ]),
+            CheckboxListTile(value: disposable, title: const Text('Jetable'), onChanged: (v) => setD(() => disposable = v ?? false), controlAffinity: ListTileControlAffinity.leading),
+            CheckboxListTile(value: shared, title: const Text('Partagé (non individuel)'), onChanged: (v) => setD(() => shared = v ?? false), controlAffinity: ListTileControlAffinity.leading),
+            if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+          ]),
+        ),
+        actions: [
+          if (record != null) TextButton(
+            onPressed: () async {
+              try { await api.delete('/epi/catalog/${record['id']}'); if (context.mounted) Navigator.pop(c); load(); }
+              catch (e) { setD(() => formError = '$e'); }
+            },
+            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+          ),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(
+            onPressed: () async {
+              final payload = {
+                'name': name.text, 'categoryId': categoryId, 'frequency': frequency,
+                'manufacturer': manufacturer.text, 'model': model.text, 'standard': standard.text, 'location': location.text,
+                'minStock': int.tryParse(minStock.text) ?? 0, 'maxStock': maxStock.text.isEmpty ? null : int.tryParse(maxStock.text),
+                'disposable': disposable, 'shared': shared,
+              };
+              try {
+                if (record != null) await api.patch('/epi/catalog/${record['id']}', payload);
+                else await api.post('/epi/catalog', {'code': code.text, ...payload});
+                if (context.mounted) Navigator.pop(c);
+                load();
+              } catch (e) { setD(() => formError = '$e'); }
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      )),
+    );
+  }
+
+  Widget _epiCard(Map e) {
+    final s = (e['stock'] ?? 0) as num;
+    final minStock = (e['minStock'] ?? 0) as num;
+    final low = s <= minStock;
+    return Card(
+      child: ListTile(
+        leading: Icon(Icons.inventory_2, color: low ? QhseColors.red : QhseColors.green),
+        title: Text('${e['name']}'),
+        subtitle: Text(
+          e['frequency'] == 'DAILY'
+              ? "Stock restant : $s • distribués aujourd'hui : ${e['dailyDistributed'] ?? 0}"
+              : 'Stock restant : $s',
+        ),
+        trailing: low ? const Chip(label: Text('Stock bas'), backgroundColor: Color(0xFFFFCDD2)) : null,
+        onTap: () => _openForm(record: e),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(error!, style: const TextStyle(color: QhseColors.red)),
+        const SizedBox(height: 12),
+        OutlinedButton(onPressed: load, child: const Text('Réessayer')),
+      ]));
+    }
+    final daily = stock.where((e) => e['frequency'] == 'DAILY').toList();
+    final annual = stock.where((e) => e['frequency'] == 'ANNUAL').toList();
+    return RefreshIndicator(
+      onRefresh: load,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvel EPI'))),
+          const SizedBox(height: 8),
+          const Text('EPI journaliers (gants, cache-nez, charlotte…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 6),
+          ...daily.map((e) => _epiCard(e)),
+          if (daily.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucun EPI journalier configuré', style: TextStyle(color: QhseColors.textSecondary))),
+          const SizedBox(height: 16),
+          const Text('EPI annuels (chaussures, tenue, lunettes, casque…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 6),
+          ...annual.map((e) => _epiCard(e)),
+          if (annual.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucun EPI annuel configuré', style: TextStyle(color: QhseColors.textSecondary))),
+        ],
+      ),
+    );
+  }
+}
+
 class InspectionsTab extends StatefulWidget {
   const InspectionsTab({super.key});
   @override
