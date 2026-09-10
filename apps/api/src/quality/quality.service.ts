@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { currentAuditUserId } from '../common/audit-context';
 
 const CONTROL_INCLUDE = {
   template:{include:{points:true}}, productionLine:true, machine:true, productRef:true, productFormat:true, shiftRef:true,
@@ -151,5 +152,78 @@ export class QualityService {
 
   removeControl(id: string) {
     return this.db.qualityControl.delete({ where: { id } });
+  }
+
+  // --- Planification des contrôles récurrents ---
+  listSchedules(domain?:string) {
+    return this.db.controlSchedule.findMany({where:domain?{domain}:undefined,include:{type:true,template:true,assignedTo:true,site:true,productionLine:true},orderBy:{nextDueDate:'asc'}});
+  }
+
+  createSchedule(data:any) {
+    if (!data.code || !data.name || !data.frequency || !data.nextDueDate) throw new BadRequestException('code, name, frequency et nextDueDate sont obligatoires');
+    return this.db.controlSchedule.create({data:{
+      code:data.code, name:data.name, domain:data.domain||'QUALITE', typeId:data.typeId, templateId:data.templateId,
+      frequency:data.frequency, intervalDays:data.intervalDays, assignedToId:data.assignedToId,
+      nextDueDate:new Date(data.nextDueDate), siteId:data.siteId, lineId:data.lineId, active:data.active??true,
+    },include:{type:true,template:true,assignedTo:true}});
+  }
+
+  updateSchedule(id:string,data:any) {
+    return this.db.controlSchedule.update({where:{id},data:{
+      name:data.name, typeId:data.typeId, templateId:data.templateId, frequency:data.frequency, intervalDays:data.intervalDays,
+      assignedToId:data.assignedToId, nextDueDate:data.nextDueDate?new Date(data.nextDueDate):undefined,
+      siteId:data.siteId, lineId:data.lineId, active:data.active,
+    }});
+  }
+
+  deleteSchedule(id:string) { return this.db.controlSchedule.delete({where:{id}}); }
+
+  private advanceDueDate(from:Date, frequency:string, intervalDays?:number|null) {
+    const next = new Date(from);
+    switch(frequency) {
+      case 'DAILY': next.setDate(next.getDate()+1); break;
+      case 'WEEKLY': next.setDate(next.getDate()+7); break;
+      case 'MONTHLY': next.setMonth(next.getMonth()+1); break;
+      case 'QUARTERLY': next.setMonth(next.getMonth()+3); break;
+      case 'BIANNUAL': next.setMonth(next.getMonth()+6); break;
+      case 'ANNUAL': next.setFullYear(next.getFullYear()+1); break;
+      case 'CUSTOM': next.setDate(next.getDate()+(intervalDays||30)); break;
+      default: next.setDate(next.getDate()+30);
+    }
+    return next;
+  }
+
+  // Génère un contrôle concret à partir d'un planning — une action
+  // explicite plutôt qu'une tâche automatique en arrière-plan, pour ne
+  // rien créer de façon inattendue. Avance ensuite la prochaine échéance
+  // selon la fréquence définie.
+  async generateFromSchedule(id:string) {
+    const s = await this.db.controlSchedule.findUnique({where:{id}});
+    if (!s) throw new NotFoundException('Planning introuvable');
+    const userId = currentAuditUserId();
+    return this.db.$transaction(async tx=>{
+      const control = await tx.qualityControl.create({data:{
+        code:`CTRL-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+        domain:s.domain, typeId:s.typeId, templateId:s.templateId, siteId:s.siteId, lineId:s.lineId,
+        status:'IN_PROGRESS', startedAt:new Date(), createdById:userId,
+        notes:`Généré depuis le planning « ${s.name} »`,
+      },include:{template:{include:{points:true}}}});
+      await tx.controlSchedule.update({where:{id},data:{lastGeneratedAt:new Date(),nextDueDate:this.advanceDueDate(s.nextDueDate,s.frequency,s.intervalDays)}});
+      return control;
+    });
+  }
+
+  // Classe chaque planning actif par palier d'échéance — même principe
+  // que les renouvellements EPI, pour rester cohérent dans toute
+  // l'application plutôt qu'une simple liste plate.
+  async scheduleBuckets() {
+    const now = new Date();
+    const in7 = new Date(now); in7.setDate(in7.getDate()+7);
+    const all = await this.db.controlSchedule.findMany({where:{active:true},include:{type:true,template:true,assignedTo:true}});
+    return {
+      overdue: all.filter(s=>s.nextDueDate < now),
+      dueSoon: all.filter(s=>s.nextDueDate >= now && s.nextDueDate <= in7),
+      upcoming: all.filter(s=>s.nextDueDate > in7),
+    };
   }
 }
