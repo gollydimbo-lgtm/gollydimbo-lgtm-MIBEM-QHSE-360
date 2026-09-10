@@ -72,10 +72,13 @@ export class QualityService {
     const point=await this.db.controlPoint.findUnique({where:{id:pointId}});
     if(!control || !point || point.templateId !== control.templateId) throw new BadRequestException('Point de contrôle incompatible');
     if(['COMPLIANT','NON_COMPLIANT','CANCELLED'].includes(control.status)) throw new BadRequestException('Contrôle déjà clôturé');
-    if(point.required && (data.value===undefined || data.value===null || data.value==='')) throw new BadRequestException(`Valeur obligatoire: ${point.label}`);
+    // Un point marqué non applicable n'a pas besoin de valeur, même s'il
+    // est par ailleurs obligatoire — il sera exclu du taux de conformité.
+    if(point.required && !data.notApplicable && (data.value===undefined || data.value===null || data.value==='')) throw new BadRequestException(`Valeur obligatoire: ${point.label}`);
     let compliant=data.compliant;
     if(point.type==='NUMERIC' && typeof data.value==='number') compliant = (point.minValue==null || data.value>=point.minValue) && (point.maxValue==null || data.value<=point.maxValue);
-    return this.db.controlResult.upsert({where:{controlId_pointId:{controlId,pointId}},update:{value:data.value,compliant,comment:data.comment,createdById:data.createdById,photoRequired:!!data.photoRequired},create:{controlId,pointId,value:data.value,compliant,comment:data.comment,createdById:data.createdById,photoRequired:!!data.photoRequired}});
+    const notApplicable = !!data.notApplicable;
+    return this.db.controlResult.upsert({where:{controlId_pointId:{controlId,pointId}},update:{value:data.value,compliant:notApplicable?null:compliant,notApplicable,comment:data.comment,createdById:data.createdById,photoRequired:!!data.photoRequired},create:{controlId,pointId,value:data.value,compliant:notApplicable?null:compliant,notApplicable,comment:data.comment,createdById:data.createdById,photoRequired:!!data.photoRequired}});
   }
 
   async addAttachment(controlId:string, data:any) {
@@ -92,16 +95,41 @@ export class QualityService {
   async updateControl(id:string,data:any) {
     const c=await this.db.qualityControl.findUnique({where:{id}}); if(!c) throw new NotFoundException('Contrôle introuvable');
     if(['COMPLIANT','NON_COMPLIANT','CANCELLED'].includes(c.status)) throw new BadRequestException('Contrôle clôturé');
-    return this.db.qualityControl.update({where:{id},data:{notes:data.notes,latitude:data.latitude,longitude:data.longitude,gpsAccuracy:data.gpsAccuracy,machineId:data.machineId,formatId:data.formatId}});
+    return this.db.qualityControl.update({where:{id},data:{
+      notes:data.notes,latitude:data.latitude,longitude:data.longitude,gpsAccuracy:data.gpsAccuracy,machineId:data.machineId,formatId:data.formatId,
+      lotSize:data.lotSize, sampleSize:data.sampleSize, samplingMethod:data.samplingMethod,
+      acceptanceThreshold:data.acceptanceThreshold, rejectionThreshold:data.rejectionThreshold,
+    }});
   }
 
   async submit(id:string) {
     const c=await this.getControl(id); if(!c) throw new NotFoundException('Contrôle introuvable');
     const required=(c.template?.points||[]).filter((p:any)=>p.required); const done=new Set((c.results||[]).map((r:any)=>r.pointId));
     if(required.some((p:any)=>!done.has(p.id))) throw new BadRequestException('Tous les points obligatoires doivent être renseignés');
-    const failed=(c.results||[]).filter((r:any)=>r.compliant===false);
+    const results = c.results||[];
+    // Les points non applicables sont exclus du dénominateur — un
+    // contrôle avec beaucoup de N/A ne doit jamais paraître mauvais.
+    const evaluated = results.filter((r:any)=>!r.notApplicable);
+    const failed = evaluated.filter((r:any)=>r.compliant===false);
+    const compliantCount = evaluated.filter((r:any)=>r.compliant===true).length;
+    const conformityRate = evaluated.length ? Math.round((compliantCount/evaluated.length)*1000)/10 : null;
+    const criticalFailed = failed.some((r:any)=>r.point?.critical);
+    // Taux de défaut : basé sur la taille d'échantillon si elle a été
+    // renseignée (contrôle produit avec échantillonnage), sinon sur
+    // l'ensemble des points évalués.
+    const defectRate = c.sampleSize ? Math.round((failed.length/c.sampleSize)*1000)/10 : (conformityRate!=null ? Math.round((100-conformityRate)*10)/10 : null);
+    let finalDecision = 'CONFORME';
+    if (failed.length) {
+      if (criticalFailed) finalDecision = 'REFUSE';
+      else if (c.rejectionThreshold!=null && defectRate!=null && defectRate > c.rejectionThreshold) finalDecision = 'REFUSE';
+      else if (c.acceptanceThreshold!=null && defectRate!=null && defectRate <= c.acceptanceThreshold) finalDecision = 'CONFORME_SOUS_RESERVE';
+      else finalDecision = 'NON_CONFORME';
+    }
     return this.db.$transaction(async tx=>{
-      const updated=await tx.qualityControl.update({where:{id},data:{status:failed.length?'NON_COMPLIANT':'COMPLIANT',result:failed.length?'FAIL':'PASS',submittedAt:new Date()}});
+      const updated=await tx.qualityControl.update({where:{id},data:{
+        status:failed.length?'NON_COMPLIANT':'COMPLIANT', result:failed.length?'FAIL':'PASS', submittedAt:new Date(),
+        conformityRate, defectRate, finalDecision,
+      }});
       for(const r of failed){
         const critical = r.point?.critical;
         // Fusion des liens : la non-conformité générée hérite des liens
