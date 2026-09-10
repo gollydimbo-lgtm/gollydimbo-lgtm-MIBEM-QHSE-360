@@ -12,14 +12,12 @@ import { PrismaService } from '../common/prisma.service';
  trainingList(){return this.db.training.findMany({orderBy:{scheduledAt:'desc'}})} trainingCreate(b:any){return this.db.training.create({data:b})} trainingUpdate(id:string,b:any){return this.db.training.update({where:{id},data:b})}
  equipmentList(){return this.db.equipment.findMany({orderBy:{name:'asc'}})} equipmentCreate(b:any){return this.db.equipment.create({data:b})} equipmentUpdate(id:string,b:any){return this.db.equipment.update({where:{id},data:b})} equipmentDelete(id:string){return this.db.equipment.delete({where:{id}})}
  events(){return this.db.safetyEvent.findMany({orderBy:{occurredAt:'desc'}})} eventCreate(b:any){return this.db.safetyEvent.create({data:b})} eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})} eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
- processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,_count:{select:{
+ processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,_count:{select:{
    risks:{where:{status:'ACTIVE'}},
    actions:{where:{status:{not:'CLOSED'}}},
    nonConformities:{where:{status:'OPEN'}},
    audits:true,
    documents:true,
-   trainings:true,
-   objectifsQhse:true,
    qualityControls:true,
  }}},orderBy:{createdAt:'desc'}})}
  processusGet(id:string){return this.db.processus.findUnique({where:{id},include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:{include:{user:true}},responsible:true},orderBy:{order:'asc'}},exigences:{include:{responsable:true}},risks:true,actions:{include:{responsible:true}},nonConformities:true,audits:true,documents:true,trainings:true,objectifsQhse:true,qualityControls:true}})}
