@@ -965,6 +965,11 @@ model Processus {
   inputs Json?
   outputs Json?
   customers Json?
+  // Position sur la cartographie interactive — mémorisée après chaque
+  // déplacement, pour que la carte reste telle que l'utilisateur l'a
+  // organisée d'une session à l'autre.
+  positionX Float?
+  positionY Float?
   // Champs historiques conservés tels quels — aucune donnée existante
   // n'est perdue par cet enrichissement.
   proprietaire String?
@@ -985,6 +990,21 @@ model Processus {
   trainings Training[]
   objectifsQhse ObjectifQhse[]
   qualityControls QualityControl[]
+  linksFrom ProcessusLink[] @relation("ProcessusLinkSource")
+  linksTo ProcessusLink[] @relation("ProcessusLinkTarget")
+}
+
+// Liens dessinés entre processus sur la cartographie interactive — un
+// simple trait avec une légende optionnelle (ex. "alimente", "dépend de").
+model ProcessusLink {
+  id String @id @default(cuid())
+  sourceId String
+  targetId String
+  label String?
+  createdAt DateTime @default(now())
+  source Processus @relation("ProcessusLinkSource", fields:[sourceId], references:[id], onDelete:Cascade)
+  target Processus @relation("ProcessusLinkTarget", fields:[targetId], references:[id], onDelete:Cascade)
+  @@unique([sourceId,targetId])
 }
 
 // Le "P" du SIPOC — chaque étape du processus, avec sa propre matrice
