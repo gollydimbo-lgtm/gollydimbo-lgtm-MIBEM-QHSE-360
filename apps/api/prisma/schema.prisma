@@ -134,6 +134,11 @@ model User {
   epiAssignmentsResponsible EpiAssignment[]
   epcMaintenancesPerformed EpcMaintenance[]
   controlSchedulesAssigned ControlSchedule[]
+  processusAsPilote Processus[] @relation("ProcessusPilote")
+  processusAsSuppleant Processus[] @relation("ProcessusSuppleant")
+  processusActivitiesResponsible ProcessusActivity[] @relation("ProcessusActivityResponsible")
+  processusRacis ProcessusRaci[]
+  processusExigencesResponsable ProcessusExigence[]
 }
 
 model Role {
@@ -243,9 +248,11 @@ model Document {
   status DocumentStatus @default(DRAFT)
   currentVersion Int @default(1)
   createdById String?
+  processusId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   createdBy User? @relation("DocumentCreator", fields:[createdById], references:[id], onDelete:SetNull)
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   versions DocumentVersion[]
   attachments Attachment[]
 }
@@ -525,10 +532,12 @@ model NonConformity {
   qualityControlId String?
   epiId String?
   epcId String?
+  processusId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
   epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   @@index([status,occurredAt])
 }
 
@@ -543,8 +552,10 @@ model Action {
   completedAt DateTime?
   responsibleId String?
   nonConformityId String?
+  processusId String?
   responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
@@ -559,6 +570,7 @@ model Site {
   lines ProductionLine[]
   qualityControls QualityControl[]
   controlSchedules ControlSchedule[]
+  processus Processus[]
   createdAt DateTime @default(now())
 }
 
@@ -656,6 +668,7 @@ model QualityControl {
   riskId String?
   fournisseurId String?
   employeeId String?
+  processusId String?
   // Taux de conformité calculé à la soumission — les points marqués non
   // applicables sont exclus du dénominateur, jamais comptés comme échec.
   conformityRate Float?
@@ -685,6 +698,7 @@ model QualityControl {
   risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
   fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   nonConformities NonConformity[]
   results ControlResult[]
   attachments QualityControlAttachment[]
@@ -830,9 +844,11 @@ model Risk {
   status String @default("ACTIVE")
   measures String?
   reviewedAt DateTime?
+  processusId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   qualityControls QualityControl[]
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
 }
 
 model HaccpRecord {
@@ -859,7 +875,9 @@ model QhseAudit {
   status String @default("PLANNED")
   score Float?
   findings Json?
+  processusId String?
   auditor User? @relation(fields:[auditorId], references:[id], onDelete:SetNull)
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
 }
 
@@ -884,6 +902,8 @@ model Training {
   status String @default("PLANNED")
   participants Json?
   expiryAt DateTime?
+  processusId String?
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
 }
 
 model Equipment {
@@ -922,10 +942,105 @@ model Processus {
   id String @id @default(cuid())
   code String @unique
   nom String
+  // Classification — jamais une liste figée, l'utilisateur reste libre
+  // de qualifier son processus comme il l'entend.
+  type String @default("OPERATIONNEL")
+  domaine String?
+  departement String?
+  siteId String?
+  version String?
+  statut String @default("ACTIF")
+  criticite String?
+  // Pilotage
+  piloteId String?
+  suppleantId String?
+  // Finalité et périmètre
+  finalite String?
+  objectifPrincipal String?
+  perimetreDebut String?
+  perimetreFin String?
+  // SIPOC simple — Suppliers/Inputs/Outputs/Customers en listes ; le "P"
+  // (activités) est une vraie structure, voir ProcessusActivity.
+  suppliers Json?
+  inputs Json?
+  outputs Json?
+  customers Json?
+  // Champs historiques conservés tels quels — aucune donnée existante
+  // n'est perdue par cet enrichissement.
   proprietaire String?
   objectifs String?
   kpi String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  pilote User? @relation("ProcessusPilote", fields:[piloteId], references:[id], onDelete:SetNull)
+  suppleant User? @relation("ProcessusSuppleant", fields:[suppleantId], references:[id], onDelete:SetNull)
+  activities ProcessusActivity[]
+  exigences ProcessusExigence[]
+  risks Risk[]
+  actions Action[]
+  nonConformities NonConformity[]
+  audits QhseAudit[]
+  documents Document[]
+  trainings Training[]
+  objectifsQhse ObjectifQhse[]
+  qualityControls QualityControl[]
+}
+
+// Le "P" du SIPOC — chaque étape du processus, avec sa propre matrice
+// RACI. Ordre libre, ajout illimité, comme demandé.
+model ProcessusActivity {
+  id String @id @default(cuid())
+  processusId String
+  code String?
+  order Int @default(0)
+  name String
+  description String?
+  responsibleId String?
+  inputs String?
+  outputs String?
+  resources String?
+  equipment String?
+  frequency String?
+  criticality String?
+  createdAt DateTime @default(now())
+  processus Processus @relation(fields:[processusId], references:[id], onDelete:Cascade)
+  responsible User? @relation("ProcessusActivityResponsible", fields:[responsibleId], references:[id], onDelete:SetNull)
+  racis ProcessusRaci[]
+}
+
+// Matrice RACI par activité. roleLabel permet de désigner un service ou
+// une fonction sans forcer un compte utilisateur du système.
+model ProcessusRaci {
+  id String @id @default(cuid())
+  activityId String
+  userId String?
+  roleLabel String?
+  raci String
+  activity ProcessusActivity @relation(fields:[activityId], references:[id], onDelete:Cascade)
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+}
+
+// Exigences légales, réglementaires ou normatives rattachées au
+// processus — configurable pour n'importe quel référentiel (ISO 9001,
+// 14001, 45001, 22000, HACCP, exigences client, internes...), jamais
+// limité à une seule norme en dur.
+model ProcessusExigence {
+  id String @id @default(cuid())
+  processusId String
+  exigence String
+  origine String?
+  reference String?
+  applicable Boolean @default(true)
+  preuveConformite String?
+  responsableId String?
+  frequenceVerification String?
+  derniereVerification DateTime?
+  prochaineEcheance DateTime?
+  statutConformite String @default("CONFORME")
+  createdAt DateTime @default(now())
+  processus Processus @relation(fields:[processusId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
 }
 
 model IndicateurQualite {
@@ -998,6 +1113,8 @@ model ObjectifQhse {
   actuel Float @default(0)
   unite String?
   echeance DateTime?
+  processusId String?
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
