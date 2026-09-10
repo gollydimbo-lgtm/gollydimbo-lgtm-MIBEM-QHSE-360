@@ -19,4 +19,10 @@ export class QualityController {
   @Post('controls/:id/signatures') sign(@Param('id')id:string,@Body()body:any){return this.service.sign(id,body);}
   @Post('controls/:id/submit') submit(@Param('id')id:string){return this.service.submit(id);}
   @Delete('controls/:id') remove(@Param('id')id:string){return this.service.removeControl(id);}
+  @Get('schedules') listSchedules(@Query('domain')domain?:string){return this.service.listSchedules(domain);}
+  @Post('schedules') createSchedule(@Body()body:any){return this.service.createSchedule(body);}
+  @Patch('schedules/:id') updateSchedule(@Param('id')id:string,@Body()body:any){return this.service.updateSchedule(id,body);}
+  @Delete('schedules/:id') deleteSchedule(@Param('id')id:string){return this.service.deleteSchedule(id);}
+  @Post('schedules/:id/generate') generateFromSchedule(@Param('id')id:string){return this.service.generateFromSchedule(id);}
+  @Get('schedules-buckets') scheduleBuckets(){return this.service.scheduleBuckets();}
 }
