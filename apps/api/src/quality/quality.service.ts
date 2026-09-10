@@ -4,7 +4,7 @@ import { currentAuditUserId } from '../common/audit-context';
 
 const CONTROL_INCLUDE = {
   template:{include:{points:true}}, productionLine:true, machine:true, productRef:true, productFormat:true, shiftRef:true,
-  type:true, epi:true, epc:true, risk:true, fournisseur:true, employee:true,
+  type:true, epi:true, epc:true, risk:true, fournisseur:true, employee:true, processus:true,
 };
 
 @Injectable()
@@ -60,7 +60,7 @@ export class QualityService {
       lotNumber:data.lotNumber, shift:data.shift, controlDate:data.controlDate?new Date(data.controlDate):new Date(),
       notes:data.notes, latitude:data.latitude, longitude:data.longitude, gpsAccuracy:data.gpsAccuracy,
       startedAt:new Date(), status:'IN_PROGRESS', createdById:data.createdById, templateId:data.templateId,
-      domain, typeId:data.typeId, epiId:data.epiId, epcId:data.epcId, riskId:data.riskId, fournisseurId:data.fournisseurId, employeeId:data.employeeId,
+      domain, typeId:data.typeId, epiId:data.epiId, epcId:data.epcId, riskId:data.riskId, fournisseurId:data.fournisseurId, employeeId:data.employeeId, processusId:data.processusId,
     },include:CONTROL_INCLUDE});
   }
 
@@ -134,17 +134,20 @@ export class QualityService {
       for(const r of failed){
         const critical = r.point?.critical;
         // Fusion des liens : la non-conformité générée hérite des liens
-        // du contrôle qui l'a produite (EPI, EPC...), pour rester
-        // reliée au bon élément quel que soit le domaine du contrôle.
+        // du contrôle qui l'a produite (EPI, EPC, processus...), pour
+        // rester reliée au bon élément quel que soit le domaine du
+        // contrôle. Sans ce report explicite, une non-conformité
+        // générée sur un contrôle rattaché à un processus resterait
+        // invisible depuis la fiche de ce processus.
         const nc=await tx.nonConformity.create({data:{
           code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
           title:`Écart contrôle ${c.code}`,description:r.comment||`Point: ${r.point?.label||r.pointId}`,
           severity:critical?3:1,
           classification: critical ? 'NC_CRITIQUE' : 'NC_MINEURE',
           source:c.domain==='QUALITE'?'QUALITY_CONTROL':c.domain,
-          qualityControlId:id, epiId:c.epiId, epcId:c.epcId,
+          qualityControlId:id, epiId:c.epiId, epcId:c.epcId, processusId:c.processusId,
         }});
-        await tx.action.create({data:{code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,title:`Traiter ${nc.code}`,description:`Analyser et corriger l'écart du contrôle ${c.code}`,priority:critical?1:2,nonConformityId:nc.id}});
+        await tx.action.create({data:{code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,title:`Traiter ${nc.code}`,description:`Analyser et corriger l'écart du contrôle ${c.code}`,priority:critical?1:2,nonConformityId:nc.id,processusId:c.processusId}});
       }
       return updated;
     });
