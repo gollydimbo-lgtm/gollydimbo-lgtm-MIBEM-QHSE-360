@@ -133,6 +133,7 @@ model User {
   epiInspections EpiInspection[]
   epiAssignmentsResponsible EpiAssignment[]
   epcMaintenancesPerformed EpcMaintenance[]
+  controlSchedulesAssigned ControlSchedule[]
 }
 
 model Role {
@@ -557,6 +558,7 @@ model Site {
   active Boolean @default(true)
   lines ProductionLine[]
   qualityControls QualityControl[]
+  controlSchedules ControlSchedule[]
   createdAt DateTime @default(now())
 }
 
@@ -570,6 +572,7 @@ model ProductionLine {
   site Site @relation(fields:[siteId], references:[id], onDelete:Restrict)
   machines Machine[]
   controls QualityControl[]
+  controlSchedules ControlSchedule[]
   @@index([siteId])
 }
 
@@ -706,7 +709,38 @@ model ControlType {
   active Boolean @default(true)
   templates ControlTemplate[]
   controls QualityControl[]
+  schedules ControlSchedule[]
   createdAt DateTime @default(now())
+}
+
+// Planification des contrôles récurrents (section 9 du cahier des
+// charges) : quotidien, hebdomadaire, mensuel, trimestriel, semestriel,
+// annuel ou intervalle personnalisé. La génération du contrôle concret
+// reste une action explicite (bouton "Générer maintenant") plutôt qu'une
+// tâche automatique en arrière-plan — plus sûr, rien ne peut se
+// déclencher tout seul de façon inattendue.
+model ControlSchedule {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  domain String @default("QUALITE")
+  typeId String?
+  templateId String?
+  frequency String
+  intervalDays Int?
+  assignedToId String?
+  nextDueDate DateTime
+  lastGeneratedAt DateTime?
+  active Boolean @default(true)
+  siteId String?
+  lineId String?
+  createdAt DateTime @default(now())
+  type ControlType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
+  template ControlTemplate? @relation(fields:[templateId], references:[id], onDelete:SetNull)
+  assignedTo User? @relation(fields:[assignedToId], references:[id], onDelete:SetNull)
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  productionLine ProductionLine? @relation(fields:[lineId], references:[id], onDelete:SetNull)
+  @@index([nextDueDate,active])
 }
 
 model ControlTemplate {
@@ -719,6 +753,7 @@ model ControlTemplate {
   type ControlType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
   points ControlPoint[]
   controls QualityControl[]
+  schedules ControlSchedule[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
