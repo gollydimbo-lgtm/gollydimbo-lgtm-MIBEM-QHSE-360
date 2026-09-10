@@ -44,6 +44,10 @@ import { PrismaService } from '../common/prisma.service';
  processusExigenceCreate(b:any){return this.db.processusExigence.create({data:b})}
  processusExigenceUpdate(id:string,b:any){return this.db.processusExigence.update({where:{id},data:b})}
  processusExigenceDelete(id:string){return this.db.processusExigence.delete({where:{id}})}
+
+ processusLinkList(){return this.db.processusLink.findMany()}
+ processusLinkCreate(b:any){return this.db.processusLink.create({data:{sourceId:b.sourceId,targetId:b.targetId,label:b.label}})}
+ processusLinkDelete(id:string){return this.db.processusLink.delete({where:{id}})}
  indicateurList(){return this.db.indicateurQualite.findMany({orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible)}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
  reclamationList(){return this.db.reclamation.findMany({orderBy:{date:'desc'}})} reclamationCreate(b:any){return this.db.reclamation.create({data:b})} reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})} reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
  fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
