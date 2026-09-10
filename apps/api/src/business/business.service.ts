@@ -12,7 +12,29 @@ import { PrismaService } from '../common/prisma.service';
  trainingList(){return this.db.training.findMany({orderBy:{scheduledAt:'desc'}})} trainingCreate(b:any){return this.db.training.create({data:b})} trainingUpdate(id:string,b:any){return this.db.training.update({where:{id},data:b})}
  equipmentList(){return this.db.equipment.findMany({orderBy:{name:'asc'}})} equipmentCreate(b:any){return this.db.equipment.create({data:b})} equipmentUpdate(id:string,b:any){return this.db.equipment.update({where:{id},data:b})} equipmentDelete(id:string){return this.db.equipment.delete({where:{id}})}
  events(){return this.db.safetyEvent.findMany({orderBy:{occurredAt:'desc'}})} eventCreate(b:any){return this.db.safetyEvent.create({data:b})} eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})} eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
- processusList(){return this.db.processus.findMany({orderBy:{createdAt:'desc'}})} processusCreate(b:any){return this.db.processus.create({data:b})} processusUpdate(id:string,b:any){return this.db.processus.update({where:{id},data:b})} processusDelete(id:string){return this.db.processus.delete({where:{id}})}
+ processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,_count:{select:{risks:true,actions:true,nonConformities:true,audits:true,documents:true,trainings:true,objectifsQhse:true,qualityControls:true}}},orderBy:{createdAt:'desc'}})}
+ processusGet(id:string){return this.db.processus.findUnique({where:{id},include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:{include:{user:true}},responsible:true},orderBy:{order:'asc'}},exigences:{include:{responsable:true}},risks:true,actions:{include:{responsible:true}},nonConformities:true,audits:true,documents:true,trainings:true,objectifsQhse:true,qualityControls:true}})}
+ processusCreate(b:any){return this.db.processus.create({data:b})}
+ processusUpdate(id:string,b:any){return this.db.processus.update({where:{id},data:b})}
+ processusDelete(id:string){return this.db.processus.delete({where:{id}})}
+
+ processusActivityList(processusId:string){return this.db.processusActivity.findMany({where:{processusId},include:{responsible:true,racis:{include:{user:true}}},orderBy:{order:'asc'}})}
+ processusActivityCreate(b:any){return this.db.processusActivity.create({data:b})}
+ processusActivityUpdate(id:string,b:any){return this.db.processusActivity.update({where:{id},data:b})}
+ processusActivityDelete(id:string){return this.db.processusActivity.delete({where:{id}})}
+
+ processusRaciUpsert(activityId:string,b:any){
+  // Une seule ligne RACI par (activité, utilisateur ou libellé de rôle) —
+  // on remplace plutôt que d'empiler des doublons à chaque saisie.
+  if(b.id) return this.db.processusRaci.update({where:{id:b.id},data:{raci:b.raci,userId:b.userId,roleLabel:b.roleLabel}});
+  return this.db.processusRaci.create({data:{activityId,userId:b.userId,roleLabel:b.roleLabel,raci:b.raci}});
+ }
+ processusRaciDelete(id:string){return this.db.processusRaci.delete({where:{id}})}
+
+ processusExigenceList(processusId:string){return this.db.processusExigence.findMany({where:{processusId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
+ processusExigenceCreate(b:any){return this.db.processusExigence.create({data:b})}
+ processusExigenceUpdate(id:string,b:any){return this.db.processusExigence.update({where:{id},data:b})}
+ processusExigenceDelete(id:string){return this.db.processusExigence.delete({where:{id}})}
  indicateurList(){return this.db.indicateurQualite.findMany({orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible)}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
  reclamationList(){return this.db.reclamation.findMany({orderBy:{date:'desc'}})} reclamationCreate(b:any){return this.db.reclamation.create({data:b})} reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})} reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
  fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
