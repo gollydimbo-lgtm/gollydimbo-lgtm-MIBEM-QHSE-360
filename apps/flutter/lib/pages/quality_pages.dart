@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api.dart';
@@ -24,6 +25,83 @@ const Map<String, String> kFrequencyLabels = {
 const Map<String, String> kDecisionLabels = {
   'CONFORME': 'Conforme', 'CONFORME_SOUS_RESERVE': 'Conforme sous réserve', 'NON_CONFORME': 'Non conforme', 'REFUSE': 'Refusé',
 };
+
+List<MapEntry<String, int>> _groupCount(List items, String Function(dynamic) keyFn) {
+  final counts = <String, int>{};
+  for (final item in items) {
+    final key = keyFn(item);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  final entries = counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+  return entries;
+}
+
+/// Anneau avec légende — même principe que celui du tableau de bord
+/// général, pour rester visuellement cohérent dans toute l'application.
+class _LabeledDonut extends StatelessWidget {
+  final List<MapEntry<String, int>> entries;
+  final List<Color> colors;
+  const _LabeledDonut({required this.entries, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) return Center(child: Text('Aucune donnée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
+    return Row(children: [
+      Expanded(
+        child: PieChart(
+          PieChartData(
+            sectionsSpace: 2,
+            centerSpaceRadius: 34,
+            sections: [
+              for (int i = 0; i < entries.length; i++)
+                PieChartSectionData(
+                  value: entries[i].value.toDouble(),
+                  color: colors[i % colors.length],
+                  radius: 34,
+                  title: '${entries[i].value}',
+                  titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (int i = 0; i < entries.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: colors[i % colors.length], shape: BoxShape.circle)),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(entries[i].key, style: TextStyle(fontSize: 10, color: QhseColors.textSecondary), overflow: TextOverflow.ellipsis)),
+                ]),
+              ),
+          ],
+        ),
+      ),
+    ]);
+  }
+}
+
+/// Un petit panneau avec titre — même habillage que les Panel du web.
+class _DashPanel extends StatelessWidget {
+  final String title;
+  final Widget child;
+  const _DashPanel({required this.title, required this.child});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: QhseColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: QhseColors.border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: TextStyle(color: QhseColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          SizedBox(height: 160, child: child),
+        ]),
+      );
+}
 
 // --- Création / modification d'un type de contrôle ---
 Future<void> showControlTypeDialog(BuildContext context, Api api, {Map? record, required VoidCallback onSaved}) async {
@@ -249,6 +327,27 @@ class _QualityHomeState extends State<QualityHome> {
                       ),
                     const SizedBox(height: 8),
                     KpiBar(kpis),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Column(children: [
+                        _DashPanel(
+                          title: 'Contrôles par domaine',
+                          child: _LabeledDonut(
+                            entries: _groupCount(filtered, (c) => '${c['domain']}'),
+                            colors: const [QhseColors.blue, QhseColors.green, QhseColors.amber, QhseColors.red, Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _DashPanel(
+                          title: 'Contrôles par type',
+                          child: _LabeledDonut(
+                            entries: _groupCount(filtered.where((c) => c['type'] != null).toList(), (c) => c['type']?['name'] ?? 'Sans type'),
+                            colors: const [QhseColors.blue, QhseColors.green, QhseColors.amber, QhseColors.red, Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                          ),
+                        ),
+                      ]),
+                    ),
                   ]),
                 ),
                 // Registre
