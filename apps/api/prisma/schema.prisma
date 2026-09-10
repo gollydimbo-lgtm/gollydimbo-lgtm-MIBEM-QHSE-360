@@ -653,6 +653,21 @@ model QualityControl {
   riskId String?
   fournisseurId String?
   employeeId String?
+  // Taux de conformité calculé à la soumission — les points marqués non
+  // applicables sont exclus du dénominateur, jamais comptés comme échec.
+  conformityRate Float?
+  // Décision finale — plus riche que le simple statut technique
+  // COMPLIANT/NON_COMPLIANT : Conforme, Conforme sous réserve, Refusé,
+  // Bloqué, Libéré, À recontrôler... configurable, jamais figée en dur.
+  finalDecision String?
+  // Échantillonnage (contrôles produit) — tout optionnel, sans incidence
+  // sur les contrôles qui n'en ont pas besoin.
+  lotSize Int?
+  sampleSize Int?
+  samplingMethod String?
+  defectRate Float?
+  acceptanceThreshold Float?
+  rejectionThreshold Float?
   site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
   productionLine ProductionLine? @relation(fields:[lineId], references:[id], onDelete:SetNull)
   machine Machine? @relation(fields:[machineId], references:[id], onDelete:SetNull)
@@ -733,6 +748,10 @@ model ControlResult {
   pointId String
   value Json?
   compliant Boolean?
+  // Un point marqué non applicable ne compte ni comme conforme ni comme
+  // non conforme — il doit être exclu du dénominateur du taux de
+  // conformité, jamais traité comme un échec silencieux.
+  notApplicable Boolean @default(false)
   comment String?
   photoRequired Boolean @default(false)
   createdById String?
