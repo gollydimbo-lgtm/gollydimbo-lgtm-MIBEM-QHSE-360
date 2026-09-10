@@ -23,6 +23,7 @@ import 'pages/safety_events_page.dart';
 import 'pages/risks_page.dart';
 import 'pages/audits_page.dart';
 import 'pages/non_conformities_page.dart';
+import 'pages/quality_pages.dart';
 import 'pages/actions_page.dart';
 import 'pages/safety_talk_page.dart';
 import 'theme.dart';
@@ -315,62 +316,4 @@ class ComingSoonPage extends StatelessWidget {
         ),
       );
 }
-
-class QualityHome extends StatefulWidget{const QualityHome({super.key});@override State<QualityHome> createState()=>_QualityHomeState();}
-class _QualityHomeState extends State<QualityHome>{final api=Api();List controls=[];bool loading=true;@override void initState(){super.initState();load();}Future<void>load()async{try{final x=await api.get('/quality/controls');controls=List.from(x); }catch(e){}setState(()=>loading=false);}
-List<KpiStat> get kpis{final soumis=controls.where((c)=>c['status']!='DRAFT'&&c['status']!='IN_PROGRESS').toList();final conformes=controls.where((c)=>c['status']=='COMPLIANT').length;final nonConformes=controls.where((c)=>c['status']=='NON_COMPLIANT').length;final taux=soumis.isEmpty?null:(conformes/soumis.length*100).round();
-return[KpiStat('Contrôles enregistrés','${controls.length}',color:QhseColors.blue,icon:Icons.fact_check_outlined),KpiStat('Conformes','$conformes',color:QhseColors.green,icon:Icons.check_circle_outline),KpiStat('Non conformes','$nonConformes',color:QhseColors.red,icon:Icons.error_outline),KpiStat('Taux de conformité',taux==null?'—':'$taux%',color:QhseColors.amber,icon:Icons.insights_outlined)];}
-@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Contrôle Qualité')),floatingActionButton:FloatingActionButton.extended(onPressed:()=>Navigator.push(c,MaterialPageRoute(builder:(_)=>const NewControlPage())).then((_)=>load()),icon:const Icon(Icons.add),label:const Text('Nouveau contrôle')),body:loading?const Center(child:CircularProgressIndicator()):RefreshIndicator(onRefresh:load,child:ListView(padding:const EdgeInsets.only(top:12,bottom:12),children:[KpiBar(kpis),const SizedBox(height:8),...controls.map((x)=>Padding(padding:const EdgeInsets.symmetric(horizontal:12),child:Card(child:ListTile(title:Text('${x['code']} — ${x['status']}'),subtitle:Text('${x['lotNumber']??''} • ${x['controlDate']??''}'),onTap:()=>Navigator.push(c,MaterialPageRoute(builder:(_)=>ControlPage(controlId:x['id']))).then((_)=>load()))))) ])));}
-
-class NewControlPage extends StatefulWidget{const NewControlPage({super.key});@override State<NewControlPage> createState()=>_NewControlPageState();}
-class _NewControlPageState extends State<NewControlPage>{final api=Api();final code=TextEditingController(text:'CTRL-${DateTime.now().millisecondsSinceEpoch}'),lot=TextEditingController();List sites=[],products=[],shifts=[],templates=[];String? siteId,lineId,machineId,productId,formatId,shiftId,templateId;List lines=[],machines=[],formats=[];double? lat,lon;bool busy=false;
-Future<void> init()async{try{final r=await api.get('/quality/catalogs');sites=List.from(r[0]);products=List.from(r[1]);shifts=List.from(r[2]);templates=List.from(r[3]);setState((){});}catch(e){_msg('$e');}}
-@override void initState(){super.initState();init();}
-Future<void>gps()async{if(!await Geolocator.isLocationServiceEnabled()){_msg('GPS désactivé');return;}var p=await Geolocator.checkPermission();if(p==LocationPermission.denied)p=await Geolocator.requestPermission();if(p==LocationPermission.denied||p==LocationPermission.deniedForever){_msg('Permission GPS refusée');return;}final x=await Geolocator.getCurrentPosition();setState((){lat=x.latitude;lon=x.longitude;});}
-Future<void>create()async{if(lineId==null||productId==null||shiftId==null||lot.text.isEmpty||templateId==null){_msg('Ligne, produit, quart, lot et modèle sont obligatoires');return;}setState(()=>busy=true);try{final x=await api.post('/quality/controls',{'code':code.text,'siteId':siteId,'lineId':lineId,'machineId':machineId,'productId':productId,'formatId':formatId,'shiftId':shiftId,'lotNumber':lot.text,'templateId':templateId,'latitude':lat,'longitude':lon});if(mounted)Navigator.pushReplacement(context,MaterialPageRoute(builder:(_)=>ControlPage(controlId:x['id'])));}catch(e){_msg('$e');}setState(()=>busy=false);}
-void _msg(String s)=>ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(s)));
-@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Nouveau contrôle')),body:ListView(padding:const EdgeInsets.all(16),children:[TextField(controller:code,decoration:const InputDecoration(labelText:'Code contrôle')),TextField(controller:lot,decoration:const InputDecoration(labelText:'Numéro de lot')),const SizedBox(height:10),_drop('Site',siteId,sites.map((x)=>DropdownMenuItem<String>(value:x['id'] as String,child:Text(x['name']))).toList(),(v){siteId=v;final s=sites.firstWhere((x)=>x['id']==v);setState((){lines=List.from(s['lines']??[]);lineId=null;machineId=null;});}),_drop('Ligne',lineId,lines.map((x)=>DropdownMenuItem<String>(value:x['id'] as String,child:Text(x['name']))).toList(),(v){lineId=v;final l=lines.firstWhere((x)=>x['id']==v);setState(()=>machines=List.from(l['machines']??[]));}),_drop('Machine',machineId,machines.map((x)=>DropdownMenuItem<String>(value:x['id'] as String,child:Text(x['name']))).toList(),(v)=>setState(()=>machineId=v)),_drop('Produit',productId,products.map((x)=>DropdownMenuItem<String>(value:x['id'] as String,child:Text(x['name']))).toList(),(v){productId=v;final p=products.firstWhere((x)=>x['id']==v);setState(()=>formats=List.from(p['formats']??[]));}),_drop('Format',formatId,formats.map((x)=>DropdownMenuItem<String>(value:x['id'] as String,child:Text(x['label']))).toList(),(v)=>setState(()=>formatId=v)),_drop('Quart',shiftId,shifts.map((x)=>DropdownMenuItem<String>(value:x['id'] as String,child:Text(x['name']))).toList(),(v)=>setState(()=>shiftId=v)),_drop('Modèle de contrôle',templateId,templates.map((x)=>DropdownMenuItem<String>(value:x['id'] as String,child:Text(x['name']))).toList(),(v)=>setState(()=>templateId=v)),const SizedBox(height:12),OutlinedButton.icon(onPressed:gps,icon:const Icon(Icons.gps_fixed),label:Text(lat==null?'Capturer GPS':'GPS ${lat!.toStringAsFixed(5)}, ${lon!.toStringAsFixed(5)}')),const SizedBox(height:18),FilledButton.icon(onPressed:busy?null:create,icon:const Icon(Icons.play_arrow),label:Text(busy?'Création...':'Démarrer le contrôle'))]));
-Widget _drop(String label,String? value,List<DropdownMenuItem<String>> items,ValueChanged<String?> onChanged)=>DropdownButtonFormField<String>(value:value,decoration:InputDecoration(labelText:label),items:items,onChanged:onChanged);
-}
-
-class ControlPage extends StatefulWidget{final String controlId;const ControlPage({super.key,required this.controlId});@override State<ControlPage> createState()=>_ControlPageState();}
-class _ControlPageState extends State<ControlPage>{final api=Api();Map<String,dynamic>? c;Map<String,dynamic> vals={};Map<String,TextEditingController> textCtrls={};bool loading=true;bool submitting=false;
-@override void initState(){super.initState();load();}
-Future<void>load()async{try{c=Map<String,dynamic>.from(await api.get('/quality/controls/${widget.controlId}'));for(final r in List.from(c?['results']??[])){vals[r['pointId']]=r['value'];}}catch(e){}setState(()=>loading=false);}
-Future<void>result(dynamic p,dynamic value)async{try{await api.post('/quality/controls/${widget.controlId}/results',{'pointId':p['id'],'value':value});vals[p['id']]=value;setState((){});}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
-Future<void>photo()async{String? name;Uint8List? bytes;String mime='image/jpeg';if(kIsWeb||defaultTargetPlatform==TargetPlatform.windows){final r=await FilePicker.platform.pickFiles(type:FileType.image,withData:true);if(r==null||r.files.single.bytes==null)return;name=r.files.single.name;bytes=r.files.single.bytes;}else{final x=await ImagePicker().pickImage(source:ImageSource.camera,imageQuality:75);if(x==null)return;name=x.name;bytes=await x.readAsBytes();}try{final a=await api.post('/attachments/base64',{'fileName':name,'mimeType':mime,'base64':base64Encode(bytes!)});await api.post('/quality/controls/${widget.controlId}/attachments',{'attachmentId':a['id']});if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Photo ajoutée au contrôle')));}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
-bool get closed=>['COMPLIANT','NON_COMPLIANT','CANCELLED'].contains(c?['status']);
-List get missingRequired{final pts=List.from(c?['template']?['points']??[]);return pts.where((p)=>p['required']==true&&vals[p['id']]==null).toList();}
-Future<void>submit()async{setState(()=>submitting=true);try{await api.post('/quality/controls/${widget.controlId}/submit',{});await load();}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}setState(()=>submitting=false);}
-Future<void>sign()async{final controller=TextEditingController();final s=await showDialog<String>(context:context,builder:(_)=>AlertDialog(title:const Text('Signature numérique'),content:TextField(controller:controller,decoration:const InputDecoration(labelText:'Nom / signature')),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Annuler')),FilledButton(onPressed:()=>Navigator.pop(context,controller.text),child:const Text('Signer'))]));if(s!=null&&s.isNotEmpty){await api.post('/quality/controls/${widget.controlId}/signatures',{'type':'CONTROLLER','signatureData':s});}}
-Future<void>delete()async{final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Confirmer la suppression'),content:Text('Supprimer définitivement le contrôle ${c?['code']} ? Cette action est irréversible.'),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Annuler')),TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Supprimer',style: TextStyle(color: QhseColors.red)))]));if(ok!=true)return;try{await api.delete('/quality/controls/${widget.controlId}');if(mounted)Navigator.pop(context);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
-Widget _pointInput(Map p){final id=p['id'];final closed_=closed;
-switch(p['type']){
-case 'NUMERIC':
-textCtrls[id]??=TextEditingController(text:vals[id]?.toString()??'');
-return TextField(controller:textCtrls[id],enabled:!closed_,keyboardType:TextInputType.number,decoration: InputDecoration(labelText:p['unit']??'Valeur'),onSubmitted:(v)=>result(p,num.tryParse(v)));
-case 'CHOICE':
-final choices=List<String>.from(p['choices']??[]);
-return DropdownButtonFormField<String>(value:vals[id] as String?,items:choices.map((ch)=>DropdownMenuItem(value:ch,child:Text(ch))).toList(),onChanged:closed_?null:(v){if(v!=null)result(p,v);},decoration:const InputDecoration(labelText:'Choix'));
-case 'TEXT':case 'PHOTO':
-textCtrls[id]??=TextEditingController(text:vals[id]?.toString()??'');
-return TextField(controller:textCtrls[id],enabled:!closed_,decoration:const InputDecoration(labelText:'Réponse'),onSubmitted:(v)=>result(p,v));
-default:
-return Switch(value:vals[id]==true,onChanged:closed_?null:(v){result(p,v);});
-}}
-@override Widget build(BuildContext context){if(loading)return const Scaffold(body:Center(child:CircularProgressIndicator()));final pts=List.from(c?['template']?['points']??[]);final missing=missingRequired;
-return Scaffold(appBar:AppBar(title:Text('${c?['code']}'),actions:[IconButton(icon:const Icon(Icons.delete_outline),tooltip:'Supprimer',onPressed:delete)]),body:ListView(padding:const EdgeInsets.all(12),children:[
-Card(child:ListTile(title:Text('${c?['productRef']?['name']??''} • lot ${c?['lotNumber']??''}'),subtitle:Text('${c?['productionLine']?['name']??''} • ${c?['shiftRef']?['name']??''} • ${c?['status']}'))),
-...pts.map((p)=>Card(child:Padding(padding:const EdgeInsets.all(8),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-Text('${p['label']}${p['required']==true?' *':''}${p['critical']==true?'  ⚠ critique':''}',style:const TextStyle(fontWeight:FontWeight.w600)),
-const SizedBox(height:6),_pointInput(p),
-])))),
-const SizedBox(height:8),
-if(!closed)OutlinedButton.icon(onPressed:photo,icon:const Icon(Icons.camera_alt),label:const Text('Ajouter une photo')),
-if(!closed)OutlinedButton.icon(onPressed:sign,icon:const Icon(Icons.draw),label:const Text('Signer')),
-if(!closed&&missing.isNotEmpty)Padding(padding:const EdgeInsets.symmetric(vertical:8),child:Text('${missing.length} point(s) obligatoire(s) restant(s) avant de pouvoir soumettre.',style:const TextStyle(color:QhseColors.amber,fontSize:12))),
-if(!closed)FilledButton.icon(onPressed:(submitting||missing.isNotEmpty)?null:submit,icon:const Icon(Icons.check_circle),label:Text(submitting?'Soumission...':'Soumettre et générer les NC')),
-if(closed)Padding(padding:EdgeInsets.symmetric(vertical:12),child:Text('Ce contrôle est clôturé — plus aucune modification possible.',style:TextStyle(color:QhseColors.textSecondary))),
-]));}}
-
 
