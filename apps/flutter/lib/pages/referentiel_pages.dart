@@ -224,52 +224,8 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
 // --- Les 6 modules restants, chacun défini en quelques lignes grâce au composant générique ci-dessus ---
 // (Processus dispose désormais de son propre module dédié — voir processus_pages.dart)
 // (Indicateurs qualité dispose désormais de son propre module dédié — voir indicateurs_pages.dart)
-
-class ReclamationsPage extends StatelessWidget {
-  const ReclamationsPage({super.key});
-  @override
-  Widget build(BuildContext context) => SimpleCrudPage(
-        title: 'Réclamations clients', endpoint: '/business/reclamations', codePrefix: 'REC',
-        fields: const [
-          FieldSpec('client', 'Client', required: true),
-          FieldSpec('motif', 'Motif', required: true),
-          FieldSpec('description', 'Description', type: 'multiline'),
-          FieldSpec('date', 'Date', type: 'date'),
-          FieldSpec('gravite', 'Gravité', type: 'select', options: ['Faible', 'Modérée', 'Élevée'], defaultValue: 'Faible'),
-          FieldSpec('statut', 'Statut', type: 'select', options: ['OPEN', 'CLOSED'], defaultValue: 'OPEN'),
-        ],
-        titleOf: (i) => i['client'] ?? '—', subtitleOf: (i) => i['motif'] ?? '',
-        chipLabel: (i) => i['statut'] == 'CLOSED' ? 'Clôturée' : 'Ouverte',
-        chipColor: (i) => i['statut'] == 'CLOSED' ? QhseColors.green : QhseColors.amber,
-        kpiBuilder: (items) => [
-          KpiStat('Réclamations', '${items.length}', color: QhseColors.amber, icon: Icons.notifications_outlined),
-          KpiStat('En cours', '${items.where((i) => i['statut'] != 'CLOSED').length}', color: QhseColors.blue, icon: Icons.hourglass_empty),
-          KpiStat('Gravité élevée', '${items.where((i) => i['gravite'] == 'Élevée').length}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
-        ],
-      );
-}
-
-class FournisseursPage extends StatelessWidget {
-  const FournisseursPage({super.key});
-  @override
-  Widget build(BuildContext context) => SimpleCrudPage(
-        title: 'Fournisseurs', endpoint: '/business/fournisseurs', codePrefix: 'FOUR',
-        fields: const [
-          FieldSpec('nom', 'Nom', required: true),
-          FieldSpec('categorie', 'Catégorie'),
-          FieldSpec('scoreQualite', 'Score qualité (0-100)', type: 'number'),
-          FieldSpec('derniereEvaluation', 'Dernière évaluation', type: 'date'),
-          FieldSpec('statut', 'Statut', type: 'select', options: ['HOMOLOGUE', 'SOUS_SURVEILLANCE', 'PLAN_ACTION_REQUIS'], defaultValue: 'HOMOLOGUE'),
-        ],
-        titleOf: (i) => i['nom'] ?? '—', subtitleOf: (i) => i['categorie'] ?? '',
-        chipLabel: (i) => i['statut'] == 'HOMOLOGUE' ? 'Conforme' : i['statut'] == 'SOUS_SURVEILLANCE' ? 'Surveillance' : 'Non conforme',
-        chipColor: (i) => i['statut'] == 'HOMOLOGUE' ? QhseColors.green : i['statut'] == 'SOUS_SURVEILLANCE' ? QhseColors.amber : QhseColors.red,
-        kpiBuilder: (items) => [
-          KpiStat('Fournisseurs évalués', '${items.length}', color: QhseColors.blue, icon: Icons.local_shipping_outlined),
-          KpiStat('Sous surveillance', '${items.where((i) => i['statut'] != 'HOMOLOGUE').length}', color: QhseColors.amber, icon: Icons.warning_amber_outlined),
-        ],
-      );
-}
+// (Réclamations clients dispose désormais de son propre module dédié — voir reclamations_pages.dart)
+// (Fournisseurs dispose désormais de son propre module dédié — voir fournisseurs_pages.dart)
 
 class VisitesMedicalesPage extends StatelessWidget {
   const VisitesMedicalesPage({super.key});
