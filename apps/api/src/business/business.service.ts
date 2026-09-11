@@ -156,6 +156,57 @@ import { PrismaService } from '../common/prisma.service';
  reclamationCreate(b:any){return this.db.reclamation.create({data:b})}
  reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})}
  reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
+
+ // Tableau de bord Phase 2 — tout calculé à la demande depuis les
+ // réclamations déjà enregistrées, rien de nouveau à saisir.
+ async reclamationsStats(){
+  const list=await this.db.reclamation.findMany({include:{processus:true}});
+  const now=new Date();
+  const closed=list.filter(r=>r.statut==='CLOSED');
+  const open=list.filter(r=>r.statut==='OPEN');
+  const critiques=list.filter(r=>['Majeure','Critique','Élevée'].includes(r.gravite));
+  const enRetard=open.filter(r=>r.delaiCibleJours&&(now.getTime()-new Date(r.date).getTime())/86400000>r.delaiCibleJours);
+  const avgDays=(items:any[],fromField:string,toField:string)=>{
+   const diffs=items.filter(r=>(r as any)[fromField]&&(r as any)[toField]).map(r=>(new Date((r as any)[toField]).getTime()-new Date((r as any)[fromField]).getTime())/86400000);
+   return diffs.length?Math.round((diffs.reduce((s,d)=>s+d,0)/diffs.length)*10)/10:null;
+  };
+  const closedInDelay=closed.filter(r=>r.delaiCibleJours&&r.dateCloture&&(new Date(r.dateCloture).getTime()-new Date(r.date).getTime())/86400000<=r.delaiCibleJours).length;
+  const groupCount=(items:any[],keyFn:(x:any)=>string)=>{
+   const m=new Map<string,number>();
+   for(const it of items){const k=keyFn(it)||'Non renseigné';m.set(k,(m.get(k)||0)+1);}
+   return [...m.entries()].map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);
+  };
+  const parCause=groupCount(list,(r)=>r.categorieProbleme);
+  const totalCauses=parCause.reduce((s,c)=>s+c.value,0);
+  let cumul=0;
+  const pareto=parCause.map(c=>{cumul+=c.value;return {...c,pct:totalCauses?Math.round((c.value/totalCauses)*1000)/10:0,cumulPct:totalCauses?Math.round((cumul/totalCauses)*1000)/10:0};});
+  // Récurrence détectée automatiquement — même client et même nature de
+  // problème apparus plus d'une fois, indépendamment de la case à
+  // cocher manuelle.
+  const recurrenceKey=(r:any)=>r.categorieProbleme?`${r.client}__${r.categorieProbleme}`:null;
+  const recurrenceMap=new Map<string,any[]>();
+  for(const r of list){const k=recurrenceKey(r);if(!k)continue;if(!recurrenceMap.has(k))recurrenceMap.set(k,[]);recurrenceMap.get(k)!.push(r);}
+  const recurrencesDetectees=[...recurrenceMap.entries()].filter(([,items])=>items.length>1).map(([key,items])=>{
+   const [client,cause]=key.split('__');
+   return {client,cause,nombre:items.length,derniereOccurrence:items.map(i=>i.date).sort().reverse()[0]};
+  }).sort((a,b)=>b.nombre-a.nombre);
+  return {
+   volume:{total:list.length,ouvertes:open.length,cloturees:closed.length,critiques:critiques.length,recurrentesManuelles:list.filter(r=>r.recurrente).length,recurrencesDetectees:recurrencesDetectees.length,enRetard:enRetard.length},
+   performance:{
+    tauxCloture:list.length?Math.round((closed.length/list.length)*1000)/10:null,
+    tauxClotureDelai:closed.length?Math.round((closedInDelay/closed.length)*1000)/10:null,
+    delaiMoyenAccuseReception:avgDays(list,'date','dateAccuseReception'),
+    delaiMoyenPremiereReponse:avgDays(list,'date','datePremiereReponse'),
+    delaiMoyenResolution:avgDays(list,'date','dateResolutionReelle'),
+    delaiMoyenCloture:avgDays(list,'date','dateCloture'),
+   },
+   pareto,
+   parClient:groupCount(list,(r)=>r.client).slice(0,10),
+   parProduit:groupCount(list.filter(r=>r.produitService),(r)=>r.produitService).slice(0,10),
+   parProcessus:groupCount(list.filter(r=>r.processus),(r)=>r.processus.nom).slice(0,10),
+   recurrencesDetectees,
+  };
+ }
  fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
