@@ -7,17 +7,39 @@ import { PrismaService } from '../common/prisma.service';
  actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true},orderBy:{dueDate:'asc'}})} actionCreate(b:any){return this.db.action.create({data:b})} actionUpdate(id:string,b:any){return this.db.action.update({where:{id},data:b})} actionDelete(id:string){return this.db.action.delete({where:{id}})}
  riskList(){return this.db.risk.findMany({orderBy:{score:'desc'}})} riskCreate(b:any){return this.db.risk.create({data:{...b,score:Number(b.severity)*Number(b.probability)*Number(b.control||1)}})} riskUpdate(id:string,b:any){const score=b.severity&&b.probability?Number(b.severity)*Number(b.probability)*Number(b.control||1):undefined;return this.db.risk.update({where:{id},data:{...b,...(score?{score}:{})}})} riskDelete(id:string){return this.db.risk.delete({where:{id}})}
  haccpList(){return this.db.haccpRecord.findMany({orderBy:{recordDate:'desc'}})} haccpCreate(b:any){return this.db.haccpRecord.create({data:b})} haccpUpdate(id:string,b:any){return this.db.haccpRecord.update({where:{id},data:b})} haccpDelete(id:string){return this.db.haccpRecord.delete({where:{id}})}
- auditList(){return this.db.qhseAudit.findMany({orderBy:{auditDate:'desc'}})} auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})}
+ auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,processus:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})} auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
+
+ auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{auditId,description:b.description,classification:b.classification,critical:!!b.critical}})}
+ auditFindingUpdate(id:string,b:any){return this.db.auditFinding.update({where:{id},data:{description:b.description,classification:b.classification,critical:b.critical,status:b.status}})}
+ auditFindingDelete(id:string){return this.db.auditFinding.delete({where:{id}})}
+ // Génère une non-conformité (et son action corrective) à partir d'un
+ // constat d'audit — même principe que l'échec d'un point de contrôle
+ // critique dans le moteur de contrôle universel. Le constat hérite du
+ // lien processus de l'audit qui l'a produit.
+ async auditFindingGenerateNc(id:string){
+  const finding=await this.db.auditFinding.findUnique({where:{id},include:{audit:true}});
+  if(!finding) throw new Error('Constat introuvable');
+  if(finding.nonConformityId) throw new Error('Une non-conformité a déjà été générée pour ce constat');
+  return this.db.$transaction(async(tx)=>{
+   const nc=await tx.nonConformity.create({data:{
+    code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+    title:`Constat d'audit — ${finding.audit.title}`,description:finding.description,
+    severity:finding.critical?3:1,
+    classification:finding.classification||(finding.critical?'NC_CRITIQUE':'NC_MINEURE'),
+    source:'AUDIT', processusId:finding.audit.processusId,
+   }});
+   await tx.action.create({data:{code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,title:`Traiter ${nc.code}`,description:`Analyser et corriger le constat de l'audit ${finding.audit.title}`,priority:finding.critical?1:2,nonConformityId:nc.id,processusId:finding.audit.processusId}});
+   return tx.auditFinding.update({where:{id},data:{nonConformityId:nc.id,status:'CLOSED'},include:{nonConformity:true}});
+  });
+ }
  envList(){return this.db.environmentRecord.findMany({orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
  trainingList(){return this.db.training.findMany({include:{processus:true},orderBy:{scheduledAt:'desc'}})} trainingCreate(b:any){return this.db.training.create({data:b})} trainingUpdate(id:string,b:any){return this.db.training.update({where:{id},data:b})} trainingDelete(id:string){return this.db.training.delete({where:{id}})}
  equipmentList(){return this.db.equipment.findMany({orderBy:{name:'asc'}})} equipmentCreate(b:any){return this.db.equipment.create({data:b})} equipmentUpdate(id:string,b:any){return this.db.equipment.update({where:{id},data:b})} equipmentDelete(id:string){return this.db.equipment.delete({where:{id}})}
  events(){return this.db.safetyEvent.findMany({orderBy:{occurredAt:'desc'}})} eventCreate(b:any){return this.db.safetyEvent.create({data:b})} eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})} eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
- processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,_count:{select:{
+ processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
    risks:{where:{status:'ACTIVE'}},
    actions:{where:{status:{not:'CLOSED'}}},
    nonConformities:{where:{status:'OPEN'}},
-   audits:true,
-   documents:true,
    qualityControls:true,
  }}},orderBy:{createdAt:'desc'}})}
  processusGet(id:string){return this.db.processus.findUnique({where:{id},include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:{include:{user:true}},responsible:true},orderBy:{order:'asc'}},exigences:{include:{responsable:true}},risks:true,actions:{include:{responsible:true}},nonConformities:true,audits:true,documents:true,trainings:true,objectifsQhse:true,qualityControls:true}})}
