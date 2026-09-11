@@ -223,35 +223,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
 
 // --- Les 6 modules restants, chacun défini en quelques lignes grâce au composant générique ci-dessus ---
 // (Processus dispose désormais de son propre module dédié — voir processus_pages.dart)
-
-class IndicateursQualitePage extends StatelessWidget {
-  const IndicateursQualitePage({super.key});
-  @override
-  Widget build(BuildContext context) => SimpleCrudPage(
-        title: 'Processus & indicateurs — Indicateurs', endpoint: '/business/indicateurs-qualite', codePrefix: 'IND',
-        fields: const [
-          FieldSpec('indicateur', 'Indicateur', required: true),
-          FieldSpec('actuel', 'Valeur actuelle', type: 'number', required: true),
-          FieldSpec('cible', 'Cible', type: 'number', required: true),
-          FieldSpec('unite', 'Unité (%, ...)'),
-          FieldSpec('sensInverse', 'Sens inverse (atteint si actuel ≤ cible)', type: 'checkbox'),
-        ],
-        titleOf: (i) => i['indicateur'] ?? '—',
-        subtitleOf: (i) => '${i['actuel']}${i['unite'] ?? ''} / ${i['cible']}${i['unite'] ?? ''}',
-        kpiBuilder: (items) {
-          final dansLaCible = items.where((i) {
-            final actuel = (i['actuel'] as num?) ?? 0;
-            final cible = (i['cible'] as num?) ?? 0;
-            return i['sensInverse'] == true ? actuel <= cible : actuel >= cible;
-          }).length;
-          return [
-            KpiStat('Indicateurs suivis', '${items.length}', color: QhseColors.blue, icon: Icons.insights_outlined),
-            KpiStat('Dans la cible', '$dansLaCible', color: QhseColors.green, icon: Icons.check_circle_outline),
-            KpiStat('Hors cible', '${items.length - dansLaCible}', color: QhseColors.red, icon: Icons.error_outline),
-          ];
-        },
-      );
-}
+// (Indicateurs qualité dispose désormais de son propre module dédié — voir indicateurs_pages.dart)
 
 class ReclamationsPage extends StatelessWidget {
   const ReclamationsPage({super.key});
