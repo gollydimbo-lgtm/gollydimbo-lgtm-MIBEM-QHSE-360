@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../theme.dart';
 
@@ -162,9 +165,220 @@ Future<void> showProcessusDialog(BuildContext context, Api api, {Map? record, re
 }
 
 // --- Détail (lecture) d'un processus ---
-class ProcessusDetailPage extends StatelessWidget {
+String _csvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
+
+class ProcessusDetailPage extends StatefulWidget {
   final Map p;
   const ProcessusDetailPage({super.key, required this.p});
+  @override
+  State<ProcessusDetailPage> createState() => _ProcessusDetailPageState();
+}
+
+class _ProcessusDetailPageState extends State<ProcessusDetailPage> {
+  final api = Api();
+  late Map p;
+  List activities = [];
+  List exigences = [];
+  bool loadingSub = true;
+  bool exporting = false;
+
+  @override
+  void initState() { super.initState(); p = widget.p; loadSub(); }
+
+  Future<void> loadSub() async {
+    setState(() => loadingSub = true);
+    try {
+      activities = List.from(await api.get('/business/processus/${p['id']}/activities'));
+      exigences = List.from(await api.get('/business/processus/${p['id']}/exigences'));
+    } catch (_) {}
+    setState(() => loadingSub = false);
+  }
+
+  // --- SIPOC : listes simples S/I/O/C, chaque catégorie enregistrée
+  // directement sur le processus (champ JSON), sans écran dédié séparé.
+  Future<void> _editSipocList(String field, String label) async {
+    List current = List<String>.from(p[field] ?? []);
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: Text(label),
+        content: SizedBox(
+          width: 320,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Wrap(spacing: 6, runSpacing: 6, children: current.map((item) => Chip(label: Text('$item'), onDeleted: () => setD(() => current.remove(item)))).toList()),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Ajouter…'), onSubmitted: (v) { if (v.trim().isNotEmpty) setD(() { current.add(v.trim()); controller.clear(); }); })),
+              IconButton(icon: const Icon(Icons.add), onPressed: () { if (controller.text.trim().isNotEmpty) setD(() { current.add(controller.text.trim()); controller.clear(); }); }),
+            ]),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(onPressed: () async {
+            try {
+              await api.patch('/business/processus/${p['id']}', {field: current});
+              setState(() => p[field] = current);
+              if (context.mounted) Navigator.pop(c);
+            } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+          }, child: const Text('Enregistrer')),
+        ],
+      )),
+    );
+  }
+
+  // --- Activités ---
+  Future<void> _addOrEditActivity({Map? record}) async {
+    final name = TextEditingController(text: record?['name'] ?? '');
+    final description = TextEditingController(text: record?['description'] ?? '');
+    String? formError;
+    bool saving = false;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: Text(record == null ? 'Nouvelle activité' : 'Modifier l\'activité'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: name, decoration: const InputDecoration(labelText: 'Nom')),
+          TextField(controller: description, decoration: const InputDecoration(labelText: 'Description'), maxLines: 2),
+          if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+        ]),
+        actions: [
+          if (record != null) TextButton(
+            onPressed: () async {
+              try { await api.delete('/business/processus-activities/${record['id']}'); if (context.mounted) Navigator.pop(c); loadSub(); }
+              catch (e) { setD(() => formError = '$e'); }
+            },
+            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+          ),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(onPressed: saving ? null : () async {
+            setD(() => saving = true);
+            try {
+              if (record != null) await api.patch('/business/processus-activities/${record['id']}', {'name': name.text, 'description': description.text});
+              else await api.post('/business/processus-activities', {'processusId': p['id'], 'name': name.text, 'description': description.text, 'order': activities.length});
+              if (context.mounted) Navigator.pop(c);
+              loadSub();
+            } catch (e) { setD(() { saving = false; formError = '$e'; }); }
+          }, child: Text(saving ? '…' : 'Enregistrer')),
+        ],
+      )),
+    );
+  }
+
+  Future<void> _addRaci(Map activity) async {
+    final roleLabel = TextEditingController();
+    String raci = 'R';
+    String? formError;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: Text('RACI — ${activity['name']}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: roleLabel, decoration: const InputDecoration(labelText: 'Rôle ou service (ex. Achats)')),
+          DropdownButtonFormField<String>(
+            value: raci,
+            items: const [DropdownMenuItem(value: 'R', child: Text('R — Responsible')), DropdownMenuItem(value: 'A', child: Text('A — Accountable')), DropdownMenuItem(value: 'C', child: Text('C — Consulted')), DropdownMenuItem(value: 'I', child: Text('I — Informed'))],
+            onChanged: (v) => setD(() => raci = v ?? 'R'),
+            decoration: const InputDecoration(labelText: 'RACI'),
+          ),
+          if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(onPressed: () async {
+            try {
+              await api.post('/business/processus-activities/${activity['id']}/raci', {'roleLabel': roleLabel.text, 'raci': raci});
+              if (context.mounted) Navigator.pop(c);
+              loadSub();
+            } catch (e) { setD(() => formError = '$e'); }
+          }, child: const Text('Ajouter')),
+        ],
+      )),
+    );
+  }
+
+  Future<void> _deleteRaci(String id) async {
+    try { await api.delete('/business/processus-raci/$id'); loadSub(); } catch (_) {}
+  }
+
+  // --- Exigences ---
+  Future<void> _addOrEditExigence({Map? record}) async {
+    final exigence = TextEditingController(text: record?['exigence'] ?? '');
+    final origine = TextEditingController(text: record?['origine'] ?? '');
+    String statut = record?['statutConformite'] ?? 'CONFORME';
+    String? formError;
+    bool saving = false;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: Text(record == null ? 'Nouvelle exigence' : 'Modifier l\'exigence'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: exigence, decoration: const InputDecoration(labelText: 'Exigence'), maxLines: 2),
+          TextField(controller: origine, decoration: const InputDecoration(labelText: 'Origine (ISO 9001, client...)')),
+          DropdownButtonFormField<String>(
+            value: statut,
+            items: const [DropdownMenuItem(value: 'CONFORME', child: Text('Conforme')), DropdownMenuItem(value: 'NON_CONFORME', child: Text('Non conforme')), DropdownMenuItem(value: 'A_VERIFIER', child: Text('À vérifier'))],
+            onChanged: (v) => setD(() => statut = v ?? 'CONFORME'),
+            decoration: const InputDecoration(labelText: 'Statut'),
+          ),
+          if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+        ]),
+        actions: [
+          if (record != null) TextButton(
+            onPressed: () async {
+              try { await api.delete('/business/processus-exigences/${record['id']}'); if (context.mounted) Navigator.pop(c); loadSub(); }
+              catch (e) { setD(() => formError = '$e'); }
+            },
+            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+          ),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(onPressed: saving ? null : () async {
+            setD(() => saving = true);
+            try {
+              if (record != null) await api.patch('/business/processus-exigences/${record['id']}', {'exigence': exigence.text, 'origine': origine.text, 'statutConformite': statut});
+              else await api.post('/business/processus-exigences', {'processusId': p['id'], 'exigence': exigence.text, 'origine': origine.text, 'statutConformite': statut});
+              if (context.mounted) Navigator.pop(c);
+              loadSub();
+            } catch (e) { setD(() { saving = false; formError = '$e'; }); }
+          }, child: Text(saving ? '…' : 'Enregistrer')),
+        ],
+      )),
+    );
+  }
+
+  // --- Export CSV du rapport individuel ---
+  Future<void> exportCsv() async {
+    setState(() => exporting = true);
+    try {
+      final buffer = StringBuffer();
+      buffer.writeln('Rapport processus — ${p['nom']}');
+      buffer.writeln('');
+      buffer.writeln('IDENTIFICATION');
+      buffer.writeln('Code,${_csvEscape('${p['code']}')}');
+      buffer.writeln('Type,${_csvEscape(kProcessTypeLabels[p['type']] ?? '${p['type']}')}');
+      buffer.writeln('Criticité,${_csvEscape(p['criticite'] != null ? kCriticiteLabels[p['criticite']] ?? '' : '—')}');
+      buffer.writeln('Pilote,${_csvEscape(p['pilote'] != null ? '${p['pilote']['firstName']} ${p['pilote']['lastName']}' : '—')}');
+      buffer.writeln('Score de maîtrise,${computeMaturityScore(p)}/100');
+      buffer.writeln('Complétude,${computeCompleteness(p)}%');
+      buffer.writeln('');
+      buffer.writeln('ACTIVITÉS');
+      buffer.writeln('Nom,Description,Responsable');
+      for (final a in activities) { buffer.writeln([a['name'], a['description'] ?? '', a['responsible'] != null ? '${a['responsible']['firstName']} ${a['responsible']['lastName']}' : ''].map((v) => _csvEscape('$v')).join(',')); }
+      buffer.writeln('');
+      buffer.writeln('EXIGENCES');
+      buffer.writeln('Exigence,Origine,Statut');
+      for (final ex in exigences) { buffer.writeln([ex['exigence'], ex['origine'] ?? '', ex['statutConformite']].map((v) => _csvEscape('$v')).join(',')); }
+      final dir = await getTemporaryDirectory();
+      final fileName = 'Processus_${p['code']}_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
+      await Share.shareXFiles([XFile(file.path)], text: 'Rapport processus — ${p['nom']}');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => exporting = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -172,31 +386,82 @@ class ProcessusDetailPage extends StatelessWidget {
     final lvl = maturityLevel(score);
     final alerts = processusAlerts(p);
     return Scaffold(
-      appBar: AppBar(title: Text(p['nom'] ?? '')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      appBar: AppBar(title: Text(p['nom'] ?? ''), actions: [IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), onPressed: exporting ? null : exportCsv, tooltip: 'Exporter le rapport')]),
+      body: RefreshIndicator(
+        onRefresh: loadSub,
+        child: ListView(padding: const EdgeInsets.all(16), children: [
+          Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('${lvl['emoji']} ${lvl['label']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('Score : $score/100', style: TextStyle(color: QhseColors.textSecondary)),
+            ]),
+            const SizedBox(height: 4),
+            Text('Complétude : ${computeCompleteness(p)}%', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
+          ]))),
+          const SizedBox(height: 10),
+          Card(child: ListTile(title: const Text('Type'), trailing: Text(kProcessTypeLabels[p['type']] ?? p['type'] ?? '—'))),
+          Card(child: ListTile(title: const Text('Criticité'), trailing: Text(p['criticite'] != null ? kCriticiteLabels[p['criticite']] ?? p['criticite'] : '—', style: TextStyle(color: criticiteColor(p['criticite']))))),
+          Card(child: ListTile(title: const Text('Pilote'), trailing: Text(p['pilote'] != null ? '${p['pilote']['firstName']} ${p['pilote']['lastName']}' : 'Sans pilote'))),
+          if ((p['finalite'] ?? '').toString().isNotEmpty) Card(child: ListTile(title: const Text('Finalité'), subtitle: Text(p['finalite']))),
+          Card(child: ListTile(title: const Text('NC ouvertes'), trailing: Text('${p['_count']?['nonConformities'] ?? 0}'))),
+          Card(child: ListTile(title: const Text('Actions ouvertes'), trailing: Text('${p['_count']?['actions'] ?? 0}'))),
+
+          const SizedBox(height: 16),
+          const Text('Alertes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 6),
+          if (alerts.isEmpty) const Text('Aucune alerte', style: TextStyle(color: QhseColors.green))
+          else ...alerts.map((a) => Card(child: ListTile(leading: const Icon(Icons.warning_amber_outlined, color: QhseColors.amber), title: Text(a)))),
+
+          const SizedBox(height: 20),
+          const Text('SIPOC', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 6),
+          ...[['suppliers', 'Fournisseurs (S)'], ['inputs', 'Entrées (I)'], ['outputs', 'Sorties (O)'], ['customers', 'Clients (C)']].map((f) => Card(child: ListTile(
+                title: Text(f[1]),
+                subtitle: Text(List<String>.from(p[f[0]] ?? []).join(', ').isEmpty ? 'Aucun' : List<String>.from(p[f[0]] ?? []).join(', ')),
+                trailing: const Icon(Icons.edit_outlined, size: 18),
+                onTap: () => _editSipocList(f[0], f[1]),
+              ))),
+
+          const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('${lvl['emoji']} ${lvl['label']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            Text('Score : $score/100', style: TextStyle(color: QhseColors.textSecondary)),
+            const Text('Activités', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton(onPressed: () => _addOrEditActivity(), child: const Text('+ Activité')),
           ]),
-          const SizedBox(height: 4),
-          Text('Complétude : ${computeCompleteness(p)}%', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
-        ]))),
-        const SizedBox(height: 10),
-        Card(child: ListTile(title: const Text('Type'), trailing: Text(kProcessTypeLabels[p['type']] ?? p['type'] ?? '—'))),
-        Card(child: ListTile(title: const Text('Criticité'), trailing: Text(p['criticite'] != null ? kCriticiteLabels[p['criticite']] ?? p['criticite'] : '—', style: TextStyle(color: criticiteColor(p['criticite']))))),
-        Card(child: ListTile(title: const Text('Pilote'), trailing: Text(p['pilote'] != null ? '${p['pilote']['firstName']} ${p['pilote']['lastName']}' : 'Sans pilote'))),
-        if ((p['finalite'] ?? '').toString().isNotEmpty) Card(child: ListTile(title: const Text('Finalité'), subtitle: Text(p['finalite']))),
-        Card(child: ListTile(title: const Text('NC ouvertes'), trailing: Text('${p['_count']?['nonConformities'] ?? 0}'))),
-        Card(child: ListTile(title: const Text('Actions ouvertes'), trailing: Text('${p['_count']?['actions'] ?? 0}'))),
-        const SizedBox(height: 10),
-        Text('Alertes', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        if (alerts.isEmpty) const Text('Aucune alerte', style: TextStyle(color: QhseColors.green))
-        else ...alerts.map((a) => Card(child: ListTile(leading: const Icon(Icons.warning_amber_outlined, color: QhseColors.amber), title: Text(a)))),
-        const SizedBox(height: 12),
-        Text('Le détail complet (SIPOC, activités, RACI, exigences, rapport Excel) reste géré depuis le tableau de bord web pour le moment.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
-      ]),
+          if (loadingSub) const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()))
+          else if (activities.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune activité enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+          else ...activities.map((a) => Card(child: ExpansionTile(
+                title: Text(a['name'] ?? ''),
+                subtitle: (a['description'] ?? '').toString().isNotEmpty ? Text(a['description']) : null,
+                children: [
+                  ...List.from(a['racis'] ?? []).map((r) => ListTile(
+                        dense: true,
+                        title: Text(r['user'] != null ? '${r['user']['firstName']} ${r['user']['lastName']}' : (r['roleLabel'] ?? '—')),
+                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(r['raci'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _deleteRaci(r['id'])),
+                        ]),
+                      )),
+                  ButtonBar(children: [
+                    TextButton(onPressed: () => _addRaci(a), child: const Text('+ RACI')),
+                    TextButton(onPressed: () => _addOrEditActivity(record: a), child: const Text('Modifier')),
+                  ]),
+                ],
+              ))),
+
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('Exigences', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton(onPressed: () => _addOrEditExigence(), child: const Text('+ Exigence')),
+          ]),
+          if (!loadingSub && exigences.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune exigence enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
+          ...exigences.map((ex) => Card(child: ListTile(
+                title: Text(ex['exigence'] ?? ''),
+                subtitle: Text('${ex['origine'] ?? 'Origine non précisée'} · ${ex['statutConformite']}'),
+                onTap: () => _addOrEditExigence(record: ex),
+              ))),
+          const SizedBox(height: 24),
+        ]),
+      ),
     );
   }
 }
@@ -211,16 +476,39 @@ class ProcessusHome extends StatefulWidget {
 class _ProcessusHomeState extends State<ProcessusHome> {
   final api = Api();
   List items = [];
+  List links = [];
   bool loading = true;
   int tabIndex = 0;
+  bool linkMode = false;
+  String? linkSourceId;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
     setState(() => loading = true);
-    try { items = List.from(await api.get('/business/processus')); } catch (_) {}
+    try {
+      items = List.from(await api.get('/business/processus'));
+      links = List.from(await api.get('/business/processus-links'));
+    } catch (_) {}
     setState(() => loading = false);
+  }
+
+  Future<void> createLink(String sourceId, String targetId) async {
+    try { await api.post('/business/processus-links', {'sourceId': sourceId, 'targetId': targetId}); links = List.from(await api.get('/business/processus-links')); setState(() {}); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+  }
+
+  Future<void> deleteLink(String id) async {
+    try { await api.delete('/business/processus-links/$id'); links = List.from(await api.get('/business/processus-links')); setState(() {}); }
+    catch (_) {}
+  }
+
+  void onTapProcessusCard(Map p, BuildContext c) {
+    if (!linkMode) { Navigator.push(c, MaterialPageRoute(builder: (_) => ProcessusDetailPage(p: p))); return; }
+    if (linkSourceId == null) { setState(() => linkSourceId = p['id']); return; }
+    if (linkSourceId != p['id']) createLink(linkSourceId!, p['id']);
+    setState(() => linkSourceId = null);
   }
 
   List<KpiStat> get kpis {
@@ -279,25 +567,55 @@ class _ProcessusHomeState extends State<ProcessusHome> {
                     ),
                   ]),
                 ),
-                // Cartographie — regroupée par type ; le glisser-déposer et les
-                // liens dessinés restent gérés côté web pour l'instant.
+                // Cartographie — regroupée par type ; le glisser-déposer
+                // n'a pas de sens sur un écran tactile étroit, mais créer
+                // un lien en touchant la source puis la cible fonctionne
+                // bien sur mobile.
                 RefreshIndicator(
                   onRefresh: load,
                   child: ListView(
                     padding: const EdgeInsets.all(12),
-                    children: kProcessTypeLabels.keys.expand((t) {
-                      final group = items.where((p) => (p['type'] ?? 'OPERATIONNEL') == t).toList();
-                      if (group.isEmpty) return <Widget>[];
-                      return [
-                        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(kProcessTypeLabels[t]!, style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textSecondary))),
-                        ...group.map((p) => Card(child: ListTile(
-                              title: Text(p['nom'] ?? ''),
-                              subtitle: Text(p['pilote'] != null ? '${p['pilote']['firstName']} ${p['pilote']['lastName']}' : 'Sans pilote'),
-                              leading: p['criticite'] != null ? Icon(Icons.circle, size: 12, color: criticiteColor(p['criticite'])) : null,
-                              onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ProcessusDetailPage(p: p))),
-                            ))),
-                      ];
-                    }).toList(),
+                    children: [
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Expanded(child: Text(linkMode ? (linkSourceId == null ? 'Touchez le processus source…' : 'Touchez le processus cible…') : 'Cartographie', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        TextButton(
+                          onPressed: () => setState(() { linkMode = !linkMode; linkSourceId = null; }),
+                          child: Text(linkMode ? 'Annuler' : '+ Lien'),
+                        ),
+                      ]),
+                      const SizedBox(height: 6),
+                      ...kProcessTypeLabels.keys.expand((t) {
+                        final group = items.where((p) => (p['type'] ?? 'OPERATIONNEL') == t).toList();
+                        if (group.isEmpty) return <Widget>[];
+                        return [
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(kProcessTypeLabels[t]!, style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textSecondary))),
+                          ...group.map((p) => Card(
+                                color: linkSourceId == p['id'] ? QhseColors.blue.withOpacity(0.15) : null,
+                                child: ListTile(
+                                  title: Text(p['nom'] ?? ''),
+                                  subtitle: Text(p['pilote'] != null ? '${p['pilote']['firstName']} ${p['pilote']['lastName']}' : 'Sans pilote'),
+                                  leading: p['criticite'] != null ? Icon(Icons.circle, size: 12, color: criticiteColor(p['criticite'])) : null,
+                                  onTap: () => onTapProcessusCard(p, c),
+                                ),
+                              )),
+                        ];
+                      }),
+                      if (links.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text('Liens entre processus', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        ...links.map((l) {
+                          final source = items.firstWhere((p) => p['id'] == l['sourceId'], orElse: () => {'nom': '?'});
+                          final target = items.firstWhere((p) => p['id'] == l['targetId'], orElse: () => {'nom': '?'});
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.arrow_forward, size: 16, color: QhseColors.blue),
+                            title: Text('${source['nom']} → ${target['nom']}', style: const TextStyle(fontSize: 13)),
+                            trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => deleteLink(l['id'])),
+                          );
+                        }),
+                      ],
+                    ],
                   ),
                 ),
                 // Registre
