@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
-import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 
@@ -11,7 +10,14 @@ const _types = {
   'PRESQU_ACCIDENT': ('Presqu\'accident', Icons.warning_amber, Colors.orange),
   'SITUATION_DANGEREUSE': ('Situation dangereuse', Icons.dangerous, Colors.amber),
 };
+const Map<String, String> kStatutLabels = {
+  'DECLARE': 'Déclaré', 'SECURISE': 'Sécurisé', 'INVESTIGATION': 'En investigation', 'ANALYSE_CAUSES': 'Analyse des causes',
+  'ACTIONS_DEFINIES': 'Actions définies', 'ACTIONS_EN_COURS': 'Actions en cours', 'VERIFICATION': "Vérification d'efficacité",
+  'VALIDE': 'Validé', 'CLOTURE': 'Clôturé',
+};
+Color _niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
 
+// --- Écran principal : tableau de bord + registre ---
 class SafetyEventsPage extends StatefulWidget {
   const SafetyEventsPage({super.key});
   @override
@@ -21,160 +27,118 @@ class SafetyEventsPage extends StatefulWidget {
 class _SafetyEventsPageState extends State<SafetyEventsPage> {
   final api = Api();
   List events = [];
-  List workedHours = [];
+  Map stats = {'volume': {}, 'pareto': [], 'parMecanisme': [], 'parZone': []};
+  List alertes = [];
+  Map recidives = {'parCauseRacine': [], 'parZone': [], 'parMecanisme': []};
   bool loading = true;
+  int tabIndex = 0;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
+    setState(() => loading = true);
     try {
       events = List.from(await api.get('/business/safety-events'));
-      workedHours = List.from(await api.get('/business/worked-hours'));
+      stats = Map.from(await api.get('/business/safety-events-stats'));
+      alertes = List.from(await api.get('/business/safety-events-alertes'));
+      recidives = Map.from(await api.get('/business/safety-events-recidives'));
     } catch (_) {}
     setState(() => loading = false);
   }
 
-  Future<void> delete(Map e) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: Text('Supprimer définitivement « ${e['title']} » ? Cette action est irréversible.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
-        ],
+  @override
+  Widget build(BuildContext c) {
+    final volume = Map.from(stats['volume'] ?? {});
+    final pareto = List.from(stats['pareto'] ?? []);
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Accidents & incidents'),
+          bottom: TabBar(onTap: (i) => setState(() => tabIndex = i), tabs: const [Tab(text: 'Tableau de bord'), Tab(text: 'Registre')]),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NewSafetyEventPage())).then((_) => load()),
+          icon: const Icon(Icons.add),
+          label: const Text('Déclarer'),
+        ),
+        body: loading
+            ? const Center(child: CircularProgressIndicator())
+            : IndexedStack(index: tabIndex, children: [
+                RefreshIndicator(
+                  onRefresh: load,
+                  child: ListView(padding: const EdgeInsets.all(12), children: [
+                    KpiBar([
+                      KpiStat('Événements', '${volume['total'] ?? 0}', color: QhseColors.blue, icon: Icons.report_outlined),
+                      KpiStat('Accidents', '${volume['accidents'] ?? 0}', color: QhseColors.red, icon: Icons.local_hospital_outlined),
+                      KpiStat('Avec arrêt', '${volume['avecArret'] ?? 0}', color: QhseColors.amber, icon: Icons.timer_off_outlined),
+                      KpiStat('Graves (≥4)', '${volume['graves'] ?? 0}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+                    ]),
+                    const SizedBox(height: 16),
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      const Text('Alertes automatiques', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('${alertes.length}', style: TextStyle(color: QhseColors.textSecondary)),
+                    ]),
+                    const SizedBox(height: 6),
+                    if (alertes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.green)))
+                    else ...alertes.map((a) => Card(child: ListTile(
+                          title: Text(a['title'] ?? ''),
+                          subtitle: Text(List.from(a['motifs'] ?? []).map((m) => m['label']).join(' · '), style: const TextStyle(fontSize: 11)),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: _niveauColor(a['niveau']).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                            child: Text(a['niveau'] ?? '', style: TextStyle(color: _niveauColor(a['niveau']), fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                          onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SafetyEventDetailPage(eventId: a['id']))).then((_) => load()),
+                        ))),
+                    const SizedBox(height: 16),
+                    if (List.from(recidives['parCauseRacine'] ?? []).isNotEmpty || List.from(recidives['parZone'] ?? []).isNotEmpty) ...[
+                      const Text('Risque de récidive détecté', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      const SizedBox(height: 6),
+                      ...List.from(recidives['parCauseRacine'] ?? []).map((r) => Card(child: ListTile(dense: true, title: Text(r['critere'] ?? ''), subtitle: const Text('Cause racine récurrente', style: TextStyle(fontSize: 11)), trailing: Text('${r['nombre']}×', style: TextStyle(color: QhseColors.amber, fontWeight: FontWeight.bold))))),
+                      const SizedBox(height: 16),
+                    ],
+                    const Text('Pareto des causes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 6),
+                    if (pareto.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune cause racine renseignée', style: TextStyle(color: QhseColors.textSecondary)))
+                    else ...pareto.map((p) => Card(child: ListTile(
+                          title: Text(p['name'] ?? ''),
+                          trailing: Text('${p['value']} (${p['pct']}%, cumul ${p['cumulPct']}%)', style: const TextStyle(fontSize: 11)),
+                        ))),
+                  ]),
+                ),
+                RefreshIndicator(
+                  onRefresh: load,
+                  child: events.isEmpty
+                      ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun événement déclaré')))])
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: events.length,
+                          itemBuilder: (_, i) {
+                            final e = events[i];
+                            final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
+                            return Card(
+                              child: ListTile(
+                                leading: Icon(meta.$2, color: meta.$3, size: 32),
+                                title: Text('${e['title']}'),
+                                subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])} • ${kStatutLabels[e['statut']] ?? 'Déclaré'}'),
+                                trailing: severityChip(e['severity'] ?? 1, prefix: ''),
+                                onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SafetyEventDetailPage(eventId: e['id']))).then((_) => load()),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ]),
       ),
     );
-    if (ok != true) return;
-    try {
-      await api.delete('/business/safety-events/${e['id']}');
-      load();
-    } catch (err) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$err')));
-    }
   }
-
-  Future<void> _openWorkedHoursDialog(BuildContext context) async {
-    final hours = TextEditingController();
-    final site = TextEditingController();
-    DateTime periodStart = DateTime(DateTime.now().year, 1, 1);
-    DateTime periodEnd = DateTime.now();
-    String? formError;
-    await showDialog(
-      context: context,
-      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Heures travaillées'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(
-              title: Text('Début : ${periodStart.day}/${periodStart.month}/${periodStart.year}'),
-              trailing: const Icon(Icons.edit_calendar),
-              onTap: () async {
-                final d = await showDatePicker(context: context, initialDate: periodStart, firstDate: DateTime(2020), lastDate: DateTime(2035));
-                if (d != null) setD(() => periodStart = d);
-              },
-            ),
-            ListTile(
-              title: Text('Fin : ${periodEnd.day}/${periodEnd.month}/${periodEnd.year}'),
-              trailing: const Icon(Icons.edit_calendar),
-              onTap: () async {
-                final d = await showDatePicker(context: context, initialDate: periodEnd, firstDate: DateTime(2020), lastDate: DateTime(2035));
-                if (d != null) setD(() => periodEnd = d);
-              },
-            ),
-            TextField(controller: hours, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Heures travaillées (total)')),
-            TextField(controller: site, decoration: const InputDecoration(labelText: 'Site (optionnel)')),
-            if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
-          FilledButton(
-            onPressed: () async {
-              try {
-                await api.post('/business/worked-hours', {
-                  'code': 'HT-${DateTime.now().millisecondsSinceEpoch}',
-                  'periodStart': periodStart.toIso8601String(), 'periodEnd': periodEnd.toIso8601String(),
-                  'hours': double.tryParse(hours.text) ?? 0, 'site': site.text.trim().isEmpty ? null : site.text.trim(),
-                });
-                if (context.mounted) Navigator.pop(c);
-                load();
-              } catch (e) {
-                setD(() => formError = '$e');
-              }
-            },
-            child: const Text('Enregistrer'),
-          ),
-        ],
-      )),
-    );
-  }
-
-  List<KpiStat> get kpis {
-    final moyenne = events.isEmpty ? 0.0 : events.fold<num>(0, (s, e) => s + ((e['severity'] ?? 1) as num)) / events.length;
-    final typesDistincts = events.map((e) => e['type']).toSet().length;
-    final yearStart = DateTime(DateTime.now().year, 1, 1);
-    final eventsThisYear = events.where((e) => DateTime.parse(e['occurredAt']).isAfter(yearStart)).toList();
-    final hoursThisYear = workedHours.where((h) => DateTime.parse(h['periodEnd']).isAfter(yearStart));
-    final totalHours = hoursThisYear.fold<num>(0, (s, h) => s + ((h['hours'] ?? 0) as num));
-    final accidentsAvecArret = eventsThisYear.where((e) => e['withLostTime'] == true).length;
-    final joursPerdus = eventsThisYear.fold<num>(0, (s, e) => s + (e['withLostTime'] == true ? ((e['lostDays'] ?? 0) as num) : 0));
-    final tf = totalHours > 0 ? (accidentsAvecArret * 1000000 / totalHours) : null;
-    final tg = totalHours > 0 ? (joursPerdus * 1000 / totalHours) : null;
-    return [
-      KpiStat('Événements', '${events.length}', color: QhseColors.blue, icon: Icons.warning_amber_outlined),
-      KpiStat('Sévérité moyenne', moyenne.toStringAsFixed(1), color: QhseColors.amber, icon: Icons.trending_up),
-      KpiStat('Taux de Fréquence', tf == null ? '—' : tf.toStringAsFixed(1), color: QhseColors.red, icon: Icons.speed),
-      KpiStat('Taux de Gravité', tg == null ? '—' : tg.toStringAsFixed(2), color: QhseColors.red, icon: Icons.trending_down),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Accidents & situations dangereuses'), actions: [
-      IconButton(icon: const Icon(Icons.schedule), tooltip: 'Heures travaillées', onPressed: () => _openWorkedHoursDialog(c)),
-    ]),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NewSafetyEventPage())).then((_) => load()),
-      icon: const Icon(Icons.add),
-      label: const Text('Déclarer'),
-    ),
-    body: loading
-        ? const Center(child: CircularProgressIndicator())
-        : RefreshIndicator(
-            onRefresh: load,
-            child: Column(children: [
-              Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(kpis)),
-              Expanded(
-                child: events.isEmpty
-                    ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun événement déclaré')))])
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: events.length,
-                        itemBuilder: (_, i) {
-                          final e = events[i];
-                          final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
-                          return Card(
-                            child: ListTile(
-                              leading: Icon(meta.$2, color: meta.$3, size: 32),
-                              title: Text('${e['title']}'),
-                              subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])}'),
-                              trailing: severityChip(e['severity'] ?? 1, prefix: ''),
-                              onLongPress: () => delete(e),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ]),
-          ),
-  );
 
   String _date(dynamic v) => v == null ? '' : v.toString().substring(0, 16).replaceFirst('T', ' ');
 }
 
+// --- Déclaration terrain rapide : GPS + hors-ligne + photo, inchangés ---
 class NewSafetyEventPage extends StatefulWidget {
   const NewSafetyEventPage({super.key});
   @override
@@ -185,10 +149,10 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
   final api = Api();
   final title = TextEditingController();
   final description = TextEditingController();
+  final zone = TextEditingController();
   String type = 'ACCIDENT';
+  String? typePersonnel;
   int severity = 2;
-  bool withLostTime = false;
-  int lostDays = 0;
   double? lat, lon;
   bool busy = false;
   String? createdId;
@@ -212,8 +176,8 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
       'description': desc.isEmpty ? null : desc,
       'occurredAt': DateTime.now().toIso8601String(),
       'severity': severity,
-      'withLostTime': withLostTime,
-      'lostDays': withLostTime ? lostDays : null,
+      'zone': zone.text.trim().isEmpty ? null : zone.text.trim(),
+      'typePersonnel': typePersonnel,
     };
     try {
       final r = await api.post('/business/safety-events', payload);
@@ -252,23 +216,20 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
         const SizedBox(height: 12),
         TextField(controller: description, enabled: createdId == null, maxLines: 4, decoration: const InputDecoration(labelText: 'Description, circonstances, témoins...')),
         const SizedBox(height: 12),
+        TextField(controller: zone, enabled: createdId == null, decoration: const InputDecoration(labelText: 'Zone / atelier (optionnel)')),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: typePersonnel, isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Type de personnel concerné (optionnel)'),
+          items: const [
+            DropdownMenuItem(value: 'SALARIE', child: Text('Salarié')), DropdownMenuItem(value: 'INTERIMAIRE', child: Text('Intérimaire')),
+            DropdownMenuItem(value: 'SOUS_TRAITANT', child: Text('Sous-traitant')), DropdownMenuItem(value: 'VISITEUR', child: Text('Visiteur')), DropdownMenuItem(value: 'AUTRE', child: Text('Autre')),
+          ],
+          onChanged: createdId == null ? (v) => setState(() => typePersonnel = v) : null,
+        ),
+        const SizedBox(height: 12),
         Text('Sévérité : $severity', style: const TextStyle(fontWeight: FontWeight.bold)),
         Slider(value: severity.toDouble(), min: 1, max: 5, divisions: 4, label: '$severity', onChanged: createdId == null ? (v) => setState(() => severity = v.round()) : null),
-        const SizedBox(height: 8),
-        CheckboxListTile(
-          value: withLostTime,
-          title: const Text('Accident avec arrêt de travail'),
-          controlAffinity: ListTileControlAffinity.leading,
-          onChanged: createdId == null ? (v) => setState(() => withLostTime = v ?? false) : null,
-        ),
-        if (withLostTime)
-          TextFormField(
-            initialValue: '$lostDays',
-            enabled: createdId == null,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Nombre de journées perdues'),
-            onChanged: (v) => lostDays = int.tryParse(v) ?? 0,
-          ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: createdId == null ? gps : null,
@@ -299,4 +260,148 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
       ],
     ),
   );
+}
+
+// --- Fiche détaillée : statut, enquête, causes 5M, plan d'actions ---
+class SafetyEventDetailPage extends StatefulWidget {
+  final String eventId;
+  const SafetyEventDetailPage({super.key, required this.eventId});
+  @override
+  State<SafetyEventDetailPage> createState() => _SafetyEventDetailPageState();
+}
+
+class _SafetyEventDetailPageState extends State<SafetyEventDetailPage> {
+  final api = Api();
+  Map? ev;
+  bool loading = true;
+  bool saving = false;
+  List users = [];
+  final form = <String, dynamic>{};
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    try {
+      ev = Map.from(await api.get('/business/safety-events/${widget.eventId}'));
+      users = List.from(await api.get('/users'));
+      form['statut'] = ev!['statut'] ?? 'DECLARE';
+      form['enqueteurId'] = ev!['enqueteurId'];
+      form['methodeAnalyse'] = ev!['methodeAnalyse'];
+      form['causeHumaine'] = ev!['causeHumaine'];
+      form['causeMethode'] = ev!['causeMethode'];
+      form['causeMachine'] = ev!['causeMachine'];
+      form['causeMatiere'] = ev!['causeMatiere'];
+      form['causeMilieu'] = ev!['causeMilieu'];
+      form['causeManagement'] = ev!['causeManagement'];
+      form['causeRacine'] = ev!['causeRacine'];
+    } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  Future<void> save() async {
+    setState(() => saving = true);
+    try {
+      await api.patch('/business/safety-events/${widget.eventId}', form);
+      await load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enregistré')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => saving = false);
+  }
+
+  Future<void> addAction() async {
+    final t = TextEditingController(text: "Action — ${ev?['title']}");
+    String? formError;
+    bool s = false;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: const Text('Nouvelle action'),
+        content: TextField(controller: t, decoration: const InputDecoration(labelText: 'Titre')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(onPressed: s ? null : () async {
+            setD(() => s = true);
+            try {
+              await api.post('/business/actions', {'code': 'ACT-${DateTime.now().millisecondsSinceEpoch}', 'title': t.text, 'priority': 2, 'status': 'OPEN', 'safetyEventId': widget.eventId});
+              if (context.mounted) Navigator.pop(c);
+              load();
+            } catch (e) { setD(() { s = false; formError = '$e'; }); }
+          }, child: Text(s ? '…' : 'Créer')),
+        ],
+      )),
+    );
+  }
+
+  Widget _causeField(String key, String label) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: TextFormField(initialValue: form[key], decoration: InputDecoration(labelText: label), onChanged: (v) => form[key] = v),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading || ev == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final meta = _types[ev!['type']] ?? ('${ev!['type']}', Icons.info, Colors.grey);
+    return Scaffold(
+      appBar: AppBar(title: Text(ev!['title'] ?? '')),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(child: ListTile(
+          leading: Icon(meta.$2, color: meta.$3, size: 32),
+          title: Text('${meta.$1} • ${(ev!['occurredAt'] ?? '').toString().substring(0, 10)}'),
+          subtitle: Text('Sévérité ${ev!['severity']}${ev!['zone'] != null ? ' • ${ev!['zone']}' : ''}'),
+        )),
+        const SizedBox(height: 16),
+
+        DropdownButtonFormField<String>(
+          value: form['statut'], isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Statut'),
+          items: kStatutLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+          onChanged: (v) => setState(() => form['statut'] = v),
+        ),
+        const SizedBox(height: 16),
+
+        const Text('Enquête', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: form['enqueteurId'], isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Enquêteur'),
+          items: users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}'))).toList(),
+          onChanged: (v) => setState(() => form['enqueteurId'] = v),
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          value: form['methodeAnalyse'], isExpanded: true,
+          decoration: const InputDecoration(labelText: "Méthode d'analyse"),
+          items: const [
+            DropdownMenuItem(value: '5_POURQUOI', child: Text('5 Pourquoi')), DropdownMenuItem(value: 'ARBRE_CAUSES', child: Text('Arbre des causes')),
+            DropdownMenuItem(value: 'ISHIKAWA', child: Text('Ishikawa (5M)')), DropdownMenuItem(value: 'AUTRE', child: Text('Autre')),
+          ],
+          onChanged: (v) => setState(() => form['methodeAnalyse'] = v),
+        ),
+        const SizedBox(height: 16),
+
+        const Text('Analyse des causes — jamais limitée à « erreur humaine »', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 8),
+        _causeField('causeHumaine', 'Facteurs humains'),
+        _causeField('causeMethode', 'Méthodes'),
+        _causeField('causeMachine', 'Machines/équipements'),
+        _causeField('causeMatiere', 'Matières/produits'),
+        _causeField('causeMilieu', 'Milieu/environnement'),
+        _causeField('causeManagement', 'Management/organisation'),
+        _causeField('causeRacine', 'Cause racine retenue'),
+
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('Plan d\'actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          TextButton(onPressed: addAction, child: const Text('+ Action')),
+        ]),
+        if (List.from(ev!['actions'] ?? []).isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune action liée', style: TextStyle(color: QhseColors.textSecondary)))
+        else ...List.from(ev!['actions'] ?? []).map((a) => Card(child: ListTile(dense: true, title: Text(a['title'] ?? ''), trailing: Text(a['status'] ?? '', style: const TextStyle(fontSize: 11))))),
+
+        const SizedBox(height: 20),
+        FilledButton(onPressed: saving ? null : save, child: Text(saving ? 'Enregistrement…' : 'Enregistrer')),
+      ]),
+    );
+  }
 }
