@@ -31,6 +31,7 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
   Map indiceGlobal = {'indice': null, 'detail': []};
   bool loading = true;
   bool showPonderation = false;
+  String? categorieFilter;
 
   @override
   void initState() { super.initState(); load(); }
@@ -76,6 +77,85 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
           }, child: Text(saving ? '…' : 'Enregistrer')),
         ],
       )),
+    );
+  }
+
+  Future<void> _createAction(Map ind) async {
+    final actuel = (ind['actuel'] as num?) ?? 0;
+    final cible = (ind['cible'] as num?) ?? 0;
+    final ecart = ((actuel - cible) * 100).round() / 100;
+    final title = TextEditingController(text: "Corriger l'écart — ${ind['indicateur']}");
+    final description = TextEditingController(text: 'Valeur actuelle $actuel${ind['unite'] ?? ''}, cible $cible${ind['unite'] ?? ''} (écart ${ecart > 0 ? '+' : ''}$ecart${ind['unite'] ?? ''}).');
+    String? formError;
+    bool saving = false;
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+        title: const Text('Créer une action corrective'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
+          TextField(controller: description, decoration: const InputDecoration(labelText: 'Description'), maxLines: 3),
+          if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          FilledButton(onPressed: saving ? null : () async {
+            setD(() => saving = true);
+            try {
+              await api.post('/business/actions', {'code': 'ACT-${DateTime.now().millisecondsSinceEpoch}', 'title': title.text, 'description': description.text, 'priority': 2, 'status': 'OPEN'});
+              if (context.mounted) Navigator.pop(c);
+            } catch (e) { setD(() { saving = false; formError = '$e'; }); }
+          }, child: Text(saving ? '…' : 'Créer')),
+        ],
+      )),
+    );
+  }
+
+  Future<void> _showDetail(Map ind) async {
+    List mesures = [];
+    try { mesures = List.from(await api.get('/business/indicateurs-qualite/${ind['id']}/mesures')); } catch (_) {}
+    final actuel = (ind['actuel'] as num?) ?? 0;
+    final cible = (ind['cible'] as num?) ?? 0;
+    final atteint = ind['sensInverse'] == true ? actuel <= cible : actuel >= cible;
+    final ecart = ((actuel - cible) * 100).round() / 100;
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(ind['indicateur'] ?? ''),
+        content: SizedBox(
+          width: 340,
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                Column(children: [Text('Actuel', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('$actuel${ind['unite'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+                Column(children: [Text('Cible', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('$cible${ind['unite'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+                Column(children: [Text('Écart', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('${ecart > 0 ? '+' : ''}$ecart${ind['unite'] ?? ''}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: atteint ? QhseColors.green : QhseColors.red))]),
+              ]),
+              if (ind['categorie'] != null || ind['formule'] != null) Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text('${ind['categorie'] != null ? 'Catégorie : ${ind['categorie']}\n' : ''}${ind['formule'] != null ? 'Formule : ${ind['formule']}' : ''}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+              ),
+              if (!atteint) Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: SizedBox(width: double.infinity, child: OutlinedButton(onPressed: () { Navigator.pop(c); _createAction(ind); }, child: const Text('Créer une action corrective'))),
+              ),
+              const Divider(),
+              const Text('Historique des mesures', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+              if (mesures.isEmpty) Text('Aucune mesure enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
+              else ...mesures.map((m) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Expanded(child: Text('${(m['periode'] ?? '').toString().substring(0, 10)}${m['commentaire'] != null ? ' — ${m['commentaire']}' : ''}', style: const TextStyle(fontSize: 12))),
+                      Text('${m['valeur']}${ind['unite'] ?? ''}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ]),
+                  )),
+            ]),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Fermer'))],
+      ),
     );
   }
 
@@ -156,6 +236,8 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
       final cible = (i['cible'] as num?)?.toDouble() ?? 0;
       return i['sensInverse'] == true ? actuel <= cible : actuel >= cible;
     }).length;
+    final categories = items.map((i) => i['categorie']).where((c) => c != null && c != '').cast<String>().toSet().toList();
+    final filteredItems = categorieFilter == null ? items : items.where((i) => i['categorie'] == categorieFilter).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Indicateurs qualité')),
       floatingActionButton: FloatingActionButton.extended(onPressed: () => _addOrEdit(), icon: const Icon(Icons.add), label: const Text('Indicateur')),
@@ -210,8 +292,16 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
                 const SizedBox(height: 16),
                 const Text('Indicateurs manuels', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 8),
-                if (items.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text('Aucun indicateur enregistré', style: TextStyle(color: QhseColors.textSecondary))),
-                ...items.map((i) {
+                if (categories.length > 1)
+                  SizedBox(
+                    height: 36,
+                    child: ListView(scrollDirection: Axis.horizontal, children: [
+                      Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(label: const Text('Toutes'), selected: categorieFilter == null, onSelected: (_) => setState(() => categorieFilter = null))),
+                      ...categories.map((cat) => Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(label: Text(cat), selected: categorieFilter == cat, onSelected: (_) => setState(() => categorieFilter = cat)))),
+                    ]),
+                  ),
+                if (filteredItems.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text('Aucun indicateur enregistré', style: TextStyle(color: QhseColors.textSecondary))),
+                ...filteredItems.map((i) {
                   final actuel = (i['actuel'] as num?)?.toDouble();
                   final cible = (i['cible'] as num?)?.toDouble();
                   final st = indicateurStatus(actuel, cible, i['sensInverse'] == true, (i['seuilVert'] as num?)?.toDouble(), (i['seuilOrange'] as num?)?.toDouble());
@@ -220,6 +310,7 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
                     title: Text(i['indicateur'] ?? ''),
                     subtitle: Text('${actuel ?? '—'}${i['unite'] ?? ''} / ${cible ?? '—'}${i['unite'] ?? ''}${mesures.length > 1 ? ' · ${mesures.length} mesures' : ''}'),
                     leading: st['color'] != null ? Icon(Icons.circle, size: 12, color: st['color'] as Color) : null,
+                    onTap: () => _showDetail(i),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       IconButton(icon: const Icon(Icons.add_chart, size: 20), onPressed: () => _addMesure(i), tooltip: 'Ajouter une mesure'),
                       IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => _addOrEdit(record: i)),
