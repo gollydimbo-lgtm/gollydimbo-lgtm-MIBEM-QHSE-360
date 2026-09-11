@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { DocumentGroup } from '@prisma/client';
 import { createHash } from 'crypto';
@@ -24,7 +24,7 @@ export class DocumentsController {
   list(@Query('group') group?: DocumentGroup) {
     return this.db.document.findMany({
       where: group ? { documentGroup: group } : undefined,
-      include: { versions: { orderBy: { version: 'desc' } }, attachments: true },
+      include: { versions: { orderBy: { version: 'desc' } }, attachments: true, processus: true },
       orderBy: { updatedAt: 'desc' },
     });
   }
@@ -36,7 +36,7 @@ export class DocumentsController {
 
   @Get(':id')
   getOne(@Param('id') id: string) {
-    return this.db.document.findUnique({ where: { id }, include: { versions: { orderBy: { version: 'desc' } }, attachments: true } });
+    return this.db.document.findUnique({ where: { id }, include: { versions: { orderBy: { version: 'desc' } }, attachments: true, processus: true } });
   }
 
   // Crée un document. Si fileName/mimeType/base64 sont fournis, le fichier
@@ -44,13 +44,24 @@ export class DocumentsController {
   // créé sans fichier (une version pourra être ajoutée ensuite via
   // POST /documents/:id/versions).
   @Post()
-  async create(@Body() d: { code: string; title: string; category: string; documentGroup?: DocumentGroup; fileName?: string; mimeType?: string; base64?: string }) {
-    const doc = await this.db.document.create({ data: { code: d.code, title: d.title, category: d.category, documentGroup: d.documentGroup, status: d.base64 ? 'ACTIVE' : 'DRAFT' } });
+  async create(@Body() d: { code: string; title: string; category: string; documentGroup?: DocumentGroup; fileName?: string; mimeType?: string; base64?: string; processusId?: string; nextReviewAt?: string }) {
+    const doc = await this.db.document.create({ data: { code: d.code, title: d.title, category: d.category, documentGroup: d.documentGroup, status: d.base64 ? 'ACTIVE' : 'DRAFT', processusId: d.processusId, nextReviewAt: d.nextReviewAt ? new Date(d.nextReviewAt) : undefined } });
     if (d.fileName && d.base64) {
       const { storagePath, checksum } = saveFile(d.fileName, d.base64);
       await this.db.documentVersion.create({ data: { documentId: doc.id, version: 1, fileName: d.fileName, storagePath, checksum, status: 'ACTIVE' } });
     }
     return this.db.document.findUnique({ where: { id: doc.id }, include: { versions: true, attachments: true } });
+  }
+
+  // Modifie les métadonnées d'un document déjà créé — titre, catégorie,
+  // processus rattaché, prochaine échéance de révision. Ne touche jamais
+  // au fichier lui-même (voir POST :id/versions pour ça).
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() d: { title?: string; category?: string; documentGroup?: DocumentGroup; processusId?: string | null; nextReviewAt?: string | null }) {
+    return this.db.document.update({
+      where: { id },
+      data: { title: d.title, category: d.category, documentGroup: d.documentGroup, processusId: d.processusId, nextReviewAt: d.nextReviewAt === undefined ? undefined : d.nextReviewAt ? new Date(d.nextReviewAt) : null },
+    });
   }
 
   // Ajoute une nouvelle version (mise à jour progressive) à un document
