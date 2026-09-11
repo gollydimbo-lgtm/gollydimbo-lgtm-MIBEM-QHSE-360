@@ -35,7 +35,11 @@ import { PrismaService } from '../common/prisma.service';
  envList(){return this.db.environmentRecord.findMany({orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
  trainingList(){return this.db.training.findMany({include:{processus:true},orderBy:{scheduledAt:'desc'}})} trainingCreate(b:any){return this.db.training.create({data:b})} trainingUpdate(id:string,b:any){return this.db.training.update({where:{id},data:b})} trainingDelete(id:string){return this.db.training.delete({where:{id}})}
  equipmentList(){return this.db.equipment.findMany({orderBy:{name:'asc'}})} equipmentCreate(b:any){return this.db.equipment.create({data:b})} equipmentUpdate(id:string,b:any){return this.db.equipment.update({where:{id},data:b})} equipmentDelete(id:string){return this.db.equipment.delete({where:{id}})}
- events(){return this.db.safetyEvent.findMany({orderBy:{occurredAt:'desc'}})} eventCreate(b:any){return this.db.safetyEvent.create({data:b})} eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})} eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
+ events(){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'}})}
+ eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
+ eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
+ eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
+ eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
  processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
    risks:{where:{status:'ACTIVE'}},
    actions:{where:{status:{not:'CLOSED'}}},
@@ -260,7 +264,58 @@ import { PrismaService } from '../common/prisma.service';
   });
   return {score:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
- fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
+ fournisseurList(){return this.db.fournisseur.findMany({include:{responsableInterne:true,certifications:true,_count:{select:{nonConformities:{where:{status:'OPEN'}},actions:{where:{status:{not:'CLOSED'}}},audits:true,risks:{where:{status:'ACTIVE'}}}}},orderBy:{nom:'asc'}})}
+ fournisseurGet(id:string){return this.db.fournisseur.findUnique({where:{id},include:{responsableInterne:true,certifications:true,nonConformities:true,actions:{include:{responsible:true}},audits:true,risks:true,qualityControls:true,reclamations:true}})}
+ fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})}
+ fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})}
+ fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
+
+ fournisseurCertificationList(fournisseurId:string){return this.db.fournisseurCertification.findMany({where:{fournisseurId},orderBy:{dateExpiration:'asc'}})}
+ fournisseurCertificationCreate(b:any){return this.db.fournisseurCertification.create({data:b})}
+ fournisseurCertificationUpdate(id:string,b:any){return this.db.fournisseurCertification.update({where:{id},data:b})}
+ fournisseurCertificationDelete(id:string){return this.db.fournisseurCertification.delete({where:{id}})}
+
+ // Score global pondéré — même principe que l'indice qualité et le
+ // score réclamations : moyenne pondérée des scores par domaine,
+ // pondérations réutilisant la même table de configuration.
+ async fournisseurScoreGlobal(id:string){
+  const f=await this.db.fournisseur.findUnique({where:{id}});
+  if(!f) throw new Error('Fournisseur introuvable');
+  const ponderations=await this.indicateurPonderationList();
+  const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
+  const composantes=[
+   {key:'fourn_qualite',nom:'Qualité',valeur:f.scoreQualite},
+   {key:'fourn_livraison',nom:'Livraison',valeur:f.scoreLivraison},
+   {key:'fourn_qhse',nom:'QHSE',valeur:f.scoreQhse},
+   {key:'fourn_commercial',nom:'Commercial',valeur:f.scoreCommercial},
+   {key:'fourn_reactivite',nom:'Réactivité',valeur:f.scoreReactivite},
+  ];
+  let somme=0,poidsTotal=0;
+  const detail=composantes.map(c=>{
+   const poids=poidsMap[c.key]??1;
+   if(c.valeur!=null){somme+=c.valeur*poids;poidsTotal+=poids;}
+   return {...c,poids};
+  });
+  return {score:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
+ }
+
+ // Classement automatique — tous les fournisseurs ayant au moins un
+ // score renseigné, triés du meilleur au moins bon.
+ async fournisseursClassement(){
+  const list=await this.db.fournisseur.findMany();
+  const ponderations=await this.indicateurPonderationList();
+  const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
+  const withScore=list.map(f=>{
+   const composantes=[
+    {key:'fourn_qualite',valeur:f.scoreQualite},{key:'fourn_livraison',valeur:f.scoreLivraison},
+    {key:'fourn_qhse',valeur:f.scoreQhse},{key:'fourn_commercial',valeur:f.scoreCommercial},{key:'fourn_reactivite',valeur:f.scoreReactivite},
+   ];
+   let somme=0,poidsTotal=0;
+   for(const c of composantes){const poids=poidsMap[c.key]??1;if(c.valeur!=null){somme+=c.valeur*poids;poidsTotal+=poids;}}
+   return {id:f.id,nom:f.nom,score:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null};
+  }).filter(f=>f.score!=null).sort((a,b)=>(b.score as number)-(a.score as number));
+  return {top:withScore.slice(0,10),flop:[...withScore].reverse().slice(0,10)};
+ }
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
  objectifList(){return this.db.objectifQhse.findMany({orderBy:{createdAt:'desc'}})} objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
