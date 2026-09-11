@@ -140,6 +140,8 @@ model User {
   processusRacis ProcessusRaci[]
   processusExigencesResponsable ProcessusExigence[]
   reclamationsActionCurative Reclamation[]
+  fournisseursResponsable Fournisseur[]
+  safetyEventsEnquete SafetyEvent[]
 }
 
 model Role {
@@ -318,6 +320,7 @@ model Epi {
   jobRiskProtections JobRiskProtection[]
   nonConformities NonConformity[]
   qualityControls QualityControl[]
+  safetyEvents SafetyEvent[]
 }
 
 model Employee {
@@ -332,6 +335,7 @@ model Employee {
   epiMovements EpiMovement[]
   epiInspections EpiInspection[]
   qualityControls QualityControl[]
+  safetyEvents SafetyEvent[]
 }
 
 model EpiAssignment {
@@ -421,6 +425,7 @@ model Epc {
   nonConformities NonConformity[]
   maintenances EpcMaintenance[]
   qualityControls QualityControl[]
+  safetyEvents SafetyEvent[]
 }
 
 model EpcInspection {
@@ -495,13 +500,70 @@ model SyncItem {
 model SafetyEvent {
   id String @id @default(cuid())
   type String
+  // Catégorie — configurable, jamais figée : Accident du travail /
+  // Incident-presque-accident / Autre selon ce que l'entreprise utilise.
+  categorie String?
   title String
   description String?
   occurredAt DateTime
   severity Int @default(1)
   withLostTime Boolean @default(false)
   lostDays Int?
+  // Localisation
+  siteId String?
+  zone String?
+  atelier String?
+  poste String?
+  activite String?
+  // Personne concernée — lien vers un employé si applicable, sinon
+  // saisie libre (intérimaire, visiteur, sous-traitant...).
+  employeeId String?
+  personneNom String?
+  personneFonction String?
+  typePersonnel String?
+  // Conséquences
+  typeLesion String?
+  siegeLesion String?
+  consequenceMaterielle String?
+  consequenceEnvironnementale String?
+  mecanisme String?
+  // Pour les incidents/presque-accidents — la question clé pour
+  // repérer les signaux faibles avant qu'ils ne deviennent un accident.
+  potentielGravite String?
+  // Enquête et analyse des causes — 5M (jamais limité à "erreur
+  // humaine"), texte libre pour rester adaptable à tout secteur.
+  enqueteurId String?
+  dateEnquete DateTime?
+  methodeAnalyse String?
+  causeHumaine String?
+  causeMethode String?
+  causeMachine String?
+  causeMatiere String?
+  causeMilieu String?
+  causeManagement String?
+  causeRacine String?
+  // Workflow — jamais de clôture sans passer par les étapes.
+  statut String @default("DECLARE")
+  dateCloture DateTime?
+  // Liens universels vers les modules déjà existants.
+  riskId String?
+  epiId String?
+  epcId String?
+  processusId String?
+  fournisseurId String?
+  nonConformityId String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  enqueteur User? @relation(fields:[enqueteurId], references:[id], onDelete:SetNull)
+  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
+  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
+  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
+  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+  actions Action[]
 }
 
 // Heures travaillées par période, nécessaires au calcul du Taux de Fréquence
@@ -537,13 +599,16 @@ model NonConformity {
   epiId String?
   epcId String?
   processusId String?
+  fournisseurId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
   epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   auditFindings AuditFinding[]
   reclamations Reclamation[]
+  safetyEvents SafetyEvent[]
   @@index([status,occurredAt])
 }
 
@@ -560,10 +625,14 @@ model Action {
   nonConformityId String?
   processusId String?
   reclamationId String?
+  fournisseurId String?
+  safetyEventId String?
   responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   reclamation Reclamation? @relation(fields:[reclamationId], references:[id], onDelete:SetNull)
+  safetyEvent SafetyEvent? @relation(fields:[safetyEventId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
@@ -580,6 +649,7 @@ model Site {
   controlSchedules ControlSchedule[]
   reclamations Reclamation[]
   processus Processus[]
+  safetyEvents SafetyEvent[]
   createdAt DateTime @default(now())
 }
 
@@ -854,10 +924,13 @@ model Risk {
   measures String?
   reviewedAt DateTime?
   processusId String?
+  fournisseurId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   qualityControls QualityControl[]
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
+  safetyEvents SafetyEvent[]
 }
 
 model HaccpRecord {
@@ -885,8 +958,10 @@ model QhseAudit {
   score Float?
   findings Json?
   processusId String?
+  fournisseurId String?
   auditor User? @relation(fields:[auditorId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   auditFindings AuditFinding[]
 }
@@ -1021,6 +1096,7 @@ model Processus {
   linksTo ProcessusLink[] @relation("ProcessusLinkTarget")
   indicateursQualite IndicateurQualite[]
   reclamations Reclamation[]
+  safetyEvents SafetyEvent[]
 }
 
 // Liens dessinés entre processus sur la cartographie interactive — un
@@ -1218,14 +1294,81 @@ model Fournisseur {
   id String @id @default(cuid())
   code String @unique
   nom String
+  nomCommercial String?
+  typeFournisseur String?
   categorie String?
-  scoreQualite Int?
-  derniereEvaluation DateTime?
+  familleAchat String?
+  produitsServices String?
+  adresse String?
+  pays String?
+  region String?
+  ville String?
+  contactNom String?
+  contactTelephone String?
+  contactEmail String?
+  siteWeb String?
+  responsableInterneId String?
+  dateDebutRelation DateTime?
   statut String @default("HOMOLOGUE")
+  niveauRisque String?
+  criticite Boolean @default(false)
+  // Qualification — champs libres, jamais une méthode financière ou
+  // technique imposée, pour rester utilisable dans tout secteur.
+  capaciteTechnique String?
+  capaciteCommerciale String?
+  situationFinanciere String?
+  // Homologation
+  dateHomologation DateTime?
+  dateProchaineReevaluation DateTime?
+  motifDemande String?
+  avisQhse String?
+  avisAchats String?
+  avisTechnique String?
+  decisionFinale String?
+  conditionsParticulieres String?
+  // Continuité d'approvisionnement
+  monoSource Boolean @default(false)
+  solutionSecours Boolean @default(false)
+  delaiRemplacementJours Int?
+  planContinuite String?
+  // Scores par domaine — le score global se calcule à partir de ceux-ci
+  // et des pondérations configurables, jamais ressaisi séparément.
+  scoreQualite Int?
+  scoreLivraison Int?
+  scoreQhse Int?
+  scoreCommercial Int?
+  scoreReactivite Int?
+  scoreEnvironnemental Int?
+  scoreSecurite Int?
+  derniereEvaluation DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  responsableInterne User? @relation(fields:[responsableInterneId], references:[id], onDelete:SetNull)
   qualityControls QualityControl[]
   reclamations Reclamation[]
+  nonConformities NonConformity[]
+  actions Action[]
+  audits QhseAudit[]
+  risks Risk[]
+  certifications FournisseurCertification[]
+  safetyEvents SafetyEvent[]
+}
+
+// Certifications et documents réglementaires du fournisseur — jamais
+// limité à l'ISO 9001, l'utilisateur ajoute ce qui est pertinent pour
+// son secteur.
+model FournisseurCertification {
+  id String @id @default(cuid())
+  fournisseurId String
+  type String
+  numero String?
+  organismeCertificateur String?
+  dateEmission DateTime?
+  dateExpiration DateTime?
+  statut String @default("VALIDE")
+  commentaire String?
+  createdAt DateTime @default(now())
+  fournisseur Fournisseur @relation(fields:[fournisseurId], references:[id], onDelete:Cascade)
 }
 
 model VisiteMedicale {
