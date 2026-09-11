@@ -32,7 +32,18 @@ export class QhsService {
     const topType = Object.entries(byType).sort((a, b) => b[1] - a[1])[0];
     const mostSevere = events[0];
 
-    const title = topType
+    // Cause racine ou zone dominante de la semaine — quand elle existe,
+    // c'est un thème bien plus actionnable qu'un simple type d'événement.
+    const byCause: Record<string, number> = {};
+    for (const e of events) if ((e as any).causeRacine) byCause[(e as any).causeRacine] = (byCause[(e as any).causeRacine] || 0) + 1;
+    const topCause = Object.entries(byCause).sort((a, b) => b[1] - a[1])[0];
+    const byZone: Record<string, number> = {};
+    for (const e of events) if ((e as any).zone) byZone[(e as any).zone] = (byZone[(e as any).zone] || 0) + 1;
+    const topZone = Object.entries(byZone).sort((a, b) => b[1] - a[1])[0];
+
+    const title = topCause
+      ? `Prévention : ${topCause[0]}`
+      : topType
       ? `Prévention : ${this.labelType(topType[0])}`
       : criticalNc.length > 0
       ? `Focus qualité : ${criticalNc[0].title}`
@@ -41,6 +52,8 @@ export class QhsService {
     const lines: string[] = [];
     lines.push(`Période analysée : ${this.fmt(since)} → ${this.fmt(new Date())}.`);
     lines.push(`${events.length} événement(s) sécurité déclaré(s) cette semaine.`);
+    if (topCause) lines.push(`Cause dominante identifiée lors des enquêtes : « ${topCause[0]} » (${topCause[1]} occurrence(s)) — thème prioritaire de la séance.`);
+    if (topZone) lines.push(`Zone la plus concernée : ${topZone[0]} (${topZone[1]} événement(s)).`);
     if (topType) lines.push(`Type le plus fréquent : ${this.labelType(topType[0])} (${topType[1]} occurrence(s)).`);
     if (mostSevere) lines.push(`Événement le plus grave : « ${mostSevere.title} » (sévérité ${mostSevere.severity}).`);
     if (criticalNc.length > 0) lines.push(`${criticalNc.length} non-conformité(s) critique(s) associée(s) : ${criticalNc.map((n: { code: string }) => n.code).join(', ')}.`);
