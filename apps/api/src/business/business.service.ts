@@ -207,6 +207,59 @@ import { PrismaService } from '../common/prisma.service';
    recurrencesDetectees,
   };
  }
+
+ // Alertes automatiques — chaque réclamation ouverte est passée au
+ // crible de plusieurs critères indépendants, avec un niveau de
+ // sévérité par alerte plutôt qu'un seul statut global.
+ async reclamationsAlertes(){
+  const list=await this.db.reclamation.findMany({where:{statut:'OPEN'},include:{actions:true}});
+  const now=new Date();
+  const alertes:any[]=[];
+  for(const r of list){
+   const motifs:{label:string,niveau:string}[]=[];
+   if(r.delaiCibleJours&&(now.getTime()-new Date(r.date).getTime())/86400000>r.delaiCibleJours) motifs.push({label:'Délai cible dépassé',niveau:'URGENT'});
+   if(['Critique','Majeure','Élevée'].includes(r.gravite)) motifs.push({label:'Réclamation critique',niveau:'CRITIQUE'});
+   if(!r.actionCurativeResponsableId) motifs.push({label:'Sans responsable',niveau:'ATTENTION'});
+   if((r.actions||[]).length===0) motifs.push({label:'Sans action corrective',niveau:'ATTENTION'});
+   if((r.actions||[]).some(a=>a.dueDate&&new Date(a.dueDate)<now&&a.status!=='CLOSED')) motifs.push({label:'Action en retard',niveau:'URGENT'});
+   if(['Critique','Majeure'].includes(r.gravite)&&!r.causeRacine) motifs.push({label:'Analyse des causes requise',niveau:'ATTENTION'});
+   if(r.recurrente) motifs.push({label:'Problème récurrent',niveau:'ATTENTION'});
+   if(motifs.length) alertes.push({id:r.id,client:r.client,motif:r.motif,niveau:motifs.some(m=>m.niveau==='CRITIQUE')?'CRITIQUE':motifs.some(m=>m.niveau==='URGENT')?'URGENT':'ATTENTION',motifs});
+  }
+  return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2,INFORMATION:3} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2,INFORMATION:3} as any)[b.niveau]);
+ }
+
+ // Score global de performance réclamations — même principe que
+ // l'indice global de performance qualité : moyenne pondérée,
+ // pondérations réutilisant la même table de configuration.
+ async reclamationsScoreGlobal(){
+  const [statsData,ponderations]=await Promise.all([this.reclamationsStats(),this.indicateurPonderationList()]);
+  const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
+  const closedList=await this.db.reclamation.findMany({where:{statut:'CLOSED'}});
+  const withEfficacite=closedList.filter(r=>r.efficacite);
+  const efficaces=withEfficacite.filter(r=>r.efficacite==='EFFICACE').length;
+  const tauxEfficacite=withEfficacite.length?Math.round((efficaces/withEfficacite.length)*1000)/10:null;
+  const withSatisfaction=await this.db.reclamation.count({where:{satisfaction:{not:null}}});
+  const satisfaits=await this.db.reclamation.count({where:{satisfaction:'SATISFAIT'}});
+  const tauxSatisfaction=withSatisfaction?Math.round((satisfaits/withSatisfaction)*1000)/10:null;
+  const tauxRecurrence=statsData.volume.total?Math.round((statsData.recurrencesDetectees.length/statsData.volume.total)*1000)/10:null;
+  const tauxCritiques=statsData.volume.total?Math.round((statsData.volume.critiques/statsData.volume.total)*1000)/10:null;
+  const composantes=[
+   {key:'reclam_taux_cloture',nom:'Taux de clôture',valeur:statsData.performance.tauxCloture},
+   {key:'reclam_taux_delai',nom:'Respect des délais',valeur:statsData.performance.tauxClotureDelai},
+   {key:'reclam_taux_recurrence',nom:'Faible récurrence',valeur:tauxRecurrence==null?null:100-tauxRecurrence},
+   {key:'reclam_satisfaction',nom:'Satisfaction client',valeur:tauxSatisfaction},
+   {key:'reclam_efficacite',nom:'Efficacité des actions',valeur:tauxEfficacite},
+   {key:'reclam_faible_criticite',nom:'Faible taux de critiques',valeur:tauxCritiques==null?null:100-tauxCritiques},
+  ];
+  let somme=0,poidsTotal=0;
+  const detail=composantes.map(c=>{
+   const poids=poidsMap[c.key]??1;
+   if(c.valeur!=null){somme+=c.valeur*poids;poidsTotal+=poids;}
+   return {...c,poids};
+  });
+  return {score:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
+ }
  fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
