@@ -507,6 +507,13 @@ class _ControlPageState extends State<ControlPage> {
   Map<String, TextEditingController> textCtrls = {};
   bool loading = true;
   bool submitting = false;
+  bool samplingInit = false;
+  bool savingSampling = false;
+  final lotSizeCtrl = TextEditingController();
+  final sampleSizeCtrl = TextEditingController();
+  final samplingMethodCtrl = TextEditingController();
+  final acceptanceThresholdCtrl = TextEditingController();
+  final rejectionThresholdCtrl = TextEditingController();
 
   @override
   void initState() { super.initState(); load(); }
@@ -518,8 +525,33 @@ class _ControlPageState extends State<ControlPage> {
         vals[r['pointId']] = r['value'];
         naFlags[r['pointId']] = r['notApplicable'] == true;
       }
+      if (!samplingInit) {
+        lotSizeCtrl.text = c?['lotSize']?.toString() ?? '';
+        sampleSizeCtrl.text = c?['sampleSize']?.toString() ?? '';
+        samplingMethodCtrl.text = c?['samplingMethod'] ?? '';
+        acceptanceThresholdCtrl.text = c?['acceptanceThreshold']?.toString() ?? '';
+        rejectionThresholdCtrl.text = c?['rejectionThreshold']?.toString() ?? '';
+        samplingInit = true;
+      }
     } catch (_) {}
     setState(() => loading = false);
+  }
+
+  Future<void> saveSampling() async {
+    setState(() => savingSampling = true);
+    try {
+      await api.patch('/quality/controls/${widget.controlId}', {
+        'lotSize': lotSizeCtrl.text.isEmpty ? null : int.tryParse(lotSizeCtrl.text),
+        'sampleSize': sampleSizeCtrl.text.isEmpty ? null : int.tryParse(sampleSizeCtrl.text),
+        'samplingMethod': samplingMethodCtrl.text.isEmpty ? null : samplingMethodCtrl.text,
+        'acceptanceThreshold': acceptanceThresholdCtrl.text.isEmpty ? null : double.tryParse(acceptanceThresholdCtrl.text),
+        'rejectionThreshold': rejectionThresholdCtrl.text.isEmpty ? null : double.tryParse(rejectionThresholdCtrl.text),
+      });
+      await load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => savingSampling = false);
   }
 
   Future<void> result(dynamic p, dynamic value, {bool notApplicable = false}) async {
@@ -648,6 +680,26 @@ class _ControlPageState extends State<ControlPage> {
           Card(child: Padding(padding: const EdgeInsets.all(12), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             if (c?['conformityRate'] != null) Text('Taux de conformité : ${c?['conformityRate']}%', style: const TextStyle(fontWeight: FontWeight.bold)),
             if (c?['finalDecision'] != null) Text(kDecisionLabels[c?['finalDecision']] ?? c?['finalDecision'], style: TextStyle(fontWeight: FontWeight.bold, color: c?['finalDecision'] == 'CONFORME' ? QhseColors.green : c?['finalDecision'] == 'REFUSE' ? QhseColors.red : QhseColors.amber)),
+          ]))),
+        if (!closed)
+          Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Échantillonnage (optionnel)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextField(controller: lotSizeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Taille du lot', isDense: true))),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: sampleSizeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Échantillon', isDense: true))),
+            ]),
+            const SizedBox(height: 8),
+            TextField(controller: samplingMethodCtrl, decoration: const InputDecoration(labelText: 'Méthode', isDense: true)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextField(controller: acceptanceThresholdCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Seuil d'acceptation (%)", isDense: true))),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: rejectionThresholdCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Seuil de rejet (%)', isDense: true))),
+            ]),
+            const SizedBox(height: 8),
+            Align(alignment: Alignment.centerRight, child: FilledButton(onPressed: savingSampling ? null : saveSampling, child: Text(savingSampling ? '…' : 'Enregistrer'))),
           ]))),
         ...pts.map((p) => Card(child: Padding(padding: const EdgeInsets.all(8), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${p['label']}${p['required'] == true ? ' *' : ''}${p['critical'] == true ? '  ⚠ critique' : ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
