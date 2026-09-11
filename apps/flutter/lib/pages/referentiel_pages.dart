@@ -221,26 +221,8 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
   }
 }
 
-// --- Les 7 modules, chacun défini en quelques lignes grâce au composant générique ci-dessus ---
-
-class ProcessusPage extends StatelessWidget {
-  const ProcessusPage({super.key});
-  @override
-  Widget build(BuildContext context) => SimpleCrudPage(
-        title: 'Processus & indicateurs — Processus', endpoint: '/business/processus', codePrefix: 'PROC',
-        fields: const [
-          FieldSpec('nom', 'Nom du processus', required: true),
-          FieldSpec('proprietaire', 'Propriétaire'),
-          FieldSpec('objectifs', 'Objectifs', type: 'multiline'),
-          FieldSpec('kpi', 'KPI'),
-        ],
-        titleOf: (i) => i['nom'] ?? '—', subtitleOf: (i) => i['proprietaire'] ?? 'Propriétaire non défini',
-        kpiBuilder: (items) => [
-          KpiStat('Processus cartographiés', '${items.length}', color: QhseColors.blue, icon: Icons.account_tree_outlined),
-          KpiStat('Avec propriétaire', '${items.where((i) => (i['proprietaire'] ?? '').toString().isNotEmpty).length}', color: QhseColors.green, icon: Icons.person_outline),
-        ],
-      );
-}
+// --- Les 6 modules restants, chacun défini en quelques lignes grâce au composant générique ci-dessus ---
+// (Processus dispose désormais de son propre module dédié — voir processus_pages.dart)
 
 class IndicateursQualitePage extends StatelessWidget {
   const IndicateursQualitePage({super.key});
