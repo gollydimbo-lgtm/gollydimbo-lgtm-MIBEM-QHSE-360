@@ -68,7 +68,48 @@ import { PrismaService } from '../common/prisma.service';
  processusLinkList(){return this.db.processusLink.findMany()}
  processusLinkCreate(b:any){return this.db.processusLink.create({data:{sourceId:b.sourceId,targetId:b.targetId,label:b.label}})}
  processusLinkDelete(id:string){return this.db.processusLink.delete({where:{id}})}
- indicateurList(){return this.db.indicateurQualite.findMany({orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible)}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
+ indicateurList(){return this.db.indicateurQualite.findMany({include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
+
+ // Ajouter une mesure met aussi à jour la valeur actuelle affichée sur
+ // la fiche — pas besoin de le faire deux fois séparément.
+ async indicateurMesureCreate(indicateurId:string,b:any){
+  return this.db.$transaction(async(tx)=>{
+   const m=await tx.indicateurMesure.create({data:{indicateurId,valeur:Number(b.valeur),periode:b.periode?new Date(b.periode):new Date(),commentaire:b.commentaire}});
+   await tx.indicateurQualite.update({where:{id:indicateurId},data:{actuel:Number(b.valeur)}});
+   return m;
+  });
+ }
+ indicateurMesureList(indicateurId:string){return this.db.indicateurMesure.findMany({where:{indicateurId},orderBy:{periode:'desc'}})}
+
+ // Bibliothèque d'indicateurs calculés automatiquement depuis les
+ // données déjà enregistrées dans les autres modules — le principe de
+ // convergence demandé : Contrôle → NC → Action → KPI, Réclamation →
+ // KPI, Fournisseur → KPI, Audit → KPI, Processus → KPI. Rien n'est
+ // ressaisi, tout est recalculé à la demande depuis les tables déjà
+ // remplies par les autres écrans.
+ async indicateursAuto(){
+  const [controls,nc,actions,reclamations,fournisseurControls,audits]=await Promise.all([
+   this.db.qualityControl.groupBy({by:['status'],_count:true,where:{status:{in:['COMPLIANT','NON_COMPLIANT']}}}),
+   this.db.nonConformity.groupBy({by:['status'],_count:true}),
+   this.db.action.groupBy({by:['status'],_count:true}),
+   this.db.reclamation.groupBy({by:['statut'],_count:true}),
+   this.db.qualityControl.groupBy({by:['status'],_count:true,where:{fournisseurId:{not:null},status:{in:['COMPLIANT','NON_COMPLIANT']}}}),
+   this.db.qhseAudit.groupBy({by:['status'],_count:true}),
+  ]);
+  const pct=(list:any[],key:string,matchValues:string[],totalValues?:string[])=>{
+   const total=totalValues?list.filter(x=>totalValues.includes(x[key])).reduce((s,x)=>s+x._count,0):list.reduce((s,x)=>s+x._count,0);
+   const match=list.filter(x=>matchValues.includes(x[key])).reduce((s,x)=>s+x._count,0);
+   return total>0?Math.round((match/total)*1000)/10:null;
+  };
+  return [
+   {key:'taux_conformite_controles',nom:'Taux de conformité des contrôles',categorie:'Contrôle qualité',formule:'Contrôles conformes / Contrôles réalisés × 100',unite:'%',sensInverse:false,valeur:pct(controls,'status',['COMPLIANT'])},
+   {key:'taux_nc_ouvertes',nom:'Taux de non-conformités ouvertes',categorie:'Non-conformités',formule:'NC ouvertes / NC totales × 100',unite:'%',sensInverse:true,valeur:pct(nc,'status',['OPEN'])},
+   {key:'taux_cloture_actions',nom:'Taux de clôture des actions',categorie:'Actions',formule:'Actions clôturées / Actions totales × 100',unite:'%',sensInverse:false,valeur:pct(actions,'status',['CLOSED'])},
+   {key:'taux_reclamations_cloturees',nom:'Taux de réclamations clôturées',categorie:'Satisfaction client',formule:'Réclamations clôturées / Réclamations totales × 100',unite:'%',sensInverse:false,valeur:pct(reclamations,'statut',['CLOSED'])},
+   {key:'taux_conformite_fournisseur',nom:'Taux de conformité fournisseur',categorie:'Fournisseurs',formule:'Contrôles fournisseur conformes / Contrôles fournisseur réalisés × 100',unite:'%',sensInverse:false,valeur:pct(fournisseurControls,'status',['COMPLIANT'])},
+   {key:'taux_realisation_audits',nom:'Taux de réalisation des audits',categorie:'Audits',formule:'Audits réalisés / Audits planifiés × 100',unite:'%',sensInverse:false,valeur:pct(audits,'status',['COMPLETED'],['PLANNED','IN_PROGRESS','COMPLETED'])},
+  ];
+ }
  reclamationList(){return this.db.reclamation.findMany({orderBy:{date:'desc'}})} reclamationCreate(b:any){return this.db.reclamation.create({data:b})} reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})} reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
  fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
