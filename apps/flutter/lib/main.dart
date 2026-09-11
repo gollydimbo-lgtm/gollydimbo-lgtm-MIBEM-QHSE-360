@@ -16,6 +16,7 @@ import 'pages/epi_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/users_page.dart';
 import 'pages/referentiel_pages.dart';
+import 'pages/processus_pages.dart';
 import 'pages/rapports_page.dart';
 import 'pages/other_modules_page.dart';
 import 'pages/ged_page.dart';
@@ -133,7 +134,7 @@ class _HomeShellState extends State<HomeShell> {
     _NavGroup('PILOTAGE', [_NavItem('Tableau de bord', Icons.dashboard_outlined, null)]),
     _NavGroup('QUALITÉ (ISO 9001:2015)', [
       _NavItem('Contrôles qualité', Icons.fact_check_outlined, const QualityHome()),
-      _NavItem('Processus', Icons.assignment_outlined, const ProcessusPage()),
+      _NavItem('Processus', Icons.assignment_outlined, const ProcessusHome()),
       _NavItem('Indicateurs qualité', Icons.insights_outlined, const IndicateursQualitePage()),
       _NavItem('Réclamations clients', Icons.notifications_outlined, const ReclamationsPage()),
       _NavItem('Fournisseurs', Icons.science_outlined, const FournisseursPage()),
