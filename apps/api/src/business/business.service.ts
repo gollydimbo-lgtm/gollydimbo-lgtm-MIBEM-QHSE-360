@@ -40,6 +40,70 @@ import { PrismaService } from '../common/prisma.service';
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
  eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
  eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
+
+ // Statistiques Phase 2 — répartitions et Pareto des causes, calculés à
+ // la demande depuis les événements déjà enregistrés.
+ async safetyEventsStats(){
+  const list=await this.db.safetyEvent.findMany();
+  const groupCount=(items:any[],keyFn:(x:any)=>string|null|undefined)=>{
+   const m=new Map<string,number>();
+   for(const it of items){const k=keyFn(it)||'Non renseigné';m.set(k,(m.get(k)||0)+1);}
+   return [...m.entries()].map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);
+  };
+  const accidents=list.filter(e=>e.type==='ACCIDENT');
+  const incidents=list.filter(e=>e.type!=='ACCIDENT');
+  const parType=groupCount(list,e=>e.type);
+  const parMecanisme=groupCount(accidents.filter(e=>e.mecanisme),e=>e.mecanisme);
+  const parLesion=groupCount(accidents.filter(e=>e.typeLesion),e=>e.typeLesion);
+  const parZone=groupCount(list.filter(e=>e.zone),e=>e.zone);
+  // Pareto des causes racines — toutes catégories d'événements confondues.
+  const causesList=list.filter(e=>e.causeRacine).map(e=>e.causeRacine as string);
+  const parCause=groupCount(causesList.map(c=>({c})),(x:any)=>x.c);
+  const totalCauses=parCause.reduce((s,c)=>s+c.value,0);
+  let cumul=0;
+  const pareto=parCause.map(c=>{cumul+=c.value;return {...c,pct:totalCauses?Math.round((c.value/totalCauses)*1000)/10:0,cumulPct:totalCauses?Math.round((cumul/totalCauses)*1000)/10:0};});
+  return {
+   volume:{total:list.length,accidents:accidents.length,incidents:incidents.length,avecArret:list.filter(e=>e.withLostTime).length,graves:list.filter(e=>e.severity>=4).length},
+   parType,parMecanisme,parLesion,parZone,pareto,
+  };
+ }
+
+ // Alertes automatiques — chaque événement encore ouvert passé au
+ // crible de plusieurs critères indépendants.
+ async safetyEventsAlertes(){
+  const list=await this.db.safetyEvent.findMany({where:{statut:{not:'CLOTURE'}},include:{actions:true}});
+  const now=new Date();
+  const alertes:any[]=[];
+  for(const e of list){
+   const motifs:{label:string,niveau:string}[]=[];
+   if(e.severity>=4) motifs.push({label:'Événement grave',niveau:'CRITIQUE'});
+   if(['DECES','INVALIDITE','COLLECTIF'].includes(e.potentielGravite||'')) motifs.push({label:'Fort potentiel de gravité',niveau:'CRITIQUE'});
+   const joursDepuisDeclaration=(now.getTime()-new Date(e.occurredAt).getTime())/86400000;
+   if(e.statut==='DECLARE'&&joursDepuisDeclaration>3) motifs.push({label:'Enquête non réalisée',niveau:'URGENT'});
+   if(!e.enqueteurId&&joursDepuisDeclaration>3) motifs.push({label:'Sans enquêteur affecté',niveau:'ATTENTION'});
+   if((e.actions||[]).some((a:any)=>a.dueDate&&new Date(a.dueDate)<now&&a.status!=='CLOSED')) motifs.push({label:'Action en retard',niveau:'URGENT'});
+   if((e.actions||[]).length===0&&['ANALYSE_CAUSES','ACTIONS_DEFINIES'].includes(e.statut)) motifs.push({label:'Sans action définie',niveau:'ATTENTION'});
+   if(motifs.length) alertes.push({id:e.id,title:e.title,type:e.type,niveau:motifs.some(m=>m.niveau==='CRITIQUE')?'CRITIQUE':motifs.some(m=>m.niveau==='URGENT')?'URGENT':'ATTENTION',motifs});
+  }
+  return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
+ }
+
+ // Détection de récidive — même cause racine, même zone ou même
+ // mécanisme apparu plus d'une fois.
+ async safetyEventsRecidives(){
+  const list=await this.db.safetyEvent.findMany({orderBy:{occurredAt:'desc'}});
+  const buildGroups=(keyFn:(e:any)=>string|null)=>{
+   const map=new Map<string,any[]>();
+   for(const e of list){const k=keyFn(e);if(!k)continue;if(!map.has(k))map.set(k,[]);map.get(k)!.push(e);}
+   return [...map.entries()].filter(([,items])=>items.length>1).map(([key,items])=>({critere:key,nombre:items.length,dernierEvenement:items[0].title,derniereOccurrence:items[0].occurredAt}));
+  };
+  return {
+   parCauseRacine:buildGroups(e=>e.causeRacine).sort((a,b)=>b.nombre-a.nombre),
+   parZone:buildGroups(e=>e.zone).sort((a,b)=>b.nombre-a.nombre),
+   parMecanisme:buildGroups(e=>e.mecanisme).sort((a,b)=>b.nombre-a.nombre),
+  };
+ }
+
  processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
    risks:{where:{status:'ACTIVE'}},
    actions:{where:{status:{not:'CLOSED'}}},
