@@ -148,7 +148,14 @@ import { PrismaService } from '../common/prisma.service';
   return {indice:sommePoids>0?Math.round((sommePonderee/sommePoids)*10)/10:null,detail};
  }
 
- reclamationList(){return this.db.reclamation.findMany({orderBy:{date:'desc'}})} reclamationCreate(b:any){return this.db.reclamation.create({data:b})} reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})} reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
+ async reclamationList(){
+  const list=await this.db.reclamation.findMany({include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:true},orderBy:{date:'desc'}});
+  return list.map(r=>({...r,coutTotal:[r.coutRemboursement,r.coutRemplacement,r.coutTransport,r.coutMainOeuvre,r.coutAutres,r.actionCurativeCout].reduce((s:number,v)=>s+(v||0),0)}));
+ }
+ reclamationGet(id:string){return this.db.reclamation.findUnique({where:{id},include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:{include:{responsible:true}}}})}
+ reclamationCreate(b:any){return this.db.reclamation.create({data:b})}
+ reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})}
+ reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
  fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
