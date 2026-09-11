@@ -249,6 +249,9 @@ model Document {
   currentVersion Int @default(1)
   createdById String?
   processusId String?
+  // Prochaine date de révision — sans elle, aucune alerte d'échéance
+  // documentaire n'a de sens à calculer.
+  nextReviewAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   createdBy User? @relation("DocumentCreator", fields:[createdById], references:[id], onDelete:SetNull)
@@ -538,6 +541,7 @@ model NonConformity {
   epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
   epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  auditFindings AuditFinding[]
   @@index([status,occurredAt])
 }
 
@@ -879,6 +883,24 @@ model QhseAudit {
   auditor User? @relation(fields:[auditorId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
+  auditFindings AuditFinding[]
+}
+
+// Constat d'audit structuré — remplace le champ "findings" en texte
+// libre jamais exploité. Un constat critique peut générer automatiquement
+// une non-conformité et une action, exactement comme un point de
+// contrôle critique le fait déjà dans le moteur de contrôle universel.
+model AuditFinding {
+  id String @id @default(cuid())
+  auditId String
+  description String
+  classification String?
+  critical Boolean @default(false)
+  status String @default("OPEN")
+  nonConformityId String?
+  createdAt DateTime @default(now())
+  audit QhseAudit @relation(fields:[auditId], references:[id], onDelete:Cascade)
+  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
 }
 
 model EnvironmentRecord {
