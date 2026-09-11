@@ -1125,6 +1125,16 @@ model IndicateurMesure {
   indicateur IndicateurQualite @relation(fields:[indicateurId], references:[id], onDelete:Cascade)
 }
 
+// Pondération de chaque indicateur de la bibliothèque automatique dans
+// l'indice global de performance qualité — entièrement configurable,
+// jamais figée en dur dans le code.
+model IndicateurPonderation {
+  id String @id @default(cuid())
+  autoKey String @unique
+  poids Float @default(1)
+  updatedAt DateTime @updatedAt
+}
+
 model Reclamation {
   id String @id @default(cuid())
   code String @unique
