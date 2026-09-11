@@ -380,6 +380,40 @@ import { PrismaService } from '../common/prisma.service';
   }).filter(f=>f.score!=null).sort((a,b)=>(b.score as number)-(a.score as number));
   return {top:withScore.slice(0,10),flop:[...withScore].reverse().slice(0,10)};
  }
+
+ // Alertes automatiques — chaque fournisseur passé au crible de
+ // plusieurs critères indépendants, avec un niveau de sévérité par
+ // alerte plutôt qu'un seul statut global.
+ async fournisseursAlertes(){
+  const list=await this.db.fournisseur.findMany({include:{certifications:true,_count:{select:{nonConformities:{where:{status:'OPEN'}}}}}});
+  const now=new Date();
+  const dans60Jours=new Date(now.getTime()+60*86400000);
+  const alertes:any[]=[];
+  for(const f of list){
+   if(['SUSPENDU','BLOQUE','RETIRE','INACTIF'].includes(f.statut)) continue;
+   const motifs:{label:string,niveau:string}[]=[];
+   for(const cert of f.certifications){
+    if(cert.dateExpiration&&new Date(cert.dateExpiration)<now) motifs.push({label:`Certification expirée : ${cert.type}`,niveau:'CRITIQUE'});
+    else if(cert.dateExpiration&&new Date(cert.dateExpiration)<dans60Jours) motifs.push({label:`Certification bientôt expirée : ${cert.type}`,niveau:'ATTENTION'});
+   }
+   if(f.dateProchaineReevaluation&&new Date(f.dateProchaineReevaluation)<now) motifs.push({label:'Réévaluation échue',niveau:'URGENT'});
+   if((f._count?.nonConformities||0)>0&&f.criticite) motifs.push({label:'NC ouverte chez un fournisseur critique',niveau:'CRITIQUE'});
+   if(f.criticite&&f.monoSource&&!f.solutionSecours) motifs.push({label:'Mono-source critique sans solution de secours',niveau:'URGENT'});
+   const scores=[f.scoreQualite,f.scoreLivraison,f.scoreQhse,f.scoreCommercial,f.scoreReactivite].filter(v=>v!=null) as number[];
+   const moyenne=scores.length?scores.reduce((s,v)=>s+v,0)/scores.length:null;
+   if(moyenne!=null&&moyenne<50) motifs.push({label:'Score global sous le seuil critique (< 50%)',niveau:'CRITIQUE'});
+   if(motifs.length) alertes.push({id:f.id,nom:f.nom,niveau:motifs.some(m=>m.niveau==='CRITIQUE')?'CRITIQUE':motifs.some(m=>m.niveau==='URGENT')?'URGENT':'ATTENTION',motifs});
+  }
+  return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
+ }
+
+ // Matrice de risque — réutilise le module Risques déjà existant
+ // (probabilité × gravité déjà calculées là-bas), simplement filtré
+ // sur les risques liés à un fournisseur.
+ async fournisseursMatriceRisque(){
+  const risks=await this.db.risk.findMany({where:{fournisseurId:{not:null},status:'ACTIVE'},include:{fournisseur:true},orderBy:{score:'desc'}});
+  return risks.map(r=>({id:r.id,fournisseur:r.fournisseur?.nom,hazard:r.hazard,severity:r.severity,probability:r.probability,score:r.score}));
+ }
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
  objectifList(){return this.db.objectifQhse.findMany({orderBy:{createdAt:'desc'}})} objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
