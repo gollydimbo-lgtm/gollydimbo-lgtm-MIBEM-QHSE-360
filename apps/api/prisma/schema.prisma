@@ -139,6 +139,7 @@ model User {
   processusActivitiesResponsible ProcessusActivity[] @relation("ProcessusActivityResponsible")
   processusRacis ProcessusRaci[]
   processusExigencesResponsable ProcessusExigence[]
+  reclamationsActionCurative Reclamation[]
 }
 
 model Role {
@@ -542,6 +543,7 @@ model NonConformity {
   epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   auditFindings AuditFinding[]
+  reclamations Reclamation[]
   @@index([status,occurredAt])
 }
 
@@ -557,9 +559,11 @@ model Action {
   responsibleId String?
   nonConformityId String?
   processusId String?
+  reclamationId String?
   responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  reclamation Reclamation? @relation(fields:[reclamationId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
@@ -574,6 +578,7 @@ model Site {
   lines ProductionLine[]
   qualityControls QualityControl[]
   controlSchedules ControlSchedule[]
+  reclamations Reclamation[]
   processus Processus[]
   createdAt DateTime @default(now())
 }
@@ -1015,6 +1020,7 @@ model Processus {
   linksFrom ProcessusLink[] @relation("ProcessusLinkSource")
   linksTo ProcessusLink[] @relation("ProcessusLinkTarget")
   indicateursQualite IndicateurQualite[]
+  reclamations Reclamation[]
 }
 
 // Liens dessinés entre processus sur la cartographie interactive — un
@@ -1139,13 +1145,73 @@ model Reclamation {
   id String @id @default(cuid())
   code String @unique
   client String
+  typeClient String?
+  clientContact String?
   motif String
   description String?
+  canal String?
   date DateTime @default(now())
+  dateEvenement DateTime?
+  // Produit / service concerné
+  produitService String?
+  reference String?
+  lotNumber String?
+  commandeNumber String?
+  factureNumber String?
+  quantiteConcernee Float?
+  siteId String?
+  processusId String?
+  fournisseurId String?
+  // Classification — texte libre configurable, jamais une liste figée
+  categorieProbleme String?
   gravite String @default("Faible")
+  scoreCriticite Int?
   statut String @default("OPEN")
+  // SLA — sans ces dates, aucun délai n'est mesurable
+  dateAccuseReception DateTime?
+  datePremiereReponse DateTime?
+  dateResolutionPrevue DateTime?
+  dateResolutionReelle DateTime?
+  dateCloture DateTime?
+  delaiCibleJours Int?
+  // Action curative immédiate (section 5 du prompt)
+  actionCurative String?
+  actionCurativeResponsableId String?
+  actionCurativeDate DateTime?
+  actionCurativeCout Float?
+  // Analyse des causes — 5 Pourquoi + Ishikawa (5M)
+  methodeAnalyse String?
+  pourquoi1 String?
+  pourquoi2 String?
+  pourquoi3 String?
+  pourquoi4 String?
+  pourquoi5 String?
+  categorieCauseIshikawa String?
+  causeRacine String?
+  // Vérification d'efficacité — jamais une clôture automatique
+  efficacite String?
+  // Satisfaction client après traitement
+  satisfaction String?
+  noteSatisfaction Float?
+  commentaireClient String?
+  // Coûts détaillés — le total se calcule, ne se ressaisit pas
+  coutRemboursement Float?
+  coutRemplacement Float?
+  coutTransport Float?
+  coutMainOeuvre Float?
+  coutAutres Float?
+  // Récurrence — détectée automatiquement à la lecture, mais peut aussi
+  // être confirmée manuellement par l'utilisateur
+  recurrente Boolean @default(false)
+  nonConformityId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
+  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+  actionCurativeResponsable User? @relation(fields:[actionCurativeResponsableId], references:[id], onDelete:SetNull)
+  actions Action[]
 }
 
 model Fournisseur {
@@ -1159,6 +1225,7 @@ model Fournisseur {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   qualityControls QualityControl[]
+  reclamations Reclamation[]
 }
 
 model VisiteMedicale {
