@@ -28,7 +28,9 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
   final api = Api();
   List items = [];
   List autoItems = [];
+  Map indiceGlobal = {'indice': null, 'detail': []};
   bool loading = true;
+  bool showPonderation = false;
 
   @override
   void initState() { super.initState(); load(); }
@@ -37,9 +39,15 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
     setState(() => loading = true);
     try {
       items = List.from(await api.get('/business/indicateurs-qualite'));
-      autoItems = List.from(await api.get('/business/indicateurs-auto'));
+      autoItems = List.from(await api.get('/business/indicateurs-auto-compare'));
+      indiceGlobal = Map.from(await api.get('/business/indice-global-qualite'));
     } catch (_) {}
     setState(() => loading = false);
+  }
+
+  Future<void> _savePonderation(String autoKey, String poids) async {
+    try { await api.post('/business/indicateurs-ponderation', {'autoKey': autoKey, 'poids': double.tryParse(poids) ?? 1}); load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
   Future<void> _addMesure(Map ind) async {
@@ -156,6 +164,25 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
           : RefreshIndicator(
               onRefresh: load,
               child: ListView(padding: const EdgeInsets.all(12), children: [
+                Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Indice global de performance qualité', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text(indiceGlobal['indice'] != null ? '${indiceGlobal['indice']}/100' : '—', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 32)),
+                    TextButton(onPressed: () => setState(() => showPonderation = !showPonderation), child: Text(showPonderation ? 'Masquer' : 'Pondérations')),
+                  ]),
+                  if (showPonderation) ...List.from(indiceGlobal['detail'] ?? []).map((d) {
+                    final ctrl = TextEditingController(text: '${d['poids'] ?? 1}');
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(children: [
+                        Expanded(child: Text(d['nom'] ?? '', style: const TextStyle(fontSize: 12))),
+                        SizedBox(width: 60, child: TextField(controller: ctrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(isDense: true), onSubmitted: (v) => _savePonderation(d['key'], v))),
+                      ]),
+                    );
+                  }),
+                ]))),
+                const SizedBox(height: 16),
                 KpiBar([
                   KpiStat('Indicateurs suivis', '${items.length}', color: QhseColors.blue, icon: Icons.insights_outlined),
                   KpiStat('Dans la cible', '$dansLaCible', color: QhseColors.green, icon: Icons.check_circle_outline),
@@ -163,14 +190,21 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
                 ]),
                 const SizedBox(height: 16),
                 const Text('Bibliothèque automatique', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                Text('Calculée depuis les contrôles, NC, actions, réclamations, fournisseurs et audits déjà enregistrés.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+                Text('Mois en cours vs mois précédent — calculée depuis les contrôles, NC, actions, réclamations, fournisseurs et audits déjà enregistrés.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
                 const SizedBox(height: 8),
                 ...autoItems.map((a) {
-                  final st = indicateurStatus((a['valeur'] as num?)?.toDouble(), null, a['sensInverse'] == true, null, null);
+                  final valeur = (a['valeur'] as num?)?.toDouble();
+                  final precedente = (a['valeurPrecedente'] as num?)?.toDouble();
+                  final st = indicateurStatus(valeur, null, a['sensInverse'] == true, null, null);
+                  final delta = (valeur != null && precedente != null) ? (((valeur - precedente) * 10).round() / 10) : null;
+                  final deltaGood = delta == null ? null : (a['sensInverse'] == true ? delta <= 0 : delta >= 0);
                   return Card(child: ListTile(
                     title: Text(a['nom'] ?? ''),
                     subtitle: Text('${a['categorie'] ?? ''} · ${a['formule'] ?? ''}', style: const TextStyle(fontSize: 11)),
-                    trailing: Text(a['valeur'] != null ? '${a['valeur']}${a['unite'] ?? ''}' : '—', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: st['color'] as Color? ?? QhseColors.textPrimary)),
+                    trailing: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text(valeur != null ? '$valeur${a['unite'] ?? ''}' : '—', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: st['color'] as Color? ?? QhseColors.textPrimary)),
+                      if (delta != null) Text('${delta > 0 ? '▲' : delta < 0 ? '▼' : '='}${delta.abs()}${a['unite'] ?? ''}', style: TextStyle(fontSize: 11, color: deltaGood == true ? QhseColors.green : QhseColors.red)),
+                    ]),
                   ));
                 }),
                 const SizedBox(height: 16),
