@@ -87,14 +87,15 @@ import { PrismaService } from '../common/prisma.service';
  // KPI, Fournisseur → KPI, Audit → KPI, Processus → KPI. Rien n'est
  // ressaisi, tout est recalculé à la demande depuis les tables déjà
  // remplies par les autres écrans.
- async indicateursAuto(){
+ async indicateursAuto(range?:{from:Date,to:Date}){
+  const dateFilter=(field:string)=>range?{[field]:{gte:range.from,lt:range.to}}:{};
   const [controls,nc,actions,reclamations,fournisseurControls,audits]=await Promise.all([
-   this.db.qualityControl.groupBy({by:['status'],_count:true,where:{status:{in:['COMPLIANT','NON_COMPLIANT']}}}),
-   this.db.nonConformity.groupBy({by:['status'],_count:true}),
-   this.db.action.groupBy({by:['status'],_count:true}),
-   this.db.reclamation.groupBy({by:['statut'],_count:true}),
-   this.db.qualityControl.groupBy({by:['status'],_count:true,where:{fournisseurId:{not:null},status:{in:['COMPLIANT','NON_COMPLIANT']}}}),
-   this.db.qhseAudit.groupBy({by:['status'],_count:true}),
+   this.db.qualityControl.groupBy({by:['status'],_count:true,where:{status:{in:['COMPLIANT','NON_COMPLIANT']},...dateFilter('controlDate')}}),
+   this.db.nonConformity.groupBy({by:['status'],_count:true,where:{...dateFilter('occurredAt')}}),
+   this.db.action.groupBy({by:['status'],_count:true,where:{...dateFilter('createdAt')}}),
+   this.db.reclamation.groupBy({by:['statut'],_count:true,where:{...dateFilter('date')}}),
+   this.db.qualityControl.groupBy({by:['status'],_count:true,where:{fournisseurId:{not:null},status:{in:['COMPLIANT','NON_COMPLIANT']},...dateFilter('controlDate')}}),
+   this.db.qhseAudit.groupBy({by:['status'],_count:true,where:{...dateFilter('auditDate')}}),
   ]);
   const pct=(list:any[],key:string,matchValues:string[],totalValues?:string[])=>{
    const total=totalValues?list.filter(x=>totalValues.includes(x[key])).reduce((s,x)=>s+x._count,0):list.reduce((s,x)=>s+x._count,0);
@@ -110,6 +111,43 @@ import { PrismaService } from '../common/prisma.service';
    {key:'taux_realisation_audits',nom:'Taux de réalisation des audits',categorie:'Audits',formule:'Audits réalisés / Audits planifiés × 100',unite:'%',sensInverse:false,valeur:pct(audits,'status',['COMPLETED'],['PLANNED','IN_PROGRESS','COMPLETED'])},
   ];
  }
+
+ // Comparaison mois en cours / mois précédent — même bibliothèque,
+ // juste calculée sur deux fenêtres de dates différentes.
+ async indicateursAutoCompare(){
+  const now=new Date();
+  const startCurrent=new Date(now.getFullYear(),now.getMonth(),1);
+  const startPrevious=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const [current,previous]=await Promise.all([
+   this.indicateursAuto({from:startCurrent,to:now}),
+   this.indicateursAuto({from:startPrevious,to:startCurrent}),
+  ]);
+  return current.map((c,i)=>({...c,valeurPrecedente:previous[i]?.valeur??null}));
+ }
+
+ indicateurPonderationList(){return this.db.indicateurPonderation.findMany()}
+ async indicateurPonderationSet(autoKey:string,poids:number){
+  return this.db.indicateurPonderation.upsert({where:{autoKey},update:{poids},create:{autoKey,poids}});
+ }
+
+ // Indice global de performance qualité — moyenne pondérée des
+ // indicateurs de la bibliothèque automatique, pondérations
+ // entièrement configurables (poids égal à 1 par défaut si non réglé).
+ async indiceGlobalQualite(){
+  const [autoList,ponderations]=await Promise.all([this.indicateursAuto(),this.indicateurPonderationList()]);
+  const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
+  let sommePonderee=0,sommePoids=0;
+  const detail=autoList.map(a=>{
+   const poids=poidsMap[a.key]??1;
+   // Un indicateur "sens inverse" (ex: taux de NC) est normalisé pour
+   // que 100 corresponde toujours à la meilleure performance possible.
+   const valeurNormalisee=a.valeur==null?null:(a.sensInverse?100-a.valeur:a.valeur);
+   if(valeurNormalisee!=null){sommePonderee+=valeurNormalisee*poids;sommePoids+=poids;}
+   return {...a,poids,valeurNormalisee};
+  });
+  return {indice:sommePoids>0?Math.round((sommePonderee/sommePoids)*10)/10:null,detail};
+ }
+
  reclamationList(){return this.db.reclamation.findMany({orderBy:{date:'desc'}})} reclamationCreate(b:any){return this.db.reclamation.create({data:b})} reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})} reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
  fournisseurList(){return this.db.fournisseur.findMany({orderBy:{nom:'asc'}})} fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})} fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})} fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
