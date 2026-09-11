@@ -1014,6 +1014,7 @@ model Processus {
   qualityControls QualityControl[]
   linksFrom ProcessusLink[] @relation("ProcessusLinkSource")
   linksTo ProcessusLink[] @relation("ProcessusLinkTarget")
+  indicateursQualite IndicateurQualite[]
 }
 
 // Liens dessinés entre processus sur la cartographie interactive — un
@@ -1093,8 +1094,35 @@ model IndicateurQualite {
   cible Float
   unite String?
   sensInverse Boolean @default(false)
+  // Catégorie et formule — texte libre transparent, jamais un calcul
+  // caché : l'utilisateur voit toujours comment la valeur est obtenue.
+  categorie String?
+  formule String?
+  frequence String?
+  processusId String?
+  seuilVert Float?
+  seuilOrange Float?
+  // MANUEL = saisi par l'utilisateur, AUTO = calculé depuis un autre
+  // module (voir /business/indicateurs-auto) — jamais les deux à la
+  // fois pour éviter la double saisie que le prompt veut éliminer.
+  source String @default("MANUEL")
+  autoKey String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  mesures IndicateurMesure[]
+}
+
+// Historique des mesures — sans lui, un indicateur n'a ni tendance ni
+// évolution, seulement une valeur figée dans le temps.
+model IndicateurMesure {
+  id String @id @default(cuid())
+  indicateurId String
+  valeur Float
+  periode DateTime @default(now())
+  commentaire String?
+  createdAt DateTime @default(now())
+  indicateur IndicateurQualite @relation(fields:[indicateurId], references:[id], onDelete:Cascade)
 }
 
 model Reclamation {
