@@ -20,6 +20,7 @@ import 'pages/processus_pages.dart';
 import 'pages/indicateurs_pages.dart';
 import 'pages/reclamations_pages.dart';
 import 'pages/fournisseurs_pages.dart';
+import 'pages/hygiene_pages.dart';
 import 'pages/rapports_page.dart';
 import 'pages/other_modules_page.dart';
 import 'pages/ged_page.dart';
@@ -145,7 +146,7 @@ class _HomeShellState extends State<HomeShell> {
     _NavGroup('SÉCURITÉ (ISO 45001:2018)', [
       _NavItem('Accidents & incidents', Icons.warning_amber_outlined, const SafetyEventsPage()),
       _NavItem('Gestion EPI/EPC', Icons.health_and_safety_outlined, const EpiPage()),
-      _NavItem('Hygiène au travail', Icons.favorite_outline, const VisitesMedicalesPage()),
+      _NavItem('Hygiène au travail', Icons.favorite_outline, const HygieneHome()),
     ]),
     _NavGroup('ENVIRONNEMENT (ISO 14001:2026)', [_NavItem('Environnement', Icons.eco_outlined, const EnvironmentPage())]),
     _NavGroup('RISQUES & AUDITS', [
