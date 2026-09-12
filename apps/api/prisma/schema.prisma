@@ -341,6 +341,7 @@ model Employee {
   visitesMedicales VisiteMedicale[]
   expositions ExpositionSurveillance[]
   tmsSignalements TmsSignalement[]
+  penibiliteExpositions PenibiliteExposition[]
 }
 
 model EpiAssignment {
@@ -1491,6 +1492,33 @@ model TmsSignalement {
   updatedAt DateTime @updatedAt
   employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
   analyseErgonomique AnalyseErgonomique? @relation(fields:[analyseErgonomiqueId], references:[id], onDelete:SetNull)
+}
+
+// Catalogue des facteurs de pénibilité — configurable, jamais une
+// liste réglementaire unique imposée à toutes les entreprises.
+model PenibiliteFactor {
+  id String @id @default(cuid())
+  nom String @unique
+  description String?
+  actif Boolean @default(true)
+  createdAt DateTime @default(now())
+  expositions PenibiliteExposition[]
+}
+
+model PenibiliteExposition {
+  id String @id @default(cuid())
+  employeeId String?
+  facteurId String
+  poste String?
+  niveauExposition String?
+  duree String?
+  frequence String?
+  mesuresPrevention String?
+  dateEvaluation DateTime @default(now())
+  prochaineReevaluation DateTime?
+  createdAt DateTime @default(now())
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  facteur PenibiliteFactor @relation(fields:[facteurId], references:[id], onDelete:Cascade)
 }
 
 // Surveillance des expositions — une mesure à la fois, liée à un
