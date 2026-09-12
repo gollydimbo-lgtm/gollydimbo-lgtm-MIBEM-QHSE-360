@@ -1767,6 +1767,84 @@ function PenibiliteExpositionForm({ facteurs, onClose, onCreated }) {
   );
 }
 
+function ProduitChimiqueForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const fournisseursQ = useCollection('/business/fournisseurs');
+  const [form, setForm] = useState({
+    nom: record?.nom || '', reference: record?.reference || '', fournisseurId: record?.fournisseurId || '',
+    quantiteStockee: record?.quantiteStockee ?? '', quantiteConsommee: record?.quantiteConsommee ?? '', unite: record?.unite || '',
+    classification: record?.classification || '', dangerEnvironnemental: record?.dangerEnvironnemental || '', zoneStockage: record?.zoneStockage || '',
+    retention: record?.retention || false, fdsDisponible: record?.fdsDisponible || false,
+    dateControle: record?.dateControle ? new Date(record.dateControle).toISOString().slice(0, 10) : '',
+    dateExpiration: record?.dateExpiration ? new Date(record.dateExpiration).toISOString().slice(0, 10) : '',
+    seuilAlerteStock: record?.seuilAlerteStock ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      const payload = {
+        ...form, fournisseurId: form.fournisseurId || null,
+        quantiteStockee: form.quantiteStockee === '' ? null : Number(form.quantiteStockee),
+        quantiteConsommee: form.quantiteConsommee === '' ? null : Number(form.quantiteConsommee),
+        seuilAlerteStock: form.seuilAlerteStock === '' ? null : Number(form.seuilAlerteStock),
+        dateControle: form.dateControle ? new Date(form.dateControle).toISOString() : null,
+        dateExpiration: form.dateExpiration ? new Date(form.dateExpiration).toISOString() : null,
+      };
+      if (editing) await api.patch(`/business/produits-chimiques/${record.id}`, payload);
+      else await api.post('/business/produits-chimiques', { code: genCode('CHIM'), ...payload });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function del() {
+    setSaving(true);
+    try { await confirmAndDelete(record.nom, `/business/produits-chimiques/${record.id}`, () => { onCreated(); onClose(); }); }
+    catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? 'Modifier le produit chimique' : 'Nouveau produit chimique'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Nom"><input required value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Référence (optionnel)"><input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Fournisseur (optionnel)">
+          <select value={form.fournisseurId} onChange={(e) => setForm({ ...form, fournisseurId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(fournisseursQ.data || []).map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
+          </select>
+        </FormField>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Quantité stockée"><input type="number" step="any" value={form.quantiteStockee} onChange={(e) => setForm({ ...form, quantiteStockee: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Unité"><input value={form.unite} onChange={(e) => setForm({ ...form, unite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="L, kg..." /></FormField>
+          <FormField label="Seuil d'alerte stock"><input type="number" step="any" value={form.seuilAlerteStock} onChange={(e) => setForm({ ...form, seuilAlerteStock: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Classification (optionnel)"><input value={form.classification} onChange={(e) => setForm({ ...form, classification: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Danger environnemental (optionnel)"><input value={form.dangerEnvironnemental} onChange={(e) => setForm({ ...form, dangerEnvironnemental: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Zone de stockage (optionnel)"><input value={form.zoneStockage} onChange={(e) => setForm({ ...form, zoneStockage: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex items-center gap-2 text-xs" style={{ color: C.textMuted }}><input type="checkbox" checked={form.retention} onChange={(e) => setForm({ ...form, retention: e.target.checked })} />Rétention en place</label>
+          <label className="flex items-center gap-2 text-xs" style={{ color: C.textMuted }}><input type="checkbox" checked={form.fdsDisponible} onChange={(e) => setForm({ ...form, fdsDisponible: e.target.checked })} />FDS disponible</label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Date de contrôle (optionnel)"><input type="date" value={form.dateControle} onChange={(e) => setForm({ ...form, dateControle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Date d'expiration (optionnel)"><input type="date" value={form.dateExpiration} onChange={(e) => setForm({ ...form, dateExpiration: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function VeilleForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record?.id;
@@ -5736,14 +5814,17 @@ function EnvironnementPage() {
   const alertesQ = useCollection('/business/environnement-alertes');
   const tendancesQ = useCollection('/business/environnement-tendances');
   const veilleQ = useCollection('/business/veille-reglementaire');
+  const produitsQ = useCollection('/business/produits-chimiques');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
   const [showAspectForm, setShowAspectForm] = useState(false);
   const [selectedAspect, setSelectedAspect] = useState(null);
   const [showVeilleForm, setShowVeilleForm] = useState(false);
   const [selectedVeille, setSelectedVeille] = useState(null);
+  const [showProduitForm, setShowProduitForm] = useState(false);
+  const [selectedProduit, setSelectedProduit] = useState(null);
   const [tab, setTab] = useState('apercu');
-  if (records.loading || aspects.loading || dashboardQ.loading || alertesQ.loading || tendancesQ.loading || veilleQ.loading) return <LoadingPanel />;
+  if (records.loading || aspects.loading || dashboardQ.loading || alertesQ.loading || tendancesQ.loading || veilleQ.loading || produitsQ.loading) return <LoadingPanel />;
   if (records.error) return <ErrorPanel message={records.error} onRetry={records.reload} />;
   const list = records.data || [];
   const aspectList = aspects.data || [];
@@ -5751,6 +5832,8 @@ function EnvironnementPage() {
   const alertes = alertesQ.data || [];
   const tendances = tendancesQ.data || [];
   const veilleEnv = (veilleQ.data || []).filter((v) => v.domaine === 'Environnement');
+  const produits = produitsQ.data || [];
+  const now2 = new Date();
   const byCategorie = groupCount(list.filter((r) => r.categorie), (r) => r.categorie);
   const sorted = [...list].sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
   const aspectsSignificatifs = aspectList.filter((a) => a.significatif && a.statut === 'ACTIVE').length;
@@ -5768,9 +5851,10 @@ function EnvironnementPage() {
       {(showForm || selected) && <EnvironmentForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={records.reload} />}
       {(showAspectForm || selectedAspect) && <EnvironnementAspectForm record={selectedAspect} onClose={() => { setShowAspectForm(false); setSelectedAspect(null); }} onCreated={aspects.reload} />}
       {(showVeilleForm || selectedVeille) && <VeilleForm record={selectedVeille ? { ...selectedVeille } : { domaine: 'Environnement' }} onClose={() => { setShowVeilleForm(false); setSelectedVeille(null); }} onCreated={veilleQ.reload} />}
+      {(showProduitForm || selectedProduit) && <ProduitChimiqueForm record={selectedProduit} onClose={() => { setShowProduitForm(false); setSelectedProduit(null); }} onCreated={produitsQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['releves', 'Relevés'], ['aspects', 'Aspects & Impacts'], ['conformite', 'Conformité réglementaire'], ['indicateurs', 'Indicateurs']].map(([id, label]) => (
+        {[['apercu', "Vue d'ensemble"], ['releves', 'Relevés'], ['aspects', 'Aspects & Impacts'], ['conformite', 'Conformité réglementaire'], ['chimiques', 'Produits chimiques'], ['indicateurs', 'Indicateurs']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -5913,6 +5997,33 @@ function EnvironnementPage() {
                   rows={veilleEnv.map((v) => [v.texte.slice(0, 60), v.dateApplication ? new Date(v.dateApplication).toLocaleDateString('fr-FR') : '—', v.responsable ? `${v.responsable.firstName} ${v.responsable.lastName}` : '—', <span style={{ color: veilleStatutColor[v.statut] || C.textMuted, fontWeight: 600 }}>{veilleStatutLabel[v.statut] || v.statut}</span>])}
                   onRowClick={(i) => setSelectedVeille(veilleEnv[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune exigence réglementaire environnementale enregistrée pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'chimiques' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowProduitForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau produit</button>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="Produits suivis" value={produits.length} color={C.blue} icon={ClipboardList} />
+            <KpiCard label="FDS manquantes" value={produits.filter((p) => !p.fdsDisponible).length} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label="Expirés" value={produits.filter((p) => p.dateExpiration && new Date(p.dateExpiration) < now2).length} color={C.red} icon={AlertTriangle} />
+            <KpiCard label="Sans rétention (dangereux)" value={produits.filter((p) => p.dangerEnvironnemental && !p.retention).length} color={C.red} icon={AlertTriangle} />
+          </div>
+          <Panel title="Registre des produits chimiques">
+            {produits.length
+              ? <DataTable columns={['Nom', 'Classification', 'Stock', 'FDS', 'Rétention', 'Expiration']}
+                  rows={produits.map((p) => [
+                    p.nom, p.classification || '—', p.quantiteStockee != null ? `${p.quantiteStockee}${p.unite || ''}` : '—',
+                    p.fdsDisponible ? <StatusChip statut="Disponible" /> : <span style={{ color: C.amber }}>Manquante</span>,
+                    p.retention ? 'Oui' : <span style={{ color: p.dangerEnvironnemental ? C.red : C.textMuted }}>Non</span>,
+                    p.dateExpiration ? <span style={{ color: new Date(p.dateExpiration) < now2 ? C.red : C.text }}>{new Date(p.dateExpiration).toLocaleDateString('fr-FR')}</span> : '—',
+                  ])}
+                  onRowClick={(i) => setSelectedProduit(produits[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun produit chimique enregistré pour le moment</p>}
           </Panel>
         </div>
       )}
