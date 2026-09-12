@@ -32,7 +32,127 @@ import { PrismaService } from '../common/prisma.service';
    return tx.auditFinding.update({where:{id},data:{nonConformityId:nc.id,status:'CLOSED'},include:{nonConformity:true}});
   });
  }
- envList(){return this.db.environmentRecord.findMany({orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
+ envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
+
+ // Aspects & impacts environnementaux — la criticité et le caractère
+ // significatif se recalculent à chaque écriture depuis la méthode de
+ // cotation documentée, jamais ressaisis séparément.
+ private calculerAspect(b:any){
+  const frequence=Number(b.frequence)||1,gravite=Number(b.gravite)||1,probabilite=Number(b.probabilite)||1,maitrise=Number(b.maitrise)||1;
+  const criticite=Math.round((frequence*gravite*probabilite)/maitrise);
+  return {frequence,gravite,probabilite,maitrise,criticite,significatif:criticite>=12};
+ }
+ environnementAspectList(){return this.db.environnementAspect.findMany({include:{site:true,processus:true,responsable:true,actions:true},orderBy:{criticite:'desc'}})}
+ environnementAspectGet(id:string){return this.db.environnementAspect.findUnique({where:{id},include:{site:true,processus:true,responsable:true,actions:{include:{responsible:true}}}})}
+ environnementAspectCreate(b:any){return this.db.environnementAspect.create({data:{...b,...this.calculerAspect(b)}})}
+ async environnementAspectUpdate(id:string,b:any){
+  const current=await this.db.environnementAspect.findUnique({where:{id}});
+  const merged={...current,...b};
+  return this.db.environnementAspect.update({where:{id},data:{...b,...this.calculerAspect(merged)}});
+ }
+ environnementAspectDelete(id:string){return this.db.environnementAspect.delete({where:{id}})}
+
+ // Environnement — tableau de bord réel : chaque valeur reste `null`
+ // si la donnée n'existe pas, jamais une valeur inventée à la place.
+ async environnementDashboard(){
+  const [records,aspects,ponderations]=await Promise.all([
+   this.db.environmentRecord.findMany(),
+   this.db.environnementAspect.findMany(),
+   this.indicateurPonderationList(),
+  ]);
+  const objectifsEnv=await this.db.objectifQhse.findMany({where:{pilier:'Environnement'}});
+  const actionsEnv=await this.db.action.findMany({where:{environnementAspectId:{not:null}}});
+  const now=new Date();
+
+  const sumByCategorie=(cat:string)=>{
+   const items=records.filter(r=>r.categorie===cat&&r.value!=null);
+   return items.length?Math.round(items.reduce((s,r)=>s+(r.value||0),0)*100)/100:null;
+  };
+  const avecConformite=records.filter(r=>r.conforme!=null);
+  const tauxConformite=avecConformite.length?Math.round((avecConformite.filter(r=>r.conforme).length/avecConformite.length)*1000)/10:null;
+
+  const aspectsActifs=aspects.filter(a=>a.statut==='ACTIVE');
+  const aspectsSignificatifs=aspectsActifs.filter(a=>a.significatif).length;
+  const tauxAspectsMaitrises=aspectsActifs.length?Math.round((1-aspectsSignificatifs/aspectsActifs.length)*1000)/10:null;
+
+  const actionsEnRetard=actionsEnv.filter(a=>a.dueDate&&new Date(a.dueDate)<now&&a.status!=='CLOSED').length;
+  const tauxClotureActions=actionsEnv.length?Math.round((actionsEnv.filter(a=>a.status==='CLOSED').length/actionsEnv.length)*1000)/10:null;
+
+  const progressionObjectif=(o:any)=>{
+   if(o.valeurInitiale==null)return null;
+   const denom=o.cible-o.valeurInitiale;
+   if(denom===0)return null;
+   const p=((o.actuel-o.valeurInitiale)/denom)*100;
+   return Math.max(0,Math.min(100,Math.round(p*10)/10));
+  };
+  const objectifsAvecProgression=objectifsEnv.map(o=>({...o,progression:progressionObjectif(o)})).filter(o=>o.progression!=null);
+  const tauxObjectifsAtteints=objectifsAvecProgression.length?Math.round((objectifsAvecProgression.filter(o=>(o.progression as number)>=90).length/objectifsAvecProgression.length)*1000)/10:null;
+
+  const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
+  const composantesScore=[
+   {key:'env_conformite',nom:'Conformité des relevés',valeur:tauxConformite},
+   {key:'env_aspects',nom:'Maîtrise des aspects',valeur:tauxAspectsMaitrises},
+   {key:'env_actions',nom:'Clôture des actions',valeur:tauxClotureActions},
+   {key:'env_objectifs',nom:'Atteinte des objectifs',valeur:tauxObjectifsAtteints},
+  ];
+  let somme=0,poidsTotal=0;
+  const detailScore=composantesScore.map(c=>{
+   const poids=poidsMap[c.key]??1;
+   if(c.valeur!=null){somme+=c.valeur*poids;poidsTotal+=poids;}
+   return {...c,poids};
+  });
+  const scoreGlobal=poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null;
+
+  return {
+   score:scoreGlobal,scoreDetail:detailScore,
+   tauxConformite,
+   dechets:sumByCategorie('Déchets'),
+   eau:sumByCategorie('Eau'),
+   energie:sumByCategorie('Énergie'),
+   ges:sumByCategorie('GES / Carbone'),
+   aspectsSignificatifs,
+   actionsEnRetard,
+  };
+ }
+
+ async environnementAlertes(){
+  const now=new Date();
+  const dans30Jours=new Date(now.getTime()+30*86400000);
+  const [records,aspects,actionsEnv,objectifsEnv]=await Promise.all([
+   this.db.environmentRecord.findMany({where:{conforme:false},orderBy:{recordedAt:'desc'},take:20}),
+   this.db.environnementAspect.findMany({where:{statut:'ACTIVE',significatif:true}}),
+   this.db.action.findMany({where:{environnementAspectId:{not:null},status:{not:'CLOSED'}}}),
+   this.db.objectifQhse.findMany({where:{pilier:'Environnement',echeance:{not:null}}}),
+  ]);
+  const alertes:any[]=[];
+  for(const r of records) alertes.push({id:r.id,label:`Relevé non conforme : ${r.type}`,niveau:'CRITIQUE'});
+  for(const a of aspects) if(!a.mesuresMaitrise) alertes.push({id:a.id,label:`Aspect significatif sans mesure de maîtrise : ${a.aspect}`,niveau:'ATTENTION'});
+  for(const a of actionsEnv) if(a.dueDate&&new Date(a.dueDate)<now) alertes.push({id:a.id,label:`Action environnementale en retard : ${a.title}`,niveau:'URGENT'});
+  for(const o of objectifsEnv){
+   const ech=new Date(o.echeance as Date);
+   if(ech<now) alertes.push({id:o.id,label:`Objectif environnemental en retard : ${o.titre}`,niveau:'ATTENTION'});
+   else if(ech<dans30Jours) alertes.push({id:o.id,label:`Échéance d'objectif proche : ${o.titre}`,niveau:'ATTENTION'});
+  }
+  return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
+ }
+
+ // Tendances mensuelles — calculées uniquement sur les mois où des
+ // relevés existent réellement, jamais une valeur comblée à zéro.
+ async environnementTendances(){
+  const records=await this.db.environmentRecord.findMany({where:{value:{not:null}},orderBy:{recordedAt:'asc'}});
+  const parCategorieMois=new Map<string,Map<string,number>>();
+  for(const r of records){
+   const cat=r.categorie||'Non catégorisé';
+   const mois=new Date(r.recordedAt).toISOString().slice(0,7);
+   if(!parCategorieMois.has(cat))parCategorieMois.set(cat,new Map());
+   const m=parCategorieMois.get(cat)!;
+   m.set(mois,(m.get(mois)||0)+(r.value||0));
+  }
+  return [...parCategorieMois.entries()].map(([categorie,moisMap])=>({
+   categorie,
+   points:[...moisMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([mois,valeur])=>({mois,valeur:Math.round(valeur*100)/100})),
+  }));
+ }
  trainingList(){return this.db.training.findMany({include:{processus:true},orderBy:{scheduledAt:'desc'}})} trainingCreate(b:any){return this.db.training.create({data:b})} trainingUpdate(id:string,b:any){return this.db.training.update({where:{id},data:b})} trainingDelete(id:string){return this.db.training.delete({where:{id}})}
  equipmentList(){return this.db.equipment.findMany({orderBy:{name:'asc'}})} equipmentCreate(b:any){return this.db.equipment.create({data:b})} equipmentUpdate(id:string,b:any){return this.db.equipment.update({where:{id},data:b})} equipmentDelete(id:string){return this.db.equipment.delete({where:{id}})}
  events(){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'}})}
@@ -136,7 +256,7 @@ import { PrismaService } from '../common/prisma.service';
  processusLinkList(){return this.db.processusLink.findMany()}
  processusLinkCreate(b:any){return this.db.processusLink.create({data:{sourceId:b.sourceId,targetId:b.targetId,label:b.label}})}
  processusLinkDelete(id:string){return this.db.processusLink.delete({where:{id}})}
- indicateurList(){return this.db.indicateurQualite.findMany({include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
+ indicateurList(domaine?:string){return this.db.indicateurQualite.findMany({where:domaine?{domaine}:undefined,include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
 
  // Ajouter une mesure met aussi à jour la valeur actuelle affichée sur
  // la fiche — pas besoin de le faire deux fois séparément.
@@ -532,6 +652,16 @@ import { PrismaService } from '../common/prisma.service';
   return {indice:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
- objectifList(){return this.db.objectifQhse.findMany({orderBy:{createdAt:'desc'}})} objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
+ objectifList(){
+  return this.db.objectifQhse.findMany({include:{processus:true,responsable:true},orderBy:{createdAt:'desc'}}).then(list=>list.map(o=>{
+   let progression=null;
+   if(o.valeurInitiale!=null){
+    const denom=o.cible-o.valeurInitiale;
+    if(denom!==0){const p=((o.actuel-o.valeurInitiale)/denom)*100;progression=Math.max(0,Math.min(100,Math.round(p*10)/10));}
+   }
+   return {...o,progression};
+  }));
+ }
+ objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0,valeurInitiale:b.valeurInitiale!==undefined?Number(b.valeurInitiale):undefined,budget:b.budget!==undefined?Number(b.budget):undefined}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.valeurInitiale!==undefined?{valeurInitiale:Number(b.valeurInitiale)}:{}),...(b.budget!==undefined?{budget:Number(b.budget)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
  workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} workedHoursDelete(id:string){return this.db.workedHours.delete({where:{id}})}
 }
