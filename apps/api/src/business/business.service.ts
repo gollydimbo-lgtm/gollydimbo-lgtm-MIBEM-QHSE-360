@@ -456,6 +456,81 @@ import { PrismaService } from '../common/prisma.service';
  tmsSignalementCreate(b:any){return this.db.tmsSignalement.create({data:b})}
  tmsSignalementUpdate(id:string,b:any){return this.db.tmsSignalement.update({where:{id},data:b})}
  tmsSignalementDelete(id:string){return this.db.tmsSignalement.delete({where:{id}})}
+
+ penibiliteFactorList(){return this.db.penibiliteFactor.findMany({where:{actif:true},orderBy:{nom:'asc'}})}
+ penibiliteFactorCreate(b:any){return this.db.penibiliteFactor.create({data:b})}
+ penibiliteFactorDelete(id:string){return this.db.penibiliteFactor.update({where:{id},data:{actif:false}})}
+
+ penibiliteExpositionList(){return this.db.penibiliteExposition.findMany({include:{employee:true,facteur:true},orderBy:{dateEvaluation:'desc'}})}
+ penibiliteExpositionCreate(b:any){return this.db.penibiliteExposition.create({data:b})}
+ penibiliteExpositionDelete(id:string){return this.db.penibiliteExposition.delete({where:{id}})}
+
+ // Alertes automatiques hygiène au travail — chaque critère est
+ // indépendant, avec un niveau de sévérité propre.
+ async hygieneAlertes(){
+  const now=new Date();
+  const dans30Jours=new Date(now.getTime()+30*86400000);
+  const [visites,risques,ergonomies,expositionsNC,penibiliteEchues]=await Promise.all([
+   this.db.visiteMedicale.findMany({where:{prochaineVisite:{not:null}}}),
+   this.db.risqueSanitaire.findMany({where:{statut:'ACTIVE'}}),
+   this.db.analyseErgonomique.findMany({where:{scoreErgonomique:{in:['ELEVE','CRITIQUE']}}}),
+   this.db.expositionSurveillance.findMany({where:{conforme:false},include:{risqueSanitaire:true}}),
+   this.db.penibiliteExposition.findMany({where:{prochaineReevaluation:{lt:now}}}),
+  ]);
+  const alertes:any[]=[];
+  for(const v of visites){
+   if(new Date(v.prochaineVisite as Date)<now) alertes.push({id:v.id,type:'VISITE_MEDICALE',label:`Visite médicale échue : ${v.employeNom}`,niveau:'URGENT'});
+   else if(new Date(v.prochaineVisite as Date)<dans30Jours) alertes.push({id:v.id,type:'VISITE_MEDICALE',label:`Visite médicale proche : ${v.employeNom}`,niveau:'ATTENTION'});
+  }
+  for(const r of risques){
+   if(r.criticite>=12) alertes.push({id:r.id,type:'RISQUE_SANITAIRE',label:`Risque sanitaire critique : ${r.danger}`,niveau:'CRITIQUE'});
+  }
+  for(const e of ergonomies){
+   alertes.push({id:e.id,type:'ERGONOMIE',label:`Poste ergonomiquement ${e.scoreErgonomique==='CRITIQUE'?'critique':'à risque élevé'} : ${e.poste}`,niveau:e.scoreErgonomique==='CRITIQUE'?'CRITIQUE':'ATTENTION'});
+  }
+  for(const ex of expositionsNC){
+   alertes.push({id:ex.id,type:'EXPOSITION',label:`Valeur d'exposition dépassée : ${ex.agentDangereux||ex.risqueSanitaire?.danger||'—'}`,niveau:'CRITIQUE'});
+  }
+  for(const p of penibiliteEchues){
+   alertes.push({id:p.id,type:'PENIBILITE',label:'Réévaluation de pénibilité nécessaire',niveau:'ATTENTION'});
+  }
+  return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
+ }
+
+ // Indice global Hygiène au travail — remplace les données de
+ // démonstration figées du tableau de bord général par un vrai calcul,
+ // pondérations réutilisant la même table de configuration que les
+ // autres indices de l'application.
+ async hygieneIndiceGlobal(){
+  const [visites,risques,ergonomies,tms,ponderations]=await Promise.all([
+   this.db.visiteMedicale.findMany(),
+   this.db.risqueSanitaire.findMany({where:{statut:'ACTIVE'}}),
+   this.db.analyseErgonomique.findMany(),
+   this.db.tmsSignalement.findMany(),
+   this.indicateurPonderationList(),
+  ]);
+  const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
+  const now=new Date();
+  const avecEcheance=visites.filter(v=>v.prochaineVisite);
+  const enRetard=avecEcheance.filter(v=>new Date(v.prochaineVisite as Date)<now).length;
+  const tauxSuiviMedical=avecEcheance.length?Math.round((1-enRetard/avecEcheance.length)*1000)/10:null;
+  const tauxMaitriseRisques=risques.length?Math.round((1-risques.filter(r=>r.criticite>=12).length/risques.length)*1000)/10:null;
+  const tauxErgonomie=ergonomies.length?Math.round((1-ergonomies.filter(e=>['ELEVE','CRITIQUE'].includes(e.scoreErgonomique)).length/ergonomies.length)*1000)/10:null;
+  const tauxTms=tms.length?Math.round(Math.max(0,100-tms.length*5)*10)/10:100;
+  const composantes=[
+   {key:'hyg_suivi_medical',nom:'Suivi médical',valeur:tauxSuiviMedical},
+   {key:'hyg_maitrise_risques',nom:'Maîtrise des risques sanitaires',valeur:tauxMaitriseRisques},
+   {key:'hyg_ergonomie',nom:'Ergonomie des postes',valeur:tauxErgonomie},
+   {key:'hyg_tms',nom:'Faible sinistralité TMS',valeur:tauxTms},
+  ];
+  let somme=0,poidsTotal=0;
+  const detail=composantes.map(c=>{
+   const poids=poidsMap[c.key]??1;
+   if(c.valeur!=null){somme+=c.valeur*poids;poidsTotal+=poids;}
+   return {...c,poids};
+  });
+  return {indice:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
+ }
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
  objectifList(){return this.db.objectifQhse.findMany({orderBy:{createdAt:'desc'}})} objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
  workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} workedHoursDelete(id:string){return this.db.workedHours.delete({where:{id}})}
