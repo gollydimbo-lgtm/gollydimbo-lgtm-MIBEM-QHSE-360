@@ -1053,6 +1053,31 @@ model EnvironnementAspect {
   actions Action[]
 }
 
+// Produits chimiques et substances à impact environnemental — la
+// classification et les seuils restent du texte libre pour rester
+// utilisables dans tout secteur, jamais une nomenclature figée.
+model ProduitChimique {
+  id String @id @default(cuid())
+  code String @unique
+  nom String
+  reference String?
+  fournisseurId String?
+  quantiteStockee Float?
+  quantiteConsommee Float?
+  unite String?
+  classification String?
+  dangerEnvironnemental String?
+  zoneStockage String?
+  retention Boolean @default(false)
+  fdsDisponible Boolean @default(false)
+  dateControle DateTime?
+  dateExpiration DateTime?
+  seuilAlerteStock Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
+}
+
 model Training {
   id String @id @default(cuid())
   code String @unique
@@ -1420,6 +1445,7 @@ model Fournisseur {
   risks Risk[]
   certifications FournisseurCertification[]
   safetyEvents SafetyEvent[]
+  produitsChimiques ProduitChimique[]
 }
 
 // Certifications et documents réglementaires du fournisseur — jamais
