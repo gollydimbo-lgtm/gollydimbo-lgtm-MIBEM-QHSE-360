@@ -146,6 +146,7 @@ model User {
   analysesErgonomiquesEvaluateur AnalyseErgonomique[]
   environnementAspectsResponsable EnvironnementAspect[]
   objectifsQhseResponsable ObjectifQhse[]
+  veilleReglementaireResponsable VeilleReglementaire[]
 }
 
 model Role {
@@ -1603,6 +1604,8 @@ model VeilleReglementaire {
   domaine String?
   dateApplication DateTime?
   statut String @default("A_TRAITER")
+  responsableId String?
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
