@@ -434,6 +434,28 @@ import { PrismaService } from '../common/prisma.service';
 
  expositionCreate(b:any){return this.db.expositionSurveillance.create({data:{...b,valeurMesuree:b.valeurMesuree!==undefined?Number(b.valeurMesuree):undefined,valeurLimite:b.valeurLimite!==undefined?Number(b.valeurLimite):undefined,conforme:b.valeurMesuree!=null&&b.valeurLimite!=null?Number(b.valeurMesuree)<=Number(b.valeurLimite):b.conforme}})}
  expositionDelete(id:string){return this.db.expositionSurveillance.delete({where:{id}})}
+
+ // Ergonomie — le score se recalcule depuis les facteurs cochés à
+ // chaque écriture, jamais ressaisi séparément par l'utilisateur.
+ private calculerScoreErgonomique(b:any):string{
+  const facteurs=['stationDeboutProlongee','stationAssiseProlongee','travailRepetitif','manutentionChargesLourdes','posturesContraignantes','ecranInformatiquePosture','vibrations','eclairageInsuffisant','espaceInsuffisant'];
+  const count=facteurs.filter(f=>b[f]===true).length;
+  return count>=6?'CRITIQUE':count>=4?'ELEVE':count>=2?'MODERE':'FAIBLE';
+ }
+ analyseErgonomiqueList(){return this.db.analyseErgonomique.findMany({include:{site:true,processus:true,evaluateur:true,tmsSignalements:true,actions:true},orderBy:{createdAt:'desc'}})}
+ analyseErgonomiqueGet(id:string){return this.db.analyseErgonomique.findUnique({where:{id},include:{site:true,processus:true,evaluateur:true,tmsSignalements:{include:{employee:true}},actions:{include:{responsible:true}}}})}
+ analyseErgonomiqueCreate(b:any){return this.db.analyseErgonomique.create({data:{...b,scoreErgonomique:this.calculerScoreErgonomique(b)}})}
+ async analyseErgonomiqueUpdate(id:string,b:any){
+  const current=await this.db.analyseErgonomique.findUnique({where:{id}});
+  const merged={...current,...b};
+  return this.db.analyseErgonomique.update({where:{id},data:{...b,scoreErgonomique:this.calculerScoreErgonomique(merged)}});
+ }
+ analyseErgonomiqueDelete(id:string){return this.db.analyseErgonomique.delete({where:{id}})}
+
+ tmsSignalementList(){return this.db.tmsSignalement.findMany({include:{employee:true,analyseErgonomique:true},orderBy:{dateSignalement:'desc'}})}
+ tmsSignalementCreate(b:any){return this.db.tmsSignalement.create({data:b})}
+ tmsSignalementUpdate(id:string,b:any){return this.db.tmsSignalement.update({where:{id},data:b})}
+ tmsSignalementDelete(id:string){return this.db.tmsSignalement.delete({where:{id}})}
  veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
  objectifList(){return this.db.objectifQhse.findMany({orderBy:{createdAt:'desc'}})} objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
  workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} workedHoursDelete(id:string){return this.db.workedHours.delete({where:{id}})}
