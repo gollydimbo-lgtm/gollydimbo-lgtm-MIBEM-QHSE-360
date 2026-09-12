@@ -226,33 +226,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
 // (Indicateurs qualité dispose désormais de son propre module dédié — voir indicateurs_pages.dart)
 // (Réclamations clients dispose désormais de son propre module dédié — voir reclamations_pages.dart)
 // (Fournisseurs dispose désormais de son propre module dédié — voir fournisseurs_pages.dart)
-
-class VisitesMedicalesPage extends StatelessWidget {
-  const VisitesMedicalesPage({super.key});
-  @override
-  Widget build(BuildContext context) => SimpleCrudPage(
-        title: 'Hygiène au travail — Visites médicales', endpoint: '/business/visites-medicales', codePrefix: 'VM',
-        fields: const [
-          FieldSpec('employeNom', 'Employé', required: true),
-          FieldSpec('poste', 'Poste'),
-          FieldSpec('aptitude', 'Aptitude', type: 'select', options: ['Apte', 'Apte avec réserves', 'Inapte']),
-          FieldSpec('prochaineVisite', 'Prochaine visite', type: 'date'),
-        ],
-        titleOf: (i) => i['employeNom'] ?? '—',
-        subtitleOf: (i) => i['prochaineVisite'] != null ? 'Prochaine visite : ${DateTime.parse(i['prochaineVisite']).day}/${DateTime.parse(i['prochaineVisite']).month}/${DateTime.parse(i['prochaineVisite']).year}' : 'Aucune visite planifiée',
-        chipLabel: (i) => i['aptitude'] ?? '—',
-        chipColor: (i) => i['aptitude'] == 'Inapte' ? QhseColors.red : i['aptitude'] == 'Apte avec réserves' ? QhseColors.amber : QhseColors.green,
-        kpiBuilder: (items) {
-          final now = DateTime.now();
-          final enRetard = items.where((i) => i['prochaineVisite'] != null && DateTime.parse(i['prochaineVisite']).isBefore(now)).length;
-          return [
-            KpiStat('Visites enregistrées', '${items.length}', color: QhseColors.blue, icon: Icons.favorite_outline),
-            KpiStat('En retard', '$enRetard', color: QhseColors.red, icon: Icons.warning_amber_outlined),
-            KpiStat('Inaptes', '${items.where((i) => i['aptitude'] == 'Inapte').length}', color: QhseColors.red, icon: Icons.block),
-          ];
-        },
-      );
-}
+// (Hygiène au travail dispose désormais de son propre module dédié — voir hygiene_pages.dart)
 
 class VeilleReglementairePage extends StatelessWidget {
   const VeilleReglementairePage({super.key});
