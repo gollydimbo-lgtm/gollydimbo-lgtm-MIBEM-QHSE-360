@@ -130,11 +130,12 @@ import { PrismaService } from '../common/prisma.service';
  async environnementAlertes(){
   const now=new Date();
   const dans30Jours=new Date(now.getTime()+30*86400000);
-  const [records,aspects,actionsEnv,objectifsEnv]=await Promise.all([
+  const [records,aspects,actionsEnv,objectifsEnv,produits]=await Promise.all([
    this.db.environmentRecord.findMany({where:{conforme:false},orderBy:{recordedAt:'desc'},take:20}),
    this.db.environnementAspect.findMany({where:{statut:'ACTIVE',significatif:true}}),
    this.db.action.findMany({where:{environnementAspectId:{not:null},status:{not:'CLOSED'}}}),
    this.db.objectifQhse.findMany({where:{pilier:'Environnement',echeance:{not:null}}}),
+   this.db.produitChimique.findMany(),
   ]);
   const alertes:any[]=[];
   for(const r of records) alertes.push({id:r.id,label:`Relevé non conforme : ${r.type}`,niveau:'CRITIQUE'});
@@ -145,8 +146,19 @@ import { PrismaService } from '../common/prisma.service';
    if(ech<now) alertes.push({id:o.id,label:`Objectif environnemental en retard : ${o.titre}`,niveau:'ATTENTION'});
    else if(ech<dans30Jours) alertes.push({id:o.id,label:`Échéance d'objectif proche : ${o.titre}`,niveau:'ATTENTION'});
   }
+  for(const p of produits){
+   if(!p.fdsDisponible) alertes.push({id:p.id,label:`FDS manquante : ${p.nom}`,niveau:'ATTENTION'});
+   if(p.dateExpiration&&new Date(p.dateExpiration)<now) alertes.push({id:p.id,label:`Produit chimique expiré : ${p.nom}`,niveau:'CRITIQUE'});
+   if(p.dangerEnvironnemental&&!p.retention) alertes.push({id:p.id,label:`Absence de rétention pour un produit dangereux : ${p.nom}`,niveau:'CRITIQUE'});
+   if(p.seuilAlerteStock!=null&&p.quantiteStockee!=null&&p.quantiteStockee>p.seuilAlerteStock) alertes.push({id:p.id,label:`Stock excessif : ${p.nom}`,niveau:'ATTENTION'});
+  }
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
+
+ produitChimiqueList(){return this.db.produitChimique.findMany({include:{fournisseur:true},orderBy:{nom:'asc'}})}
+ produitChimiqueCreate(b:any){return this.db.produitChimique.create({data:b})}
+ produitChimiqueUpdate(id:string,b:any){return this.db.produitChimique.update({where:{id},data:b})}
+ produitChimiqueDelete(id:string){return this.db.produitChimique.delete({where:{id}})}
 
  // Tendances mensuelles — calculées uniquement sur les mois où des
  // relevés existent réellement, jamais une valeur comblée à zéro.
