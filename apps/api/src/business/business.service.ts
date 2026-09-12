@@ -103,15 +103,27 @@ import { PrismaService } from '../common/prisma.service';
   });
   const scoreGlobal=poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null;
 
+  const dechetsRecords=records.filter(r=>r.categorie==='Déchets'&&r.value!=null);
+  const dechetsValorises=dechetsRecords.filter(r=>r.modeTraitement&&/recycl|valoris|r[ée]utilis/i.test(r.modeTraitement));
+  const totalDechets=dechetsRecords.reduce((s,r)=>s+(r.value||0),0);
+  const tauxValorisationDechets=dechetsRecords.length&&totalDechets>0?Math.round((dechetsValorises.reduce((s,r)=>s+(r.value||0),0)/totalDechets)*1000)/10:null;
+
+  const veilleEnv=await this.db.veilleReglementaire.findMany({where:{domaine:'Environnement'}});
+  const veilleConformes=veilleEnv.filter(v=>['CONFORME','INTEGREE'].includes(v.statut));
+  const veilleApplicable=veilleEnv.filter(v=>v.statut!=='NON_APPLICABLE');
+  const tauxConformiteReglementaire=veilleApplicable.length?Math.round((veilleConformes.length/veilleApplicable.length)*1000)/10:null;
+
   return {
    score:scoreGlobal,scoreDetail:detailScore,
    tauxConformite,
    dechets:sumByCategorie('Déchets'),
+   tauxValorisationDechets,
    eau:sumByCategorie('Eau'),
    energie:sumByCategorie('Énergie'),
    ges:sumByCategorie('GES / Carbone'),
    aspectsSignificatifs,
    actionsEnRetard,
+   tauxConformiteReglementaire,
   };
  }
 
@@ -651,7 +663,7 @@ import { PrismaService } from '../common/prisma.service';
   });
   return {indice:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
- veilleList(){return this.db.veilleReglementaire.findMany({orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
+ veilleList(){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
  objectifList(){
   return this.db.objectifQhse.findMany({include:{processus:true,responsable:true},orderBy:{createdAt:'desc'}}).then(list=>list.map(o=>{
    let progression=null;
