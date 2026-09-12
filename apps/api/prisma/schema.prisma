@@ -1,1410 +1,268 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url = env("DATABASE_URL")
-}
-
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-}
-
-enum RoleName {
-  ADMINISTRATEUR
-  RESPONSABLE_QHSE
-  ASSISTANT_QHSE
-  CONTROLEUR_QUALITE
-  CHEF_PRODUCTION
-  OPERATEUR
-  AUDITEUR
-  CONSULTATION
-}
-
-enum DocumentStatus {
-  DRAFT
-  REVIEW
-  APPROVED
-  ACTIVE
-  SUPERSEDED
-  ARCHIVED
-}
-
-enum EpiFrequency {
-  DAILY
-  ANNUAL
-}
-
-enum EpiMovementType {
-  RECEIPT
-  DAILY_DISTRIBUTION
-  ANNUAL_DISTRIBUTION
-  REPLACEMENT
-  LOSS
-  DAMAGE
-  ADJUSTMENT
-  RETURN
-  REFORM
-}
-
-enum SyncStatus {
-  PENDING
-  SYNCED
-  CONFLICT
-  FAILED
-}
-
-enum SafetyTalkStatus {
-  DRAFT
-  APPROVED
-  DELIVERED
-}
-
-enum QualityControlStatus {
-  DRAFT
-  IN_PROGRESS
-  SUBMITTED
-  COMPLIANT
-  NON_COMPLIANT
-  CANCELLED
-}
-
-enum ControlValueType {
-  BOOLEAN
-  NUMERIC
-  TEXT
-  CHOICE
-  PHOTO
-  DATE
-  TIME
-  PERCENTAGE
-  SIGNATURE
-  RATING
-}
-
-enum SignatureType {
-  CONTROLLER
-  RESPONSIBLE
-  VALIDATOR
-}
-
-enum AttachmentOwnerType {
-  QUALITY_CONTROL
-  NON_CONFORMITY
-  ACTION
-  SAFETY_EVENT
-  RISK
-  AUDIT
-  EPI
-}
-
-enum QualityShift {
-  MORNING
-  AFTERNOON
-  NIGHT
-}
-
-model User {
-  id String @id @default(cuid())
-  email String @unique
-  passwordHash String
-  firstName String
-  lastName String
-  status UserStatus @default(ACTIVE)
-  employeeId String? @unique
-  roles UserRole[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  auditLogs AuditLog[]
-  attachments Attachment[]
-  documentsCreated Document[] @relation("DocumentCreator")
-  epiMovements EpiMovement[]
-  safetyTalks SafetyTalk[]
-  actionsResponsible Action[]
-  qualityControls QualityControl[]
-  qualitySignatures QualityControlSignature[]
-  controlResults ControlResult[]
-  audits QhseAudit[]
-  refreshTokens RefreshToken[]
-  epcResponsible Epc[]
-  epcInspections EpcInspection[]
-  epiInspections EpiInspection[]
-  epiAssignmentsResponsible EpiAssignment[]
-  epcMaintenancesPerformed EpcMaintenance[]
-  controlSchedulesAssigned ControlSchedule[]
-  processusAsPilote Processus[] @relation("ProcessusPilote")
-  processusAsSuppleant Processus[] @relation("ProcessusSuppleant")
-  processusActivitiesResponsible ProcessusActivity[] @relation("ProcessusActivityResponsible")
-  processusRacis ProcessusRaci[]
-  processusExigencesResponsable ProcessusExigence[]
-  reclamationsActionCurative Reclamation[]
-  fournisseursResponsable Fournisseur[]
-  safetyEventsEnquete SafetyEvent[]
-}
-
-model Role {
-  id String @id @default(cuid())
-  name RoleName @unique
-  permissions RolePermission[]
-  users UserRole[]
-}
-
-model Permission {
-  id String @id @default(cuid())
-  code String @unique
-  roles RolePermission[]
-}
-
-model UserRole {
-  userId String
-  roleId String
-  user User @relation(fields:[userId], references:[id], onDelete: Cascade)
-  role Role @relation(fields:[roleId], references:[id], onDelete: Cascade)
-  @@id([userId,roleId])
-}
-
-model RolePermission {
-  roleId String
-  permissionId String
-  role Role @relation(fields:[roleId], references:[id], onDelete: Cascade)
-  permission Permission @relation(fields:[permissionId], references:[id], onDelete: Cascade)
-  @@id([roleId,permissionId])
-}
-
-model RefreshToken {
-  id String @id @default(cuid())
-  tokenHash String
-  userId String
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime @default(now())
-  user User @relation(fields:[userId], references:[id], onDelete: Cascade)
-}
-
-model AuditLog {
-  id String @id @default(cuid())
-  userId String?
-  action String
-  module String
-  entityId String?
-  oldValue Json?
-  newValue Json?
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
-  user User? @relation(fields:[userId], references:[id], onDelete: SetNull)
-  @@index([module,entityId])
-  @@index([createdAt])
-}
-
-model Attachment {
-  id String @id @default(cuid())
-  originalName String
-  storagePath String
-  mimeType String
-  size Int
-  sha256 String?
-  uploadedById String?
-  documentId String?
-  createdAt DateTime @default(now())
-  uploadedBy User? @relation(fields:[uploadedById], references:[id], onDelete:SetNull)
-  document Document? @relation(fields:[documentId], references:[id], onDelete: Cascade)
-  links AttachmentLink[]
-  qualityControlLinks QualityControlAttachment[]
-  @@index([documentId])
-}
-
-// Liaison générique attachment <-> entité métier (accident, NC, risque, audit, EPI...).
-// Complète QualityControlAttachment qui reste dédiée au contrôle qualité pour compatibilité.
-model AttachmentLink {
-  id String @id @default(cuid())
-  ownerType AttachmentOwnerType
-  ownerId String
-  attachmentId String
-  createdAt DateTime @default(now())
-  attachment Attachment @relation(fields:[attachmentId], references:[id], onDelete:Cascade)
-  @@unique([ownerType,ownerId,attachmentId])
-  @@index([ownerType,ownerId])
-}
-
-// Classification transverse en 5 groupes du référentiel documentaire QHSE
-// (Stratégie/Contexte, Risques/Sécurité/Conformité, Supports/Maîtrise
-// documentaire, Opérations/Maîtrise terrain, Évaluation/Contrôle/Amélioration).
-// Vient EN PLUS du champ "category" existant, sans le remplacer : purement
-// additif, aucune donnée existante n'est modifiée par ce changement de schéma.
-enum DocumentGroup {
-  STRATEGIE_CONTEXTE
-  RISQUES_SECURITE_CONFORMITE
-  SUPPORTS_MAITRISE_DOCUMENTAIRE
-  OPERATIONS_MAITRISE_TERRAIN
-  EVALUATION_CONTROLE_AMELIORATION
-}
-
-model Document {
-  id String @id @default(cuid())
-  code String @unique
-  title String
-  category String
-  documentGroup DocumentGroup?
-  status DocumentStatus @default(DRAFT)
-  currentVersion Int @default(1)
-  createdById String?
-  processusId String?
-  // Prochaine date de révision — sans elle, aucune alerte d'échéance
-  // documentaire n'a de sens à calculer.
-  nextReviewAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  createdBy User? @relation("DocumentCreator", fields:[createdById], references:[id], onDelete:SetNull)
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  versions DocumentVersion[]
-  attachments Attachment[]
-}
-
-model DocumentVersion {
-  id String @id @default(cuid())
-  documentId String
-  version Int
-  fileName String
-  storagePath String
-  checksum String?
-  status DocumentStatus @default(DRAFT)
-  createdAt DateTime @default(now())
-  document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
-  @@unique([documentId,version])
-}
-
-// Catégories EPI — table gérable par l'administrateur, jamais une liste
-// figée en dur (le cahier des charges l'exige explicitement).
-model EpiCategory {
-  id String @id @default(cuid())
-  name String @unique
-  epis Epi[]
-}
-
-model Epi {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  frequency EpiFrequency
-  unit String @default("piece")
-  annualValidityDays Int?
-  minStock Int @default(0)
-  active Boolean @default(true)
-  movements EpiMovement[]
-  assignments EpiAssignment[]
-  categoryId String?
-  category EpiCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
-  reference String?
-  subcategory String?
-  description String?
-  manufacturer String?
-  model String?
-  size String?
-  color String?
-  material String?
-  standard String?
-  // Mode de durée d'utilisation — jamais une valeur universelle : configurable
-  // équipement par équipement, selon le fabricant, la réglementation,
-  // l'analyse des risques, l'usage et l'état constaté en inspection.
-  durationMode String?
-  durationValueDays Int?
-  disposable Boolean @default(false)
-  shared Boolean @default(false)
-  maxStock Int?
-  location String?
-  status String @default("ACTIVE")
-  inspections EpiInspection[]
-  jobRiskProtections JobRiskProtection[]
-  nonConformities NonConformity[]
-  qualityControls QualityControl[]
-  safetyEvents SafetyEvent[]
-}
-
-model Employee {
-  id String @id @default(cuid())
-  matricule String @unique
-  firstName String
-  lastName String
-  department String?
-  position String?
-  active Boolean @default(true)
-  epiAssignments EpiAssignment[]
-  epiMovements EpiMovement[]
-  epiInspections EpiInspection[]
-  qualityControls QualityControl[]
-  safetyEvents SafetyEvent[]
-}
-
-model EpiAssignment {
-  id String @id @default(cuid())
-  code String @unique
-  employeeId String
-  epiId String
-  quantity Int
-  size String?
-  distributedAt DateTime
-  renewalAt DateTime?
-  expectedDurationDays Int?
-  condition String?
-  reason String?
-  status String @default("ACTIVE")
-  responsibleId String?
-  // Signatures électroniques — stockées en base64 (image PNG dessinée),
-  // jamais un simple champ texte "signé par" : preuve réelle de la remise.
-  employeeSignature String?
-  responsibleSignature String?
-  employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade)
-  epi Epi @relation(fields:[epiId], references:[id], onDelete:Restrict)
-  responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
-  @@index([employeeId,epiId])
-}
-
-model EpiMovement {
-  id String @id @default(cuid())
-  epiId String
-  type EpiMovementType
-  quantity Int
-  employeeId String?
-  distributionDate DateTime @default(now())
-  userId String?
-  note String?
-  epi Epi @relation(fields:[epiId], references:[id], onDelete:Restrict)
-  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
-  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
-  @@index([epiId,distributionDate])
-}
-
-// Checklist d'inspection EPI (casque, harnais, chaussures...) — résultat
-// standardisé, jamais une simple case cochée/décochée.
-model EpiInspection {
-  id String @id @default(cuid())
-  epiId String
-  epi Epi @relation(fields:[epiId], references:[id], onDelete:Cascade)
-  employeeId String?
-  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
-  inspectedAt DateTime @default(now())
-  result String
-  observations String?
-  inspectedById String?
-  inspectedBy User? @relation(fields:[inspectedById], references:[id], onDelete:SetNull)
-}
-
-// Catégories EPC — table gérable par l'administrateur, comme pour les EPI.
-model EpcCategory {
-  id String @id @default(cuid())
-  name String @unique
-  epcs Epc[]
-}
-
-model Epc {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  categoryId String?
-  category EpcCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
-  location String?
-  zone String?
-  description String?
-  manufacturer String?
-  model String?
-  reference String?
-  installedAt DateTime?
-  responsibleId String?
-  responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
-  condition String?
-  status String @default("ACTIVE")
-  inspectionFrequencyDays Int?
-  lastInspectionAt DateTime?
-  nextInspectionAt DateTime?
-  notes String?
-  inspections EpcInspection[]
-  jobRiskProtections JobRiskProtection[]
-  nonConformities NonConformity[]
-  maintenances EpcMaintenance[]
-  qualityControls QualityControl[]
-  safetyEvents SafetyEvent[]
-}
-
-model EpcInspection {
-  id String @id @default(cuid())
-  epcId String
-  epc Epc @relation(fields:[epcId], references:[id], onDelete:Cascade)
-  inspectedAt DateTime @default(now())
-  result String
-  observations String?
-  inspectedById String?
-  inspectedBy User? @relation(fields:[inspectedById], references:[id], onDelete:SetNull)
-}
-
-// Historique de maintenance EPC — préventive ou corrective, avec la
-// prochaine échéance pour pouvoir la suivre dans le temps.
-model EpcMaintenance {
-  id String @id @default(cuid())
-  epcId String
-  epc Epc @relation(fields:[epcId], references:[id], onDelete:Cascade)
-  date DateTime @default(now())
-  type String
-  description String?
-  cost Float?
-  performedById String?
-  performedBy User? @relation(fields:[performedById], references:[id], onDelete:SetNull)
-  nextMaintenanceAt DateTime?
-  status String @default("DONE")
-}
-
-// La matrice Poste → Activité → Danger → Risque → Mesure de prévention →
-// EPC/EPI → Fréquence d'utilisation → Critère de contrôle, exigée dans le
-// cahier des charges. Chaque ligne relie un poste à un équipement — jamais
-// une durée ou une exigence figée en dur.
-model JobRiskProtection {
-  id String @id @default(cuid())
-  code String @unique
-  jobTitle String
-  activity String?
-  hazard String
-  riskDescription String?
-  preventionMeasure String?
-  epiId String?
-  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
-  epcId String?
-  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
-  usageFrequency String?
-  controlCriteria String?
-  createdAt DateTime @default(now())
-}
-
-model DailyHeadcount {
-  id String @id @default(cuid())
-  date DateTime @unique
-  headcount Int
-  source String?
-  createdAt DateTime @default(now())
-}
-
-model SyncItem {
-  id String @id @default(cuid())
-  clientLocalId String @unique
-  entity String
-  entityId String?
-  operation String
-  payload Json
-  status SyncStatus @default(PENDING)
-  error String?
-  createdAt DateTime @default(now())
-  syncedAt DateTime?
-}
-
-model SafetyEvent {
-  id String @id @default(cuid())
-  type String
-  // Catégorie — configurable, jamais figée : Accident du travail /
-  // Incident-presque-accident / Autre selon ce que l'entreprise utilise.
-  categorie String?
-  title String
-  description String?
-  occurredAt DateTime
-  severity Int @default(1)
-  withLostTime Boolean @default(false)
-  lostDays Int?
-  // Localisation
-  siteId String?
-  zone String?
-  atelier String?
-  poste String?
-  activite String?
-  // Personne concernée — lien vers un employé si applicable, sinon
-  // saisie libre (intérimaire, visiteur, sous-traitant...).
-  employeeId String?
-  personneNom String?
-  personneFonction String?
-  typePersonnel String?
-  // Conséquences
-  typeLesion String?
-  siegeLesion String?
-  consequenceMaterielle String?
-  consequenceEnvironnementale String?
-  mecanisme String?
-  // Pour les incidents/presque-accidents — la question clé pour
-  // repérer les signaux faibles avant qu'ils ne deviennent un accident.
-  potentielGravite String?
-  // Enquête et analyse des causes — 5M (jamais limité à "erreur
-  // humaine"), texte libre pour rester adaptable à tout secteur.
-  enqueteurId String?
-  dateEnquete DateTime?
-  methodeAnalyse String?
-  causeHumaine String?
-  causeMethode String?
-  causeMachine String?
-  causeMatiere String?
-  causeMilieu String?
-  causeManagement String?
-  causeRacine String?
-  // Workflow — jamais de clôture sans passer par les étapes.
-  statut String @default("DECLARE")
-  dateCloture DateTime?
-  // Liens universels vers les modules déjà existants.
-  riskId String?
-  epiId String?
-  epcId String?
-  processusId String?
-  fournisseurId String?
-  nonConformityId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
-  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
-  enqueteur User? @relation(fields:[enqueteurId], references:[id], onDelete:SetNull)
-  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
-  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
-  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
-  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
-  actions Action[]
-}
-
-// Heures travaillées par période, nécessaires au calcul du Taux de Fréquence
-// (TF) et du Taux de Gravité (TG) des accidents du travail :
-//   TF = (accidents avec arrêt × 1 000 000) / heures travaillées
-//   TG = (journées perdues × 1 000) / heures travaillées
-model WorkedHours {
-  id String @id @default(cuid())
-  code String @unique
-  periodStart DateTime
-  periodEnd DateTime
-  hours Float
-  site String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model NonConformity {
-  id String @id @default(cuid())
-  code String @unique
-  title String
-  description String?
-  severity Int @default(1)
-  status String @default("OPEN")
-  source String?
-  // Classification configurable (observation, écart mineur, NC mineure/
-  // majeure/critique, danger immédiat, anomalie...) — texte libre plutôt
-  // qu'un enum figé, pour rester personnalisable sans toucher au code.
-  classification String?
-  occurredAt DateTime @default(now())
-  createdAt DateTime @default(now())
-  qualityControlId String?
-  epiId String?
-  epcId String?
-  processusId String?
-  fournisseurId String?
-  actions Action[]
-  qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
-  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
-  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
-  auditFindings AuditFinding[]
-  reclamations Reclamation[]
-  safetyEvents SafetyEvent[]
-  @@index([status,occurredAt])
-}
-
-model Action {
-  id String @id @default(cuid())
-  code String @unique
-  title String
-  description String?
-  status String @default("OPEN")
-  priority Int @default(2)
-  dueDate DateTime?
-  completedAt DateTime?
-  responsibleId String?
-  nonConformityId String?
-  processusId String?
-  reclamationId String?
-  fournisseurId String?
-  safetyEventId String?
-  responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
-  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
-  reclamation Reclamation? @relation(fields:[reclamationId], references:[id], onDelete:SetNull)
-  safetyEvent SafetyEvent? @relation(fields:[safetyEventId], references:[id], onDelete:SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@index([status,dueDate])
-}
-
-model Site {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  location String?
-  active Boolean @default(true)
-  lines ProductionLine[]
-  qualityControls QualityControl[]
-  controlSchedules ControlSchedule[]
-  reclamations Reclamation[]
-  processus Processus[]
-  safetyEvents SafetyEvent[]
-  createdAt DateTime @default(now())
-}
-
-model ProductionLine {
-  id String @id @default(cuid())
-  siteId String
-  code String @unique
-  name String
-  area String?
-  active Boolean @default(true)
-  site Site @relation(fields:[siteId], references:[id], onDelete:Restrict)
-  machines Machine[]
-  controls QualityControl[]
-  controlSchedules ControlSchedule[]
-  @@index([siteId])
-}
-
-model Machine {
-  id String @id @default(cuid())
-  lineId String
-  code String @unique
-  name String
-  category String?
-  active Boolean @default(true)
-  line ProductionLine @relation(fields:[lineId], references:[id], onDelete:Restrict)
-  controls QualityControl[]
-}
-
-model Product {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  category String?
-  active Boolean @default(true)
-  formats ProductFormat[]
-  controls QualityControl[]
-}
-
-model ProductFormat {
-  id String @id @default(cuid())
-  productId String
-  code String
-  label String
-  volumeMl Int?
-  product Product @relation(fields:[productId], references:[id], onDelete:Cascade)
-  controls QualityControl[]
-  @@unique([productId,code])
-}
-
-model Shift {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  startTime String?
-  endTime String?
-  active Boolean @default(true)
-  controls QualityControl[]
-}
-
-model QualityControl {
-  id String @id @default(cuid())
-  code String @unique
-  siteId String?
-  lineId String?
-  machineId String?
-  productId String?
-  formatId String?
-  shiftId String?
-  line String?
-  product String?
-  format String?
-  lotNumber String?
-  shift String?
-  controlDate DateTime @default(now())
-  status QualityControlStatus @default(DRAFT)
-  result String?
-  notes String?
-  latitude Float?
-  longitude Float?
-  gpsAccuracy Float?
-  startedAt DateTime?
-  submittedAt DateTime?
-  createdById String?
-  templateId String?
-  // Le même moteur de contrôle sert désormais à tous les modules — ce
-  // champ indique juste dans quel domaine ce contrôle-ci a été réalisé,
-  // sans jamais renommer ni dupliquer l'entité elle-même.
-  domain String @default("QUALITE")
-  typeId String?
-  // Liens universels vers les autres modules déjà existants — un
-  // contrôle peut porter sur un EPI, un EPC, un risque, un fournisseur
-  // ou un employé, en plus des liens qualité déjà en place.
-  epiId String?
-  epcId String?
-  riskId String?
-  fournisseurId String?
-  employeeId String?
-  processusId String?
-  // Taux de conformité calculé à la soumission — les points marqués non
-  // applicables sont exclus du dénominateur, jamais comptés comme échec.
-  conformityRate Float?
-  // Décision finale — plus riche que le simple statut technique
-  // COMPLIANT/NON_COMPLIANT : Conforme, Conforme sous réserve, Refusé,
-  // Bloqué, Libéré, À recontrôler... configurable, jamais figée en dur.
-  finalDecision String?
-  // Échantillonnage (contrôles produit) — tout optionnel, sans incidence
-  // sur les contrôles qui n'en ont pas besoin.
-  lotSize Int?
-  sampleSize Int?
-  samplingMethod String?
-  defectRate Float?
-  acceptanceThreshold Float?
-  rejectionThreshold Float?
-  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
-  productionLine ProductionLine? @relation(fields:[lineId], references:[id], onDelete:SetNull)
-  machine Machine? @relation(fields:[machineId], references:[id], onDelete:SetNull)
-  productRef Product? @relation(fields:[productId], references:[id], onDelete:SetNull)
-  productFormat ProductFormat? @relation(fields:[formatId], references:[id], onDelete:SetNull)
-  shiftRef Shift? @relation(fields:[shiftId], references:[id], onDelete:SetNull)
-  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
-  template ControlTemplate? @relation(fields:[templateId], references:[id], onDelete:SetNull)
-  type ControlType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
-  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
-  epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
-  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
-  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
-  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  nonConformities NonConformity[]
-  results ControlResult[]
-  attachments QualityControlAttachment[]
-  signatures QualityControlSignature[]
-  @@index([controlDate])
-  @@index([status])
-  @@index([lineId,controlDate])
-  @@index([productId,lotNumber])
-  @@index([domain,controlDate])
-}
-
-// Catalogue des types de contrôle (contrôle qualité, réception, machine,
-// hygiène, EPI/EPC...) — géré par l'administrateur, jamais une liste
-// figée en dur. Un modèle de contrôle (ControlTemplate) appartient à un
-// type ; un contrôle peut aussi référencer directement son type.
-model ControlType {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  domain String @default("QUALITE")
-  description String?
-  active Boolean @default(true)
-  templates ControlTemplate[]
-  controls QualityControl[]
-  schedules ControlSchedule[]
-  createdAt DateTime @default(now())
-}
-
-// Planification des contrôles récurrents (section 9 du cahier des
-// charges) : quotidien, hebdomadaire, mensuel, trimestriel, semestriel,
-// annuel ou intervalle personnalisé. La génération du contrôle concret
-// reste une action explicite (bouton "Générer maintenant") plutôt qu'une
-// tâche automatique en arrière-plan — plus sûr, rien ne peut se
-// déclencher tout seul de façon inattendue.
-model ControlSchedule {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  domain String @default("QUALITE")
-  typeId String?
-  templateId String?
-  frequency String
-  intervalDays Int?
-  assignedToId String?
-  nextDueDate DateTime
-  lastGeneratedAt DateTime?
-  active Boolean @default(true)
-  siteId String?
-  lineId String?
-  createdAt DateTime @default(now())
-  type ControlType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
-  template ControlTemplate? @relation(fields:[templateId], references:[id], onDelete:SetNull)
-  assignedTo User? @relation(fields:[assignedToId], references:[id], onDelete:SetNull)
-  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
-  productionLine ProductionLine? @relation(fields:[lineId], references:[id], onDelete:SetNull)
-  @@index([nextDueDate,active])
-}
-
-model ControlTemplate {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  active Boolean @default(true)
-  domain String @default("QUALITE")
-  typeId String?
-  type ControlType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
-  points ControlPoint[]
-  controls QualityControl[]
-  schedules ControlSchedule[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ControlPoint {
-  id String @id @default(cuid())
-  templateId String
-  code String
-  label String
-  type ControlValueType
-  required Boolean @default(false)
-  critical Boolean @default(false)
-  minValue Float?
-  maxValue Float?
-  choices Json?
-  unit String?
-  order Int @default(0)
-  template ControlTemplate @relation(fields:[templateId], references:[id], onDelete:Cascade)
-  results ControlResult[]
-  @@unique([templateId,code])
-  @@index([templateId,order])
-}
-
-model ControlResult {
-  id String @id @default(cuid())
-  controlId String
-  pointId String
-  value Json?
-  compliant Boolean?
-  // Un point marqué non applicable ne compte ni comme conforme ni comme
-  // non conforme — il doit être exclu du dénominateur du taux de
-  // conformité, jamais traité comme un échec silencieux.
-  notApplicable Boolean @default(false)
-  comment String?
-  photoRequired Boolean @default(false)
-  createdById String?
-  createdAt DateTime @default(now())
-  control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade)
-  point ControlPoint @relation(fields:[pointId], references:[id], onDelete:Restrict)
-  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
-  @@unique([controlId,pointId])
-}
-
-model QualityControlAttachment {
-  id String @id @default(cuid())
-  controlId String
-  attachmentId String
-  control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade)
-  attachment Attachment @relation(fields:[attachmentId], references:[id], onDelete:Cascade)
-  @@unique([controlId,attachmentId])
-}
-
-model QualityControlSignature {
-  id String @id @default(cuid())
-  controlId String
-  userId String?
-  type SignatureType
-  signatureData String
-  signedAt DateTime @default(now())
-  control QualityControl @relation(fields:[controlId], references:[id], onDelete:Cascade)
-  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
-  @@index([controlId])
-}
-
-model Risk {
-  id String @id @default(cuid())
-  code String @unique
-  hazard String
-  activity String?
-  severity Int
-  probability Int
-  control Int @default(1)
-  score Int
-  status String @default("ACTIVE")
-  measures String?
-  reviewedAt DateTime?
-  processusId String?
-  fournisseurId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  qualityControls QualityControl[]
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
-  safetyEvents SafetyEvent[]
-}
-
-model HaccpRecord {
-  id String @id @default(cuid())
-  code String @unique
-  process String
-  step String
-  hazard String
-  ccp Boolean @default(false)
-  criticalLimit String?
-  monitoring String?
-  result String?
-  correctiveAction String?
-  recordDate DateTime @default(now())
-}
-
-model QhseAudit {
-  id String @id @default(cuid())
-  code String @unique
-  title String
-  reference String?
-  auditDate DateTime
-  auditorId String?
-  status String @default("PLANNED")
-  score Float?
-  findings Json?
-  processusId String?
-  fournisseurId String?
-  auditor User? @relation(fields:[auditorId], references:[id], onDelete:SetNull)
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
-  createdAt DateTime @default(now())
-  auditFindings AuditFinding[]
-}
-
-// Constat d'audit structuré — remplace le champ "findings" en texte
-// libre jamais exploité. Un constat critique peut générer automatiquement
-// une non-conformité et une action, exactement comme un point de
-// contrôle critique le fait déjà dans le moteur de contrôle universel.
-model AuditFinding {
-  id String @id @default(cuid())
-  auditId String
-  description String
-  classification String?
-  critical Boolean @default(false)
-  status String @default("OPEN")
-  nonConformityId String?
-  createdAt DateTime @default(now())
-  audit QhseAudit @relation(fields:[auditId], references:[id], onDelete:Cascade)
-  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
-}
-
-model EnvironmentRecord {
-  id String @id @default(cuid())
-  code String @unique
-  type String
-  value Float?
-  unit String?
-  site String?
-  recordedAt DateTime @default(now())
-  notes String?
-}
-
-model Training {
-  id String @id @default(cuid())
-  code String @unique
-  title String
-  trainer String?
-  scheduledAt DateTime
-  durationHours Float?
-  status String @default("PLANNED")
-  participants Json?
-  expiryAt DateTime?
-  processusId String?
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-}
-
-model Equipment {
-  id String @id @default(cuid())
-  code String @unique
-  name String
-  category String?
-  location String?
-  status String @default("ACTIVE")
-  lastInspectionAt DateTime?
-  nextInspectionAt DateTime?
-  notes String?
-}
-
-model SafetyTalk {
-  id String @id @default(cuid())
-  weekStart DateTime
-  weekEnd DateTime
-  title String
-  summary String
-  status SafetyTalkStatus @default(DRAFT)
-  generatedAt DateTime @default(now())
-  approvedAt DateTime?
-  createdById String?
-  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
-  @@unique([weekStart])
-}
-
-// ============================================================================
-// Modules ajoutés pour compléter la parité avec la maquette Gestion QHSE 360
-// (Qualité : processus/indicateurs, Réclamations, Fournisseurs, Hygiène,
-// Veille réglementaire, Objectifs QHSE). Purement additif : aucun modèle
-// existant ci-dessus n'est modifié.
-// ============================================================================
-model Processus {
-  id String @id @default(cuid())
-  code String @unique
-  nom String
-  // Classification — jamais une liste figée, l'utilisateur reste libre
-  // de qualifier son processus comme il l'entend.
-  type String @default("OPERATIONNEL")
-  domaine String?
-  departement String?
-  siteId String?
-  version String?
-  statut String @default("ACTIF")
-  criticite String?
-  // Pilotage
-  piloteId String?
-  suppleantId String?
-  // Finalité et périmètre
-  finalite String?
-  objectifPrincipal String?
-  perimetreDebut String?
-  perimetreFin String?
-  // SIPOC simple — Suppliers/Inputs/Outputs/Customers en listes ; le "P"
-  // (activités) est une vraie structure, voir ProcessusActivity.
-  suppliers Json?
-  inputs Json?
-  outputs Json?
-  customers Json?
-  // Position sur la cartographie interactive — mémorisée après chaque
-  // déplacement, pour que la carte reste telle que l'utilisateur l'a
-  // organisée d'une session à l'autre.
-  positionX Float?
-  positionY Float?
-  // Champs historiques conservés tels quels — aucune donnée existante
-  // n'est perdue par cet enrichissement.
-  proprietaire String?
-  objectifs String?
-  kpi String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
-  pilote User? @relation("ProcessusPilote", fields:[piloteId], references:[id], onDelete:SetNull)
-  suppleant User? @relation("ProcessusSuppleant", fields:[suppleantId], references:[id], onDelete:SetNull)
-  activities ProcessusActivity[]
-  exigences ProcessusExigence[]
-  risks Risk[]
-  actions Action[]
-  nonConformities NonConformity[]
-  audits QhseAudit[]
-  documents Document[]
-  trainings Training[]
-  objectifsQhse ObjectifQhse[]
-  qualityControls QualityControl[]
-  linksFrom ProcessusLink[] @relation("ProcessusLinkSource")
-  linksTo ProcessusLink[] @relation("ProcessusLinkTarget")
-  indicateursQualite IndicateurQualite[]
-  reclamations Reclamation[]
-  safetyEvents SafetyEvent[]
-}
-
-// Liens dessinés entre processus sur la cartographie interactive — un
-// simple trait avec une légende optionnelle (ex. "alimente", "dépend de").
-model ProcessusLink {
-  id String @id @default(cuid())
-  sourceId String
-  targetId String
-  label String?
-  createdAt DateTime @default(now())
-  source Processus @relation("ProcessusLinkSource", fields:[sourceId], references:[id], onDelete:Cascade)
-  target Processus @relation("ProcessusLinkTarget", fields:[targetId], references:[id], onDelete:Cascade)
-  @@unique([sourceId,targetId])
-}
-
-// Le "P" du SIPOC — chaque étape du processus, avec sa propre matrice
-// RACI. Ordre libre, ajout illimité, comme demandé.
-model ProcessusActivity {
-  id String @id @default(cuid())
-  processusId String
-  code String?
-  order Int @default(0)
-  name String
-  description String?
-  responsibleId String?
-  inputs String?
-  outputs String?
-  resources String?
-  equipment String?
-  frequency String?
-  criticality String?
-  createdAt DateTime @default(now())
-  processus Processus @relation(fields:[processusId], references:[id], onDelete:Cascade)
-  responsible User? @relation("ProcessusActivityResponsible", fields:[responsibleId], references:[id], onDelete:SetNull)
-  racis ProcessusRaci[]
-}
-
-// Matrice RACI par activité. roleLabel permet de désigner un service ou
-// une fonction sans forcer un compte utilisateur du système.
-model ProcessusRaci {
-  id String @id @default(cuid())
-  activityId String
-  userId String?
-  roleLabel String?
-  raci String
-  activity ProcessusActivity @relation(fields:[activityId], references:[id], onDelete:Cascade)
-  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
-}
-
-// Exigences légales, réglementaires ou normatives rattachées au
-// processus — configurable pour n'importe quel référentiel (ISO 9001,
-// 14001, 45001, 22000, HACCP, exigences client, internes...), jamais
-// limité à une seule norme en dur.
-model ProcessusExigence {
-  id String @id @default(cuid())
-  processusId String
-  exigence String
-  origine String?
-  reference String?
-  applicable Boolean @default(true)
-  preuveConformite String?
-  responsableId String?
-  frequenceVerification String?
-  derniereVerification DateTime?
-  prochaineEcheance DateTime?
-  statutConformite String @default("CONFORME")
-  createdAt DateTime @default(now())
-  processus Processus @relation(fields:[processusId], references:[id], onDelete:Cascade)
-  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
-}
-
-model IndicateurQualite {
-  id String @id @default(cuid())
-  code String @unique
-  indicateur String
-  actuel Float
-  cible Float
-  unite String?
-  sensInverse Boolean @default(false)
-  // Catégorie et formule — texte libre transparent, jamais un calcul
-  // caché : l'utilisateur voit toujours comment la valeur est obtenue.
-  categorie String?
-  formule String?
-  frequence String?
-  processusId String?
-  seuilVert Float?
-  seuilOrange Float?
-  // MANUEL = saisi par l'utilisateur, AUTO = calculé depuis un autre
-  // module (voir /business/indicateurs-auto) — jamais les deux à la
-  // fois pour éviter la double saisie que le prompt veut éliminer.
-  source String @default("MANUEL")
-  autoKey String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  mesures IndicateurMesure[]
-}
-
-// Historique des mesures — sans lui, un indicateur n'a ni tendance ni
-// évolution, seulement une valeur figée dans le temps.
-model IndicateurMesure {
-  id String @id @default(cuid())
-  indicateurId String
-  valeur Float
-  periode DateTime @default(now())
-  commentaire String?
-  createdAt DateTime @default(now())
-  indicateur IndicateurQualite @relation(fields:[indicateurId], references:[id], onDelete:Cascade)
-}
-
-// Pondération de chaque indicateur de la bibliothèque automatique dans
-// l'indice global de performance qualité — entièrement configurable,
-// jamais figée en dur dans le code.
-model IndicateurPonderation {
-  id String @id @default(cuid())
-  autoKey String @unique
-  poids Float @default(1)
-  updatedAt DateTime @updatedAt
-}
-
-model Reclamation {
-  id String @id @default(cuid())
-  code String @unique
-  client String
-  typeClient String?
-  clientContact String?
-  motif String
-  description String?
-  canal String?
-  date DateTime @default(now())
-  dateEvenement DateTime?
-  // Produit / service concerné
-  produitService String?
-  reference String?
-  lotNumber String?
-  commandeNumber String?
-  factureNumber String?
-  quantiteConcernee Float?
-  siteId String?
-  processusId String?
-  fournisseurId String?
-  // Classification — texte libre configurable, jamais une liste figée
-  categorieProbleme String?
-  gravite String @default("Faible")
-  scoreCriticite Int?
-  statut String @default("OPEN")
-  // SLA — sans ces dates, aucun délai n'est mesurable
-  dateAccuseReception DateTime?
-  datePremiereReponse DateTime?
-  dateResolutionPrevue DateTime?
-  dateResolutionReelle DateTime?
-  dateCloture DateTime?
-  delaiCibleJours Int?
-  // Action curative immédiate (section 5 du prompt)
-  actionCurative String?
-  actionCurativeResponsableId String?
-  actionCurativeDate DateTime?
-  actionCurativeCout Float?
-  // Analyse des causes — 5 Pourquoi + Ishikawa (5M)
-  methodeAnalyse String?
-  pourquoi1 String?
-  pourquoi2 String?
-  pourquoi3 String?
-  pourquoi4 String?
-  pourquoi5 String?
-  categorieCauseIshikawa String?
-  causeRacine String?
-  // Vérification d'efficacité — jamais une clôture automatique
-  efficacite String?
-  // Satisfaction client après traitement
-  satisfaction String?
-  noteSatisfaction Float?
-  commentaireClient String?
-  // Coûts détaillés — le total se calcule, ne se ressaisit pas
-  coutRemboursement Float?
-  coutRemplacement Float?
-  coutTransport Float?
-  coutMainOeuvre Float?
-  coutAutres Float?
-  // Récurrence — détectée automatiquement à la lecture, mais peut aussi
-  // être confirmée manuellement par l'utilisateur
-  recurrente Boolean @default(false)
-  nonConformityId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
-  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
-  actionCurativeResponsable User? @relation(fields:[actionCurativeResponsableId], references:[id], onDelete:SetNull)
-  actions Action[]
-}
-
-model Fournisseur {
-  id String @id @default(cuid())
-  code String @unique
-  nom String
-  nomCommercial String?
-  typeFournisseur String?
-  categorie String?
-  familleAchat String?
-  produitsServices String?
-  adresse String?
-  pays String?
-  region String?
-  ville String?
-  contactNom String?
-  contactTelephone String?
-  contactEmail String?
-  siteWeb String?
-  responsableInterneId String?
-  dateDebutRelation DateTime?
-  statut String @default("HOMOLOGUE")
-  niveauRisque String?
-  criticite Boolean @default(false)
-  // Qualification — champs libres, jamais une méthode financière ou
-  // technique imposée, pour rester utilisable dans tout secteur.
-  capaciteTechnique String?
-  capaciteCommerciale String?
-  situationFinanciere String?
-  // Homologation
-  dateHomologation DateTime?
-  dateProchaineReevaluation DateTime?
-  motifDemande String?
-  avisQhse String?
-  avisAchats String?
-  avisTechnique String?
-  decisionFinale String?
-  conditionsParticulieres String?
-  // Continuité d'approvisionnement
-  monoSource Boolean @default(false)
-  solutionSecours Boolean @default(false)
-  delaiRemplacementJours Int?
-  planContinuite String?
-  // Scores par domaine — le score global se calcule à partir de ceux-ci
-  // et des pondérations configurables, jamais ressaisi séparément.
-  scoreQualite Int?
-  scoreLivraison Int?
-  scoreQhse Int?
-  scoreCommercial Int?
-  scoreReactivite Int?
-  scoreEnvironnemental Int?
-  scoreSecurite Int?
-  derniereEvaluation DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  responsableInterne User? @relation(fields:[responsableInterneId], references:[id], onDelete:SetNull)
-  qualityControls QualityControl[]
-  reclamations Reclamation[]
-  nonConformities NonConformity[]
-  actions Action[]
-  audits QhseAudit[]
-  risks Risk[]
-  certifications FournisseurCertification[]
-  safetyEvents SafetyEvent[]
-}
-
-// Certifications et documents réglementaires du fournisseur — jamais
-// limité à l'ISO 9001, l'utilisateur ajoute ce qui est pertinent pour
-// son secteur.
-model FournisseurCertification {
-  id String @id @default(cuid())
-  fournisseurId String
-  type String
-  numero String?
-  organismeCertificateur String?
-  dateEmission DateTime?
-  dateExpiration DateTime?
-  statut String @default("VALIDE")
-  commentaire String?
-  createdAt DateTime @default(now())
-  fournisseur Fournisseur @relation(fields:[fournisseurId], references:[id], onDelete:Cascade)
-}
-
-model VisiteMedicale {
-  id String @id @default(cuid())
-  code String @unique
-  employeNom String
-  poste String?
-  aptitude String?
-  statut String @default("A_VENIR")
-  prochaineVisite DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model VeilleReglementaire {
-  id String @id @default(cuid())
-  code String @unique
-  texte String
-  domaine String?
-  dateApplication DateTime?
-  statut String @default("A_TRAITER")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ObjectifQhse {
-  id String @id @default(cuid())
-  code String @unique
-  titre String
-  pilier String?
-  cible Float
-  actuel Float @default(0)
-  unite String?
-  echeance DateTime?
-  processusId String?
-  processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+// ==========================================================
+// MODULE HYGIÈNE AU TRAVAIL — PHASE 1 (schéma à ajouter)
+// À coller dans schema.prisma, puis créer une migration
+// nommée sur 4 chiffres, ex: 00XX_hygiene_travail_module
+// ==========================================================
+
+enum HygieneRiskCategorie {
+  PHYSIQUE
+  CHIMIQUE
+  BIOLOGIQUE
+  CONDITIONS_TRAVAIL
+}
+
+enum HygieneRiskStatut {
+  IDENTIFIE
+  EN_TRAITEMENT
+  MAITRISE
+  CLOTURE
+}
+
+enum HygieneRiskNiveau {
+  FAIBLE
+  MODERE
+  ELEVE
+  CRITIQUE
+}
+
+enum ExpositionConformite {
+  CONFORME
+  NON_CONFORME
+  A_VERIFIER
+}
+
+enum ScoreErgonomique {
+  FAIBLE
+  MODERE
+  ELEVE
+  CRITIQUE
+}
+
+enum ZoneCorporelle {
+  DOS
+  EPAULES
+  COU
+  POIGNETS
+  MAINS
+  COUDES
+  GENOUX
+  JAMBES
+  PIEDS
+  AUTRE
+}
+
+enum TypeSignalementTMS {
+  SITUATION_A_RISQUE
+  CAS_DECLARE
+}
+
+enum TypeVisiteMedicale {
+  EMBAUCHE
+  PERIODIQUE
+  REPRISE
+  SPONTANEE
+  SURVEILLANCE_RENFORCEE
+}
+
+enum StatutVisiteMedicale {
+  REALISEE
+  A_PROGRAMMER
+  ECHUE
+}
+
+enum AptitudeStatut {
+  APTE
+  APTE_AVEC_RESTRICTIONS
+  INAPTE
+  EN_ATTENTE
+}
+
+model HygieneRisk {
+  id                     String               @id @default(cuid())
+  reference              String               @unique
+  categorie              HygieneRiskCategorie
+  sousType               String
+  danger                 String
+  situationDangereuse    String?
+  source                 String?
+  activite               String?
+  poste                  String?
+  zone                   String?
+  siteId                 String?
+  etablissement          String?
+  service                String?
+  departement            String?
+  atelier                String?
+  personnelExposeCount   Int                  @default(0)
+  dureeExposition        String?
+  frequenceExposition    String?
+  voieExposition         String?
+  niveauExposition       String?
+  gravite                Int
+  probabilite            Int
+  criticite              Int
+  niveauRisque           HygieneRiskNiveau
+  mesuresExistantes      String?
+  mesuresSupplementaires String?
+  responsableId          String?
+  echeance               DateTime?
+  statut                 HygieneRiskStatut    @default(IDENTIFIE)
+  riskId                 String?
+  risk                   Risk?                @relation(fields: [riskId], references: [id])
+  documentIds            Json?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  createdBy              String?
+  updatedBy              String?
+
+  expositions            HygieneExposureMonitoring[]
+  actions                Action[]
+}
+
+model HygieneExposureMonitoring {
+  id                String               @id @default(cuid())
+  hygieneRiskId     String
+  hygieneRisk       HygieneRisk          @relation(fields: [hygieneRiskId], references: [id])
+  employeId         String?
+  poste             String?
+  zone              String?
+  agentDangereux    String
+  niveauExposition  String?
+  frequence         String?
+  duree             String?
+  dateMesure        DateTime
+  valeurMesuree     Float?
+  uniteValeur       String?
+  valeurLimite      Float?
+  conformite        ExpositionConformite @default(A_VERIFIER)
+  sourceMesure      String?
+  evolution         String?
+  mesuresPrevention String?
+  createdAt         DateTime             @default(now())
+  createdBy         String?
+}
+
+model ErgonomicAssessment {
+  id                   String           @id @default(cuid())
+  poste                String
+  activite             String?
+  service              String?
+  siteId               String?
+  facteurs             Json
+  scoreValeur          Int
+  scoreErgonomique     ScoreErgonomique
+  tmsRisqueDetecte     Boolean          @default(false)
+  actionsProposees     String?
+  historiqueAvantApres Json?
+  dateEvaluation       DateTime         @default(now())
+  dateReevaluation     DateTime?
+  responsableId        String?
+  statut               String           @default("A_TRAITER")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  createdBy            String?
+
+  tmsCases             TMSCase[]
+  actions              Action[]
+}
+
+model TMSCase {
+  id                    String               @id @default(cuid())
+  ergonomicAssessmentId String?
+  ergonomicAssessment   ErgonomicAssessment? @relation(fields: [ergonomicAssessmentId], references: [id])
+  employeId             String?
+  poste                 String?
+  activite              String?
+  zoneCorporelle        ZoneCorporelle
+  typeSignalement       TypeSignalementTMS
+  dateSignalement       DateTime             @default(now())
+  frequence             String?
+  gravitePercue         Int?
+  statut                String               @default("OUVERT")
+  actionsEngagees       String?
+  efficaciteActions     String?
+  safetyEventId         String?
+  createdAt             DateTime             @default(now())
+  createdBy             String?
+
+  actions               Action[]
+}
+
+// Table à accès restreint — jamais exposée dans les tableaux de bord généraux
+model MedicalSurveillance {
+  id                  String               @id @default(cuid())
+  employeId           String
+  poste               String?
+  service             String?
+  dateDerniereVisite  DateTime?
+  typeVisite          TypeVisiteMedicale?
+  dateProchaineVisite DateTime?
+  statutVisite        StatutVisiteMedicale @default(A_PROGRAMMER)
+  aptitude            AptitudeStatut?
+  restrictions        String?
+  amenagementPoste    String?
+  suiviParticulier    Boolean              @default(false)
+  medecinService      String?
+  documentIds         Json?
+  dateRenouvellement  DateTime?
+  confidentiel        Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  createdBy           String?
+  updatedBy           String?
+}
+
+model PenibiliteFactor {
+  id                      String   @id @default(cuid())
+  nom                     String   @unique
+  description             String?
+  reglementationReference String?
+  actif                   Boolean  @default(true)
+  createdAt               DateTime @default(now())
+
+  expositions             PenibiliteExposition[]
+}
+
+model PenibiliteExposition {
+  id                    String           @id @default(cuid())
+  employeId             String
+  penibiliteFactorId    String
+  penibiliteFactor      PenibiliteFactor @relation(fields: [penibiliteFactorId], references: [id])
+  poste                 String?
+  niveauExposition      String?
+  duree                 String?
+  frequence             String?
+  mesuresPrevention     String?
+  dateEvaluation        DateTime         @default(now())
+  prochaineReevaluation DateTime?
+  actionsNecessaires    String?
+  createdAt             DateTime         @default(now())
+  createdBy             String?
+
+  actions               Action[]
+}
+
+// ==========================================================
+// AJOUTS SUR MODÈLES EXISTANTS (ne pas dupliquer, fusionner)
+// ==========================================================
+
+// Sur model Risk { ... } — ajouter :
+//   hygieneRisks HygieneRisk[]
+
+// Sur model Action { ... } — ajouter :
+//   hygieneRiskId          String?
+//   hygieneRisk            HygieneRisk?          @relation(fields: [hygieneRiskId], references: [id])
+//   ergonomicAssessmentId  String?
+//   ergonomicAssessment    ErgonomicAssessment?  @relation(fields: [ergonomicAssessmentId], references: [id])
+//   tmsCaseId              String?
+//   tmsCase                TMSCase?              @relation(fields: [tmsCaseId], references: [id])
+//   penibiliteExpositionId String?
+//   penibiliteExposition   PenibiliteExposition? @relation(fields: [penibiliteExpositionId], references: [id])
+
+// Indicateurs : réutiliser IndicateurPonderation existant avec namespace "hyg_*"
+//   (ex: hyg_risques, hyg_hygiene, hyg_medical, hyg_ergonomie, hyg_tms, hyg_penibilite)
+//   -> aucun changement de schéma nécessaire.
+
+// Contrôles hygiène : réutiliser le moteur universel de Contrôles Qualité existant
+//   en ajoutant un domaine "HYGIENE" + check-lists dédiées côté data (seed),
+//   aucune nouvelle table nécessaire.
