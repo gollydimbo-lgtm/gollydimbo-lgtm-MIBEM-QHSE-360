@@ -21,6 +21,7 @@ import 'pages/indicateurs_pages.dart';
 import 'pages/reclamations_pages.dart';
 import 'pages/fournisseurs_pages.dart';
 import 'pages/hygiene_pages.dart';
+import 'pages/environnement_pages.dart';
 import 'pages/rapports_page.dart';
 import 'pages/other_modules_page.dart';
 import 'pages/ged_page.dart';
@@ -148,7 +149,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem('Gestion EPI/EPC', Icons.health_and_safety_outlined, const EpiPage()),
       _NavItem('Hygiène au travail', Icons.favorite_outline, const HygieneHome()),
     ]),
-    _NavGroup('ENVIRONNEMENT (ISO 14001:2026)', [_NavItem('Environnement', Icons.eco_outlined, const EnvironmentPage())]),
+    _NavGroup('ENVIRONNEMENT (ISO 14001:2026)', [_NavItem('Environnement', Icons.eco_outlined, const EnvironnementHome())]),
     _NavGroup('RISQUES & AUDITS', [
       _NavItem('Registre des risques', Icons.report_problem_outlined, const RisksPage()),
       _NavItem('Audits', Icons.assignment_turned_in_outlined, const AuditsPage()),
