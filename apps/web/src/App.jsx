@@ -517,18 +517,46 @@ async function confirmAndDelete(label, endpoint, onDone) {
 function RiskForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
-  const [form, setForm] = useState({ hazard: record?.hazard || '', activity: record?.activity || '', severity: record?.severity || 3, probability: record?.probability || 3, measures: record?.measures || '' });
+  const categoriesQ = useCollection('/business/risk-categories');
+  const workUnitsQ = useCollection('/business/work-units');
+  const [form, setForm] = useState({
+    hazard: record?.hazard || '', categoryId: record?.categoryId || '', workUnitId: record?.workUnitId || '',
+    activity: record?.activity || '', hazardousSituation: record?.hazardousSituation || '', hazardousEvent: record?.hazardousEvent || '',
+    potentialDamage: record?.potentialDamage || '', exposedPersons: record?.exposedPersons || '', exposedPersonCount: record?.exposedPersonCount ?? '',
+    method: record?.method || 'GP', severity: record?.severity || 3, probability: record?.probability || 3, exposure: record?.exposure || 1,
+    measures: record?.measures || '',
+    residualSeverity: record?.residualSeverity ?? '', residualProbability: record?.residualProbability ?? '', residualExposure: record?.residualExposure ?? '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  function buildPayload() {
+    return {
+      ...form,
+      severity: Number(form.severity), probability: Number(form.probability), exposure: Number(form.exposure) || 1,
+      categoryId: form.categoryId || null, workUnitId: form.workUnitId || null,
+      exposedPersonCount: form.exposedPersonCount === '' ? null : Number(form.exposedPersonCount),
+      residualSeverity: form.residualSeverity === '' ? null : Number(form.residualSeverity),
+      residualProbability: form.residualProbability === '' ? null : Number(form.residualProbability),
+      residualExposure: form.residualExposure === '' ? null : Number(form.residualExposure),
+    };
+  }
   async function submit(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { ...form, severity: Number(form.severity), probability: Number(form.probability) };
+      const payload = buildPayload();
       if (editing) await api.patch(`/business/risks/${record.id}`, payload);
       else await api.post('/business/risks', { code: genCode('RISK'), ...payload, status: 'ACTIVE' });
       onCreated(); onClose();
     } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  // Réévaluer conserve l'ancienne évaluation dans l'historique (RiskEvaluation)
+  // au lieu de simplement écraser les valeurs — contrairement à "Enregistrer".
+  async function reevaluate() {
+    setSaving(true); setError(null);
+    try { await api.post(`/business/risks/${record.id}/reevaluate`, buildPayload()); onCreated(); onClose(); }
+    catch (err) { setError(err.message); }
     setSaving(false);
   }
   async function del() {
@@ -538,18 +566,53 @@ function RiskForm({ record, onClose, onCreated }) {
     setSaving(false);
   }
   return (
-    <Modal title={editing ? 'Modifier le risque' : 'Nouveau risque'} onClose={onClose}>
+    <Modal title={editing ? 'Modifier le risque' : 'Nouveau risque'} onClose={onClose} wide>
       <form onSubmit={submit}>
         <FormField label="Danger identifié"><input required value={form.hazard} onChange={(e) => setForm({ ...form, hazard: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Chute de hauteur" /></FormField>
-        <FormField label="Activité / mesures existantes"><input value={form.activity} onChange={(e) => setForm({ ...form, activity: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         <div className="grid grid-cols-2 gap-3">
+          <FormField label="Catégorie">
+            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(categoriesQ.data || []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Unité de travail">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Activité concernée"><input value={form.activity} onChange={(e) => setForm({ ...form, activity: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Situation dangereuse"><input value={form.hazardousSituation} onChange={(e) => setForm({ ...form, hazardousSituation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Événement redouté"><input value={form.hazardousEvent} onChange={(e) => setForm({ ...form, hazardousEvent: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Dommage potentiel"><input value={form.potentialDamage} onChange={(e) => setForm({ ...form, potentialDamage: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Personnes exposées"><input value={form.exposedPersons} onChange={(e) => setForm({ ...form, exposedPersons: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Opérateurs ligne 1" /></FormField>
+          <FormField label="Nombre de personnes exposées"><input type="number" min="0" value={form.exposedPersonCount} onChange={(e) => setForm({ ...form, exposedPersonCount: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Méthode d'évaluation">
+          <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="GP">Gravité × Probabilité</option>
+            <option value="GPE">Gravité × Probabilité × Exposition</option>
+          </select>
+        </FormField>
+        <div className={`grid ${form.method === 'GPE' ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
           <FormField label="Probabilité (1-5)"><select value={form.probability} onChange={(e) => setForm({ ...form, probability: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
           <FormField label="Gravité (1-5)"><select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          {form.method === 'GPE' && <FormField label="Exposition (1-5)"><select value={form.exposure} onChange={(e) => setForm({ ...form, exposure: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>}
         </div>
-        <FormField label="Mesures de maîtrise"><textarea value={form.measures} onChange={(e) => setForm({ ...form, measures: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        {editing && <p className="text-xs mb-3" style={{ color: C.textMuted }}>Risque brut actuel : <strong style={{ color: C.text }}>{record.grossScore ?? record.score}</strong> ({record.grossLevel || '—'})</p>}
+        <FormField label="Mesures de prévention existantes (résumé)"><textarea value={form.measures} onChange={(e) => setForm({ ...form, measures: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <p className="text-xs font-medium mb-2" style={{ color: C.textMuted }}>Évaluation du risque résiduel (après mesures) — optionnelle</p>
+        <div className={`grid ${form.method === 'GPE' ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
+          <FormField label="Probabilité résiduelle"><select value={form.residualProbability} onChange={(e) => setForm({ ...form, residualProbability: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          <FormField label="Gravité résiduelle"><select value={form.residualSeverity} onChange={(e) => setForm({ ...form, residualSeverity: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          {form.method === 'GPE' && <FormField label="Exposition résiduelle"><select value={form.residualExposure} onChange={(e) => setForm({ ...form, residualExposure: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>}
+        </div>
+        {editing && record.residualScore != null && <p className="text-xs mb-3" style={{ color: C.textMuted }}>Risque résiduel actuel : <strong style={{ color: C.text }}>{record.residualScore}</strong> ({record.residualLevel}) — statut : {record.controlStatus}</p>}
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
         <div className="flex gap-2">
           {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          {editing && <button type="button" onClick={reevaluate} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Réévaluer</button>}
           <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Enregistrer'}</button>
         </div>
       </form>
@@ -692,19 +755,22 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
 function NonConformityForm({ record, prefill, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
+  const risksQ = useCollection('/business/risks');
   const [form, setForm] = useState({
     title: record?.title || prefill?.title || '', description: record?.description || prefill?.description || '',
     source: record?.source || prefill?.source || '', severity: record?.severity || prefill?.severity || 2,
     occurredAt: record ? new Date(record.occurredAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     status: record?.status || 'OPEN', epiId: record?.epiId || prefill?.epiId || null, epcId: record?.epcId || prefill?.epcId || null,
+    riskId: record?.riskId || '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [generatingRisk, setGeneratingRisk] = useState(false);
   async function submit(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { ...form, severity: Number(form.severity), occurredAt: new Date(form.occurredAt).toISOString() };
+      const payload = { ...form, severity: Number(form.severity), occurredAt: new Date(form.occurredAt).toISOString(), riskId: form.riskId || null };
       if (editing) await api.patch(`/business/non-conformities/${record.id}`, payload);
       else await api.post('/business/non-conformities', { code: genCode('NC'), ...payload });
       onCreated(); onClose();
@@ -717,6 +783,14 @@ function NonConformityForm({ record, prefill, onClose, onCreated }) {
     catch (err) { setError(err.message); }
     setSaving(false);
   }
+  // Point 19 : générer directement un risque à partir de cette NC plutôt que
+  // de ressaisir le même danger dans le Registre des risques.
+  async function generateRisk() {
+    setGeneratingRisk(true); setError(null);
+    try { const risk = await api.post(`/business/non-conformities/${record.id}/generate-risk`, {}); setForm({ ...form, riskId: risk.id }); onCreated(); }
+    catch (err) { setError(err.message); }
+    setGeneratingRisk(false);
+  }
   return (
     <Modal title={editing ? 'Modifier la non-conformité' : 'Déclarer une non-conformité'} onClose={onClose}>
       <form onSubmit={submit}>
@@ -728,6 +802,12 @@ function NonConformityForm({ record, prefill, onClose, onCreated }) {
           <FormField label="Sévérité (1-5)"><select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
         </div>
         {editing && <FormField label="Statut"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="OPEN">OPEN</option><option value="CLOSED">CLOSED</option></select></FormField>}
+        <FormField label="Risque lié (Registre des risques)">
+          <select value={form.riskId} onChange={(e) => setForm({ ...form, riskId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(risksQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.hazard}</option>)}
+          </select>
+          {editing && !form.riskId && <button type="button" onClick={generateRisk} disabled={generatingRisk} className="mt-2 text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>{generatingRisk ? '…' : 'Générer un risque à partir de cette NC'}</button>}
+        </FormField>
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
         <div className="flex gap-2">
           {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
@@ -5053,6 +5133,7 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
   const [ev, setEv] = useState(null);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [generatingRisk, setGeneratingRisk] = useState(false);
   const [showActionForm, setShowActionForm] = useState(false);
   const users = useCollection('/users');
   const [form, setForm] = useState(null);
@@ -5083,6 +5164,15 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
     } catch (err) { setError(err.message); }
     setSaving(false);
   }
+  // Point 19 du cahier des charges du Registre des risques : un accident
+  // peut générer directement un risque, préréempli, plutôt que de saisir
+  // le même danger deux fois.
+  async function generateRisk() {
+    setGeneratingRisk(true); setError(null);
+    try { await api.post(`/business/safety-events/${eventId}/generate-risk`, {}); onChanged(); await load(); }
+    catch (err) { setError(err.message); }
+    setGeneratingRisk(false);
+  }
 
   return (
     <>
@@ -5092,6 +5182,13 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
           <span>{new Date(ev.occurredAt).toLocaleDateString('fr-FR')}</span>·<StatusChip statut={ev.type} />·<span>Sévérité {ev.severity}</span>
           <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg ml-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
           {ev.employee && <span>· {ev.employee.firstName} {ev.employee.lastName}</span>}
+        </div>
+
+        <div className="flex items-center justify-between p-2.5 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt }}>
+          {ev.risk
+            ? <p className="text-xs" style={{ color: C.text }}>Risque lié : <strong>{ev.risk.hazard}</strong> ({ev.risk.grossLevel || ev.risk.score})</p>
+            : <p className="text-xs" style={{ color: C.textMuted }}>Aucun risque relié dans le registre</p>}
+          {!ev.risk && <button onClick={generateRisk} disabled={generatingRisk} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>{generatingRisk ? '…' : 'Créer un risque à partir de cet accident'}</button>}
         </div>
 
         <FormField label="Statut">
@@ -6033,43 +6130,377 @@ function EnvironnementPage() {
   );
 }
 
+// Hiérarchie de prévention (point 9 du cahier des charges) — texte libre côté
+// base, mais une liste suggérée ici pour guider la saisie sans l'enfermer.
+const RISK_MEASURE_TYPES = [
+  ['SUPPRESSION', 'Suppression du danger'], ['SUBSTITUTION', 'Substitution'],
+  ['PROTECTION_COLLECTIVE', 'Protection collective'], ['TECHNIQUE', 'Mesure technique'],
+  ['ORGANISATIONNELLE', 'Mesure organisationnelle'], ['PROCEDURE', 'Procédure / instruction'],
+  ['FORMATION', 'Formation / information'], ['SIGNALISATION', 'Signalisation'], ['EPI', 'EPI'], ['AUTRE', 'Autre'],
+];
+
+function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/risks/${risk.id}`);
+  const [showAddMeasure, setShowAddMeasure] = useState(false);
+  const [form, setForm] = useState({ description: '', type: 'TECHNIQUE', efficacite: 3, justificatif: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  if (detailQ.loading) return <Modal title={risk.hazard} onClose={onClose}><LoadingPanel /></Modal>;
+  const d = detailQ.data || risk;
+  const measures = d.riskMeasures || [];
+  const evaluations = [...(d.evaluations || [])].sort((a, b) => new Date(a.evaluatedAt) - new Date(b.evaluatedAt));
+  const niveauColor = { CRITIQUE: C.red, ELEVE: C.amber, MODERE: '#B45309', FAIBLE: C.green };
+
+  async function addMeasure(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      await api.post('/business/risk-measures', { ...form, efficacite: Number(form.efficacite), riskId: risk.id });
+      setForm({ description: '', type: 'TECHNIQUE', efficacite: 3, justificatif: '' }); setShowAddMeasure(false);
+      detailQ.reload(); onChanged();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function deleteMeasure(id) {
+    try { await api.del(`/business/risk-measures/${id}`); detailQ.reload(); onChanged(); }
+    catch (err) { alert(err.message); }
+  }
+
+  return (
+    <Modal title={d.hazard} onClose={onClose} wide>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs" style={{ color: C.textMuted }}>{d.category?.label || 'Sans catégorie'} · {d.workUnit?.name || 'Sans unité de travail'}</p>
+        <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier le risque</button>
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+          <p className="text-[10px]" style={{ color: C.textMuted }}>Risque brut</p>
+          <p className="text-lg font-bold" style={{ color: niveauColor[d.grossLevel] || C.text }}>{d.grossScore ?? d.score}</p>
+          <p className="text-[10px]" style={{ color: niveauColor[d.grossLevel] || C.textMuted }}>{d.grossLevel || '—'}</p>
+        </div>
+        <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+          <p className="text-[10px]" style={{ color: C.textMuted }}>Risque résiduel</p>
+          <p className="text-lg font-bold" style={{ color: d.residualScore != null ? (niveauColor[d.residualLevel] || C.text) : C.textMuted }}>{d.residualScore ?? '—'}</p>
+          <p className="text-[10px]" style={{ color: niveauColor[d.residualLevel] || C.textMuted }}>{d.residualLevel || '—'}</p>
+        </div>
+        <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+          <p className="text-[10px]" style={{ color: C.textMuted }}>Statut de maîtrise</p>
+          <p className="text-sm font-bold mt-1.5" style={{ color: d.controlStatus === 'MAITRISE' ? C.green : d.controlStatus === 'PARTIELLEMENT_MAITRISE' ? C.amber : C.red }}>{d.controlStatus === 'MAITRISE' ? 'Maîtrisé' : d.controlStatus === 'PARTIELLEMENT_MAITRISE' ? 'Partiel' : 'Non maîtrisé'}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Mesures de prévention ({measures.length})</p>
+        <button onClick={() => setShowAddMeasure((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Mesure</button>
+      </div>
+      {showAddMeasure && (
+        <form onSubmit={addMeasure} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <FormField label="Description"><textarea required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Type (hiérarchie de prévention)">
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                {RISK_MEASURE_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Efficacité (1-5)"><select value={form.efficacite} onChange={(e) => setForm({ ...form, efficacite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          </div>
+          <FormField label="Justificatif (optionnel)"><input value={form.justificatif} onChange={(e) => setForm({ ...form, justificatif: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+          <button type="submit" disabled={saving} className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Ajouter la mesure'}</button>
+        </form>
+      )}
+      {measures.length
+        ? <div className="space-y-2 mb-5">
+            {measures.map((m) => (
+              <div key={m.id} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm flex-1" style={{ color: C.text }}>{m.description}</p>
+                  <button onClick={() => deleteMeasure(m.id)} className="text-xs" style={{ color: C.red }}>×</button>
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: C.textMuted }}>{RISK_MEASURE_TYPES.find(([v]) => v === m.type)?.[1] || m.type} · Efficacité {m.efficacite}/5{m.responsable ? ` · ${m.responsable.firstName} ${m.responsable.lastName}` : ''}</p>
+              </div>
+            ))}
+          </div>
+        : <p className="text-sm text-center py-4 mb-5" style={{ color: C.textMuted }}>Aucune mesure de prévention enregistrée</p>}
+
+      <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Historique des évaluations ({evaluations.length})</p>
+      {evaluations.length > 1 && (
+        <div className="mb-3">
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={evaluations.map((ev) => ({ date: new Date(ev.evaluatedAt).toLocaleDateString('fr-FR'), brut: ev.grossScore, residuel: ev.residualScore }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: C.textMuted }} />
+              <YAxis tick={{ fontSize: 10, fill: C.textMuted }} />
+              <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
+              <Line type="monotone" dataKey="brut" stroke={C.red} strokeWidth={2} dot />
+              <Line type="monotone" dataKey="residuel" stroke={C.green} strokeWidth={2} dot />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {evaluations.length
+        ? <DataTable columns={['Date', 'Score brut', 'Niveau', 'Score résiduel', 'Note']}
+            rows={evaluations.slice().reverse().map((ev) => [new Date(ev.evaluatedAt).toLocaleDateString('fr-FR'), ev.grossScore, ev.grossLevel, ev.residualScore ?? '—', ev.note || '—'])} />
+        : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune évaluation enregistrée</p>}
+    </Modal>
+  );
+}
+
+function RiskCategoryForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const [form, setForm] = useState({ code: record?.code || '', label: record?.label || '', order: record?.order ?? 0 });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true); setError(null);
+    try {
+      const payload = { ...form, order: Number(form.order) || 0 };
+      if (editing) await api.patch(`/business/risk-categories/${record.id}`, payload);
+      else await api.post('/business/risk-categories', payload);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function del() {
+    setSaving(true);
+    try { await confirmAndDelete(record.label, `/business/risk-categories/${record.id}`, () => { onCreated(); onClose(); }); }
+    catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? 'Modifier la catégorie' : 'Nouvelle catégorie de risque'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Code"><input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. MECANIQUE" /></FormField>
+        <FormField label="Libellé"><input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Risque mécanique" /></FormField>
+        <FormField label="Ordre d'affichage"><input type="number" value={form.order} onChange={(e) => setForm({ ...form, order: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function WorkUnitForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const [form, setForm] = useState({ code: record?.code || '', name: record?.name || '', department: record?.department || '', service: record?.service || '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true); setError(null);
+    try {
+      if (editing) await api.patch(`/business/work-units/${record.id}`, form);
+      else await api.post('/business/work-units', { ...form, code: form.code || genCode('WU') });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? "Modifier l'unité de travail" : 'Nouvelle unité de travail'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Nom"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Ligne Bouteille" /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Département"><input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Service"><input value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+      </form>
+    </Modal>
+  );
+}
+
 function RisquesPage() {
   const C = useTheme();
   const risks = useCollection('/business/risks');
+  const dashboardQ = useCollection('/business/risk-dashboard');
+  const top10Q = useCollection('/business/risk-top10');
+  const alertesQ = useCollection('/business/risk-alertes');
+  const categoriesQ = useCollection('/business/risk-categories');
+  const workUnitsQ = useCollection('/business/work-units');
   const [showForm, setShowForm] = useState(false);
-  const [selected, setSelected] = useState(null);
-  if (risks.loading) return <LoadingPanel />;
+  const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [showWorkUnitForm, setShowWorkUnitForm] = useState(false);
+  const [tab, setTab] = useState('apercu');
+  if (risks.loading || dashboardQ.loading) return <LoadingPanel />;
   if (risks.error) return <ErrorPanel message={risks.error} onRetry={risks.reload} />;
   const list = risks.data || [];
-  const adapted = list.map((r) => ({ risque: r.hazard, cause: r.activity || r.measures || '—', probabilite: r.probability, gravite: r.severity, responsable: '—', maitrise: r.status, score: r.score, raw: r }));
-  const critiques = adapted.filter((r) => r.score >= 15).length;
+  const dash = dashboardQ.data || {};
+  const top10 = top10Q.data || [];
+  const alertes = alertesQ.data || [];
+  const categories = categoriesQ.data || [];
+  const workUnits = workUnitsQ.data || [];
+  const niveauColor = { CRITIQUE: C.red, ELEVE: C.amber, MODERE: '#B45309', FAIBLE: C.green };
+  const alerteColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber };
+  const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
+  const reloadAll = () => { risks.reload(); dashboardQ.reload(); top10Q.reload(); alertesQ.reload(); };
+  // Hiérarchisation (point 12) — un risque a une action en retard s'il porte
+  // au moins une action ouverte dont l'échéance est dépassée.
+  const hasActionEnRetard = (r) => (r.actions || []).some((a) => a.dueDate && new Date(a.dueDate) < new Date() && a.status !== 'CLOSED');
+  const priorites = [
+    { id: 'CRITIQUE', label: 'Priorité immédiate — Risques critiques', color: C.red },
+    { id: 'ELEVE', label: 'Priorité haute — Risques élevés', color: C.amber },
+    { id: 'MODERE', label: 'Priorité moyenne — Risques modérés', color: '#B45309' },
+    { id: 'FAIBLE', label: 'Surveillance — Risques faibles', color: C.green },
+  ].map((p) => ({ ...p, risques: list.filter((r) => (r.grossLevel || 'FAIBLE') === p.id).sort((a, b) => (hasActionEnRetard(b) - hasActionEnRetard(a)) || (b.grossScore - a.grossScore)) }));
 
   return (
     <div className="space-y-6">
-      {(showForm || selected) && <RiskForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={risks.reload} />}
-      <div className="flex items-center justify-between">
-        <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau risque</button>
+      {(showForm || editing) && <RiskForm record={editing} onClose={() => { setShowForm(false); setEditing(null); }} onCreated={reloadAll} />}
+      {viewing && <RiskDetailModal risk={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
+      {(showCategoryForm || selectedCategory) && <RiskCategoryForm record={selectedCategory} onClose={() => { setShowCategoryForm(false); setSelectedCategory(null); }} onCreated={categoriesQ.reload} />}
+      {showWorkUnitForm && <WorkUnitForm onClose={() => setShowWorkUnitForm(false)} onCreated={workUnitsQ.reload} />}
+
+      <div className="flex flex-wrap gap-2">
+        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre complet'], ['hierarchisation', 'Hiérarchisation'], ['cartographie', 'Cartographie'], ['top10', 'Top 10'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <KpiCard label="Risques recensés" value={adapted.length} color={C.blue} icon={AlertTriangle} />
-        <KpiCard label="Risques critiques (≥15)" value={critiques} color={C.red} icon={AlertTriangle} />
-        <KpiCard label="Score moyen" value={adapted.length ? Math.round(adapted.reduce((s, r) => s + r.score, 0) / adapted.length) : '—'} color={C.amber} icon={Activity} />
-      </div>
-      <p className="text-xs" style={{ color: C.textMuted }}>Le champ « Responsable » n'existe pas encore sur votre modèle de risque — dites-moi si vous voulez que je l'ajoute. Cliquez une ligne du registre pour la modifier.</p>
-      <div className="grid grid-cols-2 gap-4">
-        <Panel title="Matrice des risques 5×5">{adapted.length ? <RiskMatrix5x5 risques={adapted} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}</Panel>
-        <Panel title="Cartographie — criticité décroissante">
-          {adapted.length ? <HorizontalBars data={[...adapted].sort((a, b) => b.score - a.score)} labelKey="risque" valueKey="score" color={C.amber} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
-        </Panel>
-      </div>
-      <Panel title="Registre complet des risques">
-        {adapted.length
-          ? <DataTable columns={['Risque', 'Activité / Mesures', 'Probabilité', 'Gravité', 'Score', 'Statut']}
-              rows={adapted.map((r) => [r.risque, r.cause, r.probabilite, r.gravite, r.score, <StatusChip statut={r.score >= 15 ? 'Non conforme' : r.score >= 8 ? 'Sous surveillance' : 'Conforme'} />])}
-              onRowClick={(i) => setSelected(adapted[i].raw)} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun risque enregistré pour le moment</p>}
-      </Panel>
+
+      {tab === 'apercu' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau risque</button>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="Risques recensés" value={dv(dash.total)} color={C.blue} icon={AlertTriangle} />
+            <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
+            <KpiCard label="Élevés" value={dv(dash.eleves)} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label="Modérés" value={dv(dash.moderes)} color="#B45309" icon={AlertTriangle} />
+            <KpiCard label="Faibles" value={dv(dash.faibles)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="Non maîtrisés" value={dv(dash.nonMaitrises)} color={dash.nonMaitrises > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label="Avec action ouverte" value={dv(dash.avecActionsOuvertes)} color={C.blue} icon={ClipboardList} />
+            <KpiCard label="Actions en retard" value={dv(dash.actionsEnRetard)} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label="À réévaluer" value={dv(dash.aReevaluer)} color={dash.aReevaluer > 0 ? C.amber : C.green} icon={RefreshCw} />
+            <KpiCard label="Taux de maîtrise" value={dv(dash.tauxMaitrise, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label="Taux de mise à jour" value={dv(dash.tauxMiseAJour, '%')} color={C.blue} icon={Activity} />
+            <KpiCard label="Taux de clôture des actions" value={dv(dash.tauxClotureActions, '%')} color={C.blue} icon={ClipboardList} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Panel title="Matrice de criticité 5×5 (gravité × probabilité)">
+              {list.length ? <RiskMatrix5x5 risques={list.map((r) => ({ gravite: r.severity, probabilite: r.probability }))} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+            </Panel>
+            <Panel title="Alertes" subtitle={`${alertes.length} point(s) nécessitant attention`}>
+              {alertes.length
+                ? <div className="space-y-2 max-h-64 overflow-y-auto">{alertes.map((a, i) => (
+                    <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                      <span className="text-sm" style={{ color: C.text }}>{a.label}</span>
+                      <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${alerteColor[a.niveau]}22`, color: alerteColor[a.niveau] }}>{a.niveau}</span>
+                    </div>
+                  ))}</div>
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {tab === 'registre' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau risque</button>
+          </div>
+          <Panel title="Registre complet des risques">
+            {list.length
+              ? <DataTable columns={['Risque', 'Catégorie', 'Unité de travail', 'Score brut', 'Résiduel', 'Statut de maîtrise']}
+                  rows={list.map((r) => [
+                    r.hazard, r.category?.label || '—', r.workUnit?.name || '—',
+                    <span style={{ color: niveauColor[r.grossLevel] || C.text, fontWeight: 600 }}>{r.grossScore ?? r.score} ({r.grossLevel || '—'})</span>,
+                    r.residualScore != null ? <span style={{ color: niveauColor[r.residualLevel] || C.text, fontWeight: 600 }}>{r.residualScore} ({r.residualLevel})</span> : '—',
+                    <StatusChip statut={r.controlStatus === 'MAITRISE' ? 'Conforme' : r.controlStatus === 'PARTIELLEMENT_MAITRISE' ? 'Sous surveillance' : 'Non conforme'} />,
+                  ])}
+                  onRowClick={(i) => setViewing(list[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun risque enregistré pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'hierarchisation' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          {priorites.map((p) => (
+            <Panel key={p.id} title={`${p.label} (${p.risques.length})`}>
+              {p.risques.length
+                ? <div className="space-y-2">
+                    {p.risques.map((r) => (
+                      <div key={r.id} onClick={() => setViewing(r)} className="flex items-center justify-between py-2 px-2 rounded-lg cursor-pointer" style={{ borderLeft: `3px solid ${p.color}`, backgroundColor: C.cardAlt }}>
+                        <div>
+                          <p className="text-sm font-medium" style={{ color: C.text }}>{r.hazard}</p>
+                          <p className="text-[11px]" style={{ color: C.textMuted }}>{r.workUnit?.name || 'Sans unité'} · {(r.actions || []).length} action(s){hasActionEnRetard(r) ? ' · action en retard' : ''}</p>
+                        </div>
+                        <span className="text-sm font-bold" style={{ color: p.color }}>{r.grossScore ?? r.score}</span>
+                      </div>
+                    ))}
+                  </div>
+                : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun risque dans cette catégorie</p>}
+            </Panel>
+          ))}
+        </div>
+      )}
+
+      {tab === 'cartographie' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <div className="grid grid-cols-2 gap-4">
+            <Panel title="Répartition par catégorie">
+              {list.length ? <DonutChart data={groupCount(list, (r) => r.category?.label)} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899', '#14B8A6']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+            </Panel>
+            <Panel title="Répartition par niveau de criticité">
+              {list.length ? <DonutChart data={groupCount(list, (r) => r.grossLevel)} colors={[C.red, C.amber, '#B45309', C.green]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+            </Panel>
+          </div>
+          <Panel title="Répartition par unité de travail">
+            {list.length ? <HorizontalBars data={groupCount(list, (r) => r.workUnit?.name)} labelKey="name" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+          </Panel>
+          <Panel title="Pareto des risques (par score brut)">
+            {list.length ? <ParetoChart causes={list.map((r) => ({ cause: r.hazard, occurrences: r.grossScore ?? r.score ?? 0 }))} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'top10' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <Panel title="Top 10 des risques les plus critiques">
+            {top10.length
+              ? <DataTable columns={['Rang', 'Risque', 'Unité de travail', 'Catégorie', 'Score', 'Actions']}
+                  rows={top10.map((r, i) => [
+                    i + 1, r.hazard, r.workUnit?.name || '—', r.category?.label || '—',
+                    <span style={{ color: niveauColor[r.grossLevel] || C.text, fontWeight: 600 }}>{r.grossScore}</span>,
+                    (r.actions || []).length ? `${r.actions.length} action(s)` : 'Aucune',
+                  ])}
+                  onRowClick={(i) => setViewing(top10[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'parametrage' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <Panel title="Catégories de risques" right={<button onClick={() => setShowCategoryForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+              {categories.length
+                ? <DataTable columns={['Code', 'Libellé']} rows={categories.map((c) => [c.code, c.label])} onRowClick={(i) => setSelectedCategory(categories[i])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune catégorie définie — la liste reste entièrement libre</p>}
+            </Panel>
+            <Panel title="Unités de travail" right={<button onClick={() => setShowWorkUnitForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+              {workUnits.length
+                ? <DataTable columns={['Nom', 'Département', 'Service']} rows={workUnits.map((w) => [w.name, w.department || '—', w.service || '—'])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune unité de travail définie</p>}
+            </Panel>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
