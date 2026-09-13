@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
+import 'environnement_pages.dart';
 
 // -------------------- Hub --------------------
 class OtherModulesPage extends StatelessWidget {
@@ -13,7 +14,7 @@ class OtherModulesPage extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         _tile(c, Icons.restaurant_menu, 'HACCP', 'Points critiques (CCP), surveillance, actions correctives', const HaccpPage()),
-        _tile(c, Icons.eco, 'Environnement', 'Relevés (eau, déchets, énergie, rejets...)', const EnvironmentPage()),
+        _tile(c, Icons.eco, 'Environnement', 'Relevés (eau, déchets, énergie, rejets...)', const EnvironnementHome()),
         _tile(c, Icons.school, 'Formations', 'Planification, échéances, participants', const TrainingsPage()),
         _tile(c, Icons.precision_manufacturing, 'Équipements', 'Inspections, statut, maintenance', const EquipmentPage()),
       ],
