@@ -32,6 +32,18 @@ services:
     volumes:
       - qhse_uploads:/app/uploads
       - ./import:/app/import:ro
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    container_name: qhse-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports: ["5173:5173"]
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
   backup:
     image: prodrigestivill/postgres-backup-local:16-alpine
     container_name: qhse-backup
