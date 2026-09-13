@@ -85,68 +85,7 @@ class _HaccpPageState extends State<HaccpPage> {
   );
 }
 
-// -------------------- Environnement --------------------
-class EnvironmentPage extends StatefulWidget {
-  const EnvironmentPage({super.key});
-  @override
-  State<EnvironmentPage> createState() => _EnvironmentPageState();
-}
-class _EnvironmentPageState extends State<EnvironmentPage> {
-  final api = Api();
-  List items = []; bool loading = true;
-  @override void initState() { super.initState(); load(); }
-  Future<void> load() async { try { items = List.from(await api.get('/business/environment')); } catch (_) {} setState(() => loading = false); }
-
-  Future<void> create() async {
-    final type = TextEditingController(), value = TextEditingController(), unit = TextEditingController(), site = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dc) => AlertDialog(
-        title: const Text('Nouveau relevé environnemental'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: type, decoration: const InputDecoration(labelText: 'Type (eau, déchets, énergie...)')),
-          TextField(controller: value, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Valeur')),
-          TextField(controller: unit, decoration: const InputDecoration(labelText: 'Unité (m³, kWh, kg...)')),
-          TextField(controller: site, decoration: const InputDecoration(labelText: 'Site / zone')),
-        ])),
-        actions: [TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Créer'))],
-      ),
-    );
-    if (ok != true || type.text.trim().isEmpty) return;
-    try {
-      await api.post('/business/environment', {'code': genCode('ENV'), 'type': type.text.trim(), 'value': double.tryParse(value.text.replaceAll(',', '.')), 'unit': unit.text.trim(), 'site': site.text.trim()});
-      load();
-    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
-  }
-
-  @override
-  Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Environnement')),
-    floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: const Text('Nouveau relevé')),
-    body: loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
-      onRefresh: load,
-      child: Column(children: [
-        Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar([
-          KpiStat('Relevés enregistrés', '${items.length}', color: QhseColors.blue, icon: Icons.eco_outlined),
-          KpiStat('Types distincts', '${items.map((e) => e['type']).toSet().length}', color: QhseColors.green, icon: Icons.category_outlined),
-        ])),
-        Expanded(
-          child: items.isEmpty
-              ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun relevé enregistré')))])
-              : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
-                  final e = items[i];
-                  return Card(child: ListTile(
-                    leading: const Icon(Icons.eco, color: Colors.green),
-                    title: Text('${e['type']} — ${e['value'] ?? '-'} ${e['unit'] ?? ''}'),
-                    subtitle: Text('${e['site'] ?? ''} • ${_date(e['recordedAt'])}'),
-                  ));
-                }),
-        ),
-      ]),
-    ),
-  );
-  String _date(dynamic v) => v == null ? '' : v.toString().substring(0, 10);
-}
+// (Environnement dispose désormais de son propre module dédié — voir environnement_pages.dart)
 
 // -------------------- Formations --------------------
 class TrainingsPage extends StatefulWidget {
