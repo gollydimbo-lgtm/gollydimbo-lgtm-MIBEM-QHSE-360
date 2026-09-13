@@ -611,12 +611,14 @@ model NonConformity {
   epcId String?
   processusId String?
   fournisseurId String?
+  riskId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
   epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
+  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
   auditFindings AuditFinding[]
   reclamations Reclamation[]
   safetyEvents SafetyEvent[]
@@ -982,6 +984,7 @@ model Risk {
   actions Action[]
   riskMeasures RiskMeasure[]
   evaluations RiskEvaluation[]
+  nonConformities NonConformity[]
   @@index([status,score])
 }
 
