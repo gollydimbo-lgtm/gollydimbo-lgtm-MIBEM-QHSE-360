@@ -147,6 +147,8 @@ model User {
   environnementAspectsResponsable EnvironnementAspect[]
   objectifsQhseResponsable ObjectifQhse[]
   veilleReglementaireResponsable VeilleReglementaire[]
+  riskMeasuresResponsable RiskMeasure[]
+  riskEvaluationsRealisees RiskEvaluation[]
 }
 
 model Role {
@@ -639,6 +641,7 @@ model Action {
   risqueSanitaireId String?
   ergonomieId String?
   environnementAspectId String?
+  riskId String?
   responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
@@ -648,6 +651,7 @@ model Action {
   risqueSanitaire RisqueSanitaire? @relation(fields:[risqueSanitaireId], references:[id], onDelete:SetNull)
   ergonomie AnalyseErgonomique? @relation(fields:[ergonomieId], references:[id], onDelete:SetNull)
   environnementAspect EnvironnementAspect? @relation(fields:[environnementAspectId], references:[id], onDelete:SetNull)
+  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
@@ -668,6 +672,7 @@ model Site {
   risquesSanitaires RisqueSanitaire[]
   analysesErgonomiques AnalyseErgonomique[]
   environnementAspects EnvironnementAspect[]
+  workUnits WorkUnit[]
   createdAt DateTime @default(now())
 }
 
@@ -943,12 +948,124 @@ model Risk {
   reviewedAt DateTime?
   processusId String?
   fournisseurId String?
+  // --- Registre des risques : moteur d'évaluation étendu (additif, aucun
+  // champ existant modifié ou supprimé) ---
+  workUnitId String?
+  categoryId String?
+  hazardousSituation String?
+  hazardousEvent String?
+  potentialDamage String?
+  exposedPersons String?
+  exposedPersonCount Int?
+  // GP = Gravité×Probabilité (par défaut), GPE = Gravité×Probabilité×Exposition
+  method String @default("GP")
+  exposure Int @default(1)
+  grossScore Int?
+  grossLevel String?
+  residualSeverity Int?
+  residualProbability Int?
+  residualExposure Int?
+  residualScore Int?
+  residualLevel String?
+  controlStatus String @default("NON_MAITRISE")
+  nextReviewDate DateTime?
+  reviewPeriodDays Int @default(365)
+  archivedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   qualityControls QualityControl[]
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   safetyEvents SafetyEvent[]
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  category RiskCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
+  actions Action[]
+  riskMeasures RiskMeasure[]
+  evaluations RiskEvaluation[]
+  @@index([status,score])
+}
+
+// Unité de travail — brique manquante pour situer un risque (département/
+// service/poste) indépendamment du Processus ou du Fournisseur, réutilisable
+// par tout futur module qui aura besoin de la même granularité.
+model WorkUnit {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  siteId String?
+  department String?
+  service String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  risks Risk[]
+}
+
+// Bibliothèque de catégories de risques configurable par l'administrateur —
+// jamais une liste figée dans le code (mécanique, électrique, chimique,
+// ergonomique, incendie, psychosocial, etc. restent des données).
+model RiskCategory {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  order Int @default(0)
+  active Boolean @default(true)
+  risks Risk[]
+}
+
+// Mesure de prévention existante rattachée à un risque, classée selon la
+// hiérarchie de prévention (texte libre pour rester adaptable à tout
+// secteur : suppression, substitution, protection collective, technique,
+// organisationnelle, procédure, formation, signalisation, EPI...).
+model RiskMeasure {
+  id String @id @default(cuid())
+  riskId String
+  description String
+  type String
+  responsableId String?
+  datePrise DateTime?
+  efficacite Int @default(1)
+  justificatif String?
+  createdAt DateTime @default(now())
+  risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+}
+
+// Historique des évaluations successives d'un risque — sans cette table,
+// aucune courbe d'évolution brut → résiduel → réévaluation n'est possible,
+// exactement comme IndicateurMesure sert d'historique à IndicateurQualite.
+model RiskEvaluation {
+  id String @id @default(cuid())
+  riskId String
+  evaluatedAt DateTime @default(now())
+  severity Int
+  probability Int
+  exposure Int @default(1)
+  grossScore Int
+  grossLevel String
+  residualSeverity Int?
+  residualProbability Int?
+  residualExposure Int?
+  residualScore Int?
+  residualLevel String?
+  note String?
+  evaluatedById String?
+  risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
+  evaluatedBy User? @relation(fields:[evaluatedById], references:[id], onDelete:SetNull)
+}
+
+// Paramétrage du Registre des risques — une seule ligne en base. Permet à
+// l'administrateur de changer la méthode, les seuils et la périodicité de
+// réévaluation sans toucher au code, pour rester générique à tout secteur.
+model RiskSettings {
+  id String @id @default(cuid())
+  method String @default("GP")
+  seuilModere Int @default(5)
+  seuilEleve Int @default(10)
+  seuilCritique Int @default(15)
+  seuilActionRequise Int @default(10)
+  reviewPeriodDays Int @default(365)
+  updatedAt DateTime @updatedAt
 }
 
 model HaccpRecord {
