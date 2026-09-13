@@ -1,11 +1,194 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { writeAudit } from '../common/audit-log.helper';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
  qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} qualityDelete(id:string){return this.db.qualityControl.delete({where:{id}})}
  ncList(status?:string){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true},orderBy:{createdAt:'desc'}})} ncCreate(b:any){return this.db.nonConformity.create({data:b})} ncUpdate(id:string,b:any){return this.db.nonConformity.update({where:{id},data:b})} ncDelete(id:string){return this.db.nonConformity.delete({where:{id}})}
  actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true},orderBy:{dueDate:'asc'}})} actionCreate(b:any){return this.db.action.create({data:b})} actionUpdate(id:string,b:any){return this.db.action.update({where:{id},data:b})} actionDelete(id:string){return this.db.action.delete({where:{id}})}
- riskList(){return this.db.risk.findMany({orderBy:{score:'desc'}})} riskCreate(b:any){return this.db.risk.create({data:{...b,score:Number(b.severity)*Number(b.probability)*Number(b.control||1)}})} riskUpdate(id:string,b:any){const score=b.severity&&b.probability?Number(b.severity)*Number(b.probability)*Number(b.control||1):undefined;return this.db.risk.update({where:{id},data:{...b,...(score?{score}:{})}})} riskDelete(id:string){return this.db.risk.delete({where:{id}})}
+ // === REGISTRE DES RISQUES ===================================================
+
+ // Paramétrage — une seule ligne, créée à la demande avec les valeurs par
+ // défaut si elle n'existe pas encore.
+ async riskSettingsGet(){
+  let s=await this.db.riskSettings.findFirst();
+  if(!s) s=await this.db.riskSettings.create({data:{}});
+  return s;
+ }
+ async riskSettingsUpdate(b:any){
+  const current=await this.riskSettingsGet();
+  return this.db.riskSettings.update({where:{id:current.id},data:b});
+ }
+
+ private riskNiveau(score:number,seuils:{seuilModere:number,seuilEleve:number,seuilCritique:number}){
+  if(score>=seuils.seuilCritique) return 'CRITIQUE';
+  if(score>=seuils.seuilEleve) return 'ELEVE';
+  if(score>=seuils.seuilModere) return 'MODERE';
+  return 'FAIBLE';
+ }
+
+ // Calcule brut/résiduel et le statut de maîtrise depuis les seuils
+ // configurés — jamais saisis manuellement, toujours recalculés à l'écriture,
+ // exactement comme calculerAspect() le fait pour l'Environnement.
+ private async calculerRisque(b:any){
+  const settings=await this.riskSettingsGet();
+  const method=b.method||settings.method;
+  const severity=Number(b.severity),probability=Number(b.probability),exposure=Number(b.exposure)||1;
+  const grossScore=method==='GPE'?severity*probability*exposure:severity*probability;
+  const grossLevel=this.riskNiveau(grossScore,settings);
+  const out:any={method,severity,probability,exposure,grossScore,grossLevel,score:grossScore};
+  if(b.residualSeverity!=null&&b.residualProbability!=null){
+   const rs=Number(b.residualSeverity),rp=Number(b.residualProbability),re=Number(b.residualExposure)||1;
+   const residualScore=method==='GPE'?rs*rp*re:rs*rp;
+   const residualLevel=this.riskNiveau(residualScore,settings);
+   out.residualScore=residualScore; out.residualLevel=residualLevel;
+   out.controlStatus=residualScore<settings.seuilModere?'MAITRISE':(residualScore<settings.seuilActionRequise?'PARTIELLEMENT_MAITRISE':'NON_MAITRISE');
+  } else out.controlStatus='NON_MAITRISE';
+  out.nextReviewDate=new Date(Date.now()+(Number(b.reviewPeriodDays)||settings.reviewPeriodDays)*86400000);
+  return out;
+ }
+
+ // Si le risque résiduel (ou brut à défaut) dépasse le seuil défini et
+ // qu'aucune action ouverte n'existe déjà pour ce risque, une action est
+ // proposée automatiquement — jamais dupliquée.
+ private async declencherActionSiNecessaire(risk:any){
+  const settings=await this.riskSettingsGet();
+  const score=risk.residualScore??risk.grossScore;
+  if(score==null||score<settings.seuilActionRequise) return null;
+  const existante=await this.db.action.findFirst({where:{riskId:risk.id,status:{not:'CLOSED'}}});
+  if(existante) return existante;
+  return this.db.action.create({data:{
+   code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   title:`Traiter le risque ${risk.code} — ${risk.hazard}`,
+   description:'Action requise : risque au-dessus du seuil acceptable.',
+   priority:risk.grossLevel==='CRITIQUE'?1:2,
+   riskId:risk.id,
+  }});
+ }
+
+ riskCategoryList(){return this.db.riskCategory.findMany({orderBy:{order:'asc'}})}
+ riskCategoryCreate(b:any){return this.db.riskCategory.create({data:b})}
+ riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:b})}
+ riskCategoryDelete(id:string){return this.db.riskCategory.delete({where:{id}})}
+
+ workUnitList(){return this.db.workUnit.findMany({include:{site:true},orderBy:{name:'asc'}})}
+ workUnitCreate(b:any){return this.db.workUnit.create({data:b})}
+ workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:b})}
+ workUnitDelete(id:string){return this.db.workUnit.update({where:{id},data:{active:false}})}
+
+ riskList(){return this.db.risk.findMany({where:{archivedAt:null},include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},orderBy:{grossScore:'desc'}})}
+ riskGet(id:string){return this.db.risk.findUnique({where:{id},include:{workUnit:true,category:true,processus:true,fournisseur:true,riskMeasures:{include:{responsable:true}},evaluations:{orderBy:{evaluatedAt:'desc'}},actions:{include:{responsible:true}}}})}
+
+ async riskCreate(b:any){
+  const calc=await this.calculerRisque(b);
+  const risk=await this.db.risk.create({data:{...b,...calc}});
+  await this.db.riskEvaluation.create({data:{riskId:risk.id,severity:calc.severity,probability:calc.probability,exposure:calc.exposure,grossScore:calc.grossScore,grossLevel:calc.grossLevel,residualSeverity:b.residualSeverity,residualProbability:b.residualProbability,residualExposure:b.residualExposure,residualScore:calc.residualScore,residualLevel:calc.residualLevel,evaluatedById:b.evaluatedById,note:'Évaluation initiale'}});
+  await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
+  await this.declencherActionSiNecessaire(risk);
+  return risk;
+ }
+
+ async riskUpdate(id:string,b:any){
+  const current=await this.db.risk.findUnique({where:{id}});
+  if(!current) throw new Error('Risque introuvable');
+  const calc=await this.calculerRisque({...current,...b});
+  const risk=await this.db.risk.update({where:{id},data:{...b,...calc}});
+  await writeAudit(this.db,'RISK','UPDATE',id,current,risk);
+  await this.declencherActionSiNecessaire(risk);
+  return risk;
+ }
+
+ // Bouton RÉÉVALUER — conserve l'ancienne évaluation dans l'historique au
+ // lieu de simplement écraser les valeurs précédentes.
+ async riskReevaluate(id:string,b:any){
+  const current=await this.db.risk.findUnique({where:{id}});
+  if(!current) throw new Error('Risque introuvable');
+  const merged={...current,...b};
+  const calc=await this.calculerRisque(merged);
+  const risk=await this.db.risk.update({where:{id},data:{...b,...calc,reviewedAt:new Date()}});
+  await this.db.riskEvaluation.create({data:{riskId:id,severity:calc.severity,probability:calc.probability,exposure:calc.exposure,grossScore:calc.grossScore,grossLevel:calc.grossLevel,residualSeverity:merged.residualSeverity,residualProbability:merged.residualProbability,residualExposure:merged.residualExposure,residualScore:calc.residualScore,residualLevel:calc.residualLevel,evaluatedById:b.evaluatedById,note:b.note||'Réévaluation'}});
+  await writeAudit(this.db,'RISK','UPDATE',id,current,risk);
+  await this.declencherActionSiNecessaire(risk);
+  return risk;
+ }
+
+ // Archivage plutôt que suppression définitive (point 17 du cahier des
+ // charges) — un risque déjà évalué reste dans l'historique QHSE.
+ async riskDelete(id:string){
+  const current=await this.db.risk.findUnique({where:{id}});
+  const risk=await this.db.risk.update({where:{id},data:{archivedAt:new Date(),status:'ARCHIVE'}});
+  await writeAudit(this.db,'RISK','DELETE',id,current,risk);
+  return risk;
+ }
+
+ riskMeasureList(riskId:string){return this.db.riskMeasure.findMany({where:{riskId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
+ riskMeasureCreate(b:any){return this.db.riskMeasure.create({data:b})}
+ riskMeasureUpdate(id:string,b:any){return this.db.riskMeasure.update({where:{id},data:b})}
+ riskMeasureDelete(id:string){return this.db.riskMeasure.delete({where:{id}})}
+
+ // Tableau de bord réel : chaque KPI reste `null` si la donnée n'existe pas.
+ async riskDashboard(){
+  const [risks,nombreUnitesTravail]=await Promise.all([
+   this.db.risk.findMany({where:{archivedAt:null},include:{actions:true}}),
+   this.db.workUnit.count({where:{active:true}}),
+  ]);
+  const now=new Date();
+  const total=risks.length;
+  const parNiveau=(n:string)=>risks.filter(r=>r.grossLevel===n).length;
+  const nonMaitrises=risks.filter(r=>r.controlStatus==='NON_MAITRISE').length;
+  const avecActionsOuvertes=risks.filter(r=>r.actions.some(a=>a.status!=='CLOSED')).length;
+  const actionsEnRetard=risks.flatMap(r=>r.actions).filter(a=>a.dueDate&&new Date(a.dueDate)<now&&a.status!=='CLOSED').length;
+  const reevalues=risks.filter(r=>r.reviewedAt).length;
+  const aReevaluer=risks.filter(r=>r.nextReviewDate&&new Date(r.nextReviewDate)<now).length;
+  const tauxMaitrise=total?Math.round((risks.filter(r=>r.controlStatus==='MAITRISE').length/total)*1000)/10:null;
+  const tauxMiseAJour=total?Math.round((reevalues/total)*1000)/10:null;
+  const actionsTotal=risks.flatMap(r=>r.actions).length;
+  const actionsCloturees=risks.flatMap(r=>r.actions).filter(a=>a.status==='CLOSED').length;
+  const tauxClotureActions=actionsTotal?Math.round((actionsCloturees/actionsTotal)*1000)/10:null;
+  const depuis30j=new Date(now.getTime()-30*86400000);
+  const nouveaux=risks.filter(r=>new Date(r.createdAt)>depuis30j).length;
+  return {
+   total,critiques:parNiveau('CRITIQUE'),eleves:parNiveau('ELEVE'),moderes:parNiveau('MODERE'),faibles:parNiveau('FAIBLE'),
+   nonMaitrises,avecActionsOuvertes,actionsEnRetard,reevalues,aReevaluer,
+   tauxMaitrise,tauxMiseAJour,tauxClotureActions,
+   nombreUnitesTravail,nouveauxDepuis30Jours:nouveaux,
+  };
+ }
+
+ // Heatmap 5x5 gravité x probabilité — chaque case liste les risques concernés.
+ async riskMatrice(){
+  const risks=await this.db.risk.findMany({where:{archivedAt:null},select:{id:true,code:true,hazard:true,severity:true,probability:true,grossLevel:true}});
+  const cases:Record<string,any[]>={};
+  for(const r of risks){
+   const key=`${r.severity}-${r.probability}`;
+   if(!cases[key]) cases[key]=[];
+   cases[key].push(r);
+  }
+  return Object.entries(cases).map(([key,items])=>{
+   const [severity,probability]=key.split('-').map(Number);
+   return {severity,probability,count:items.length,niveau:items[0]?.grossLevel,risques:items};
+  });
+ }
+
+ riskTop10(){return this.db.risk.findMany({where:{archivedAt:null},orderBy:{grossScore:'desc'},take:10,include:{workUnit:true,category:true,actions:{include:{responsible:true}}}})}
+
+ async riskAlertes(){
+  const now=new Date();
+  const dans30Jours=new Date(now.getTime()+30*86400000);
+  const risks=await this.db.risk.findMany({where:{archivedAt:null},include:{actions:true}});
+  const alertes:any[]=[];
+  for(const r of risks){
+   if(r.grossLevel==='CRITIQUE') alertes.push({id:r.id,label:`Risque critique : ${r.hazard}`,niveau:'CRITIQUE'});
+   if(r.grossLevel==='ELEVE'&&!r.actions.some(a=>a.status!=='CLOSED')) alertes.push({id:r.id,label:`Risque élevé sans action : ${r.hazard}`,niveau:'URGENT'});
+   if(r.nextReviewDate){
+    const d=new Date(r.nextReviewDate);
+    if(d<now) alertes.push({id:r.id,label:`Réévaluation en retard : ${r.hazard}`,niveau:'ATTENTION'});
+    else if(d<dans30Jours) alertes.push({id:r.id,label:`Réévaluation à prévoir : ${r.hazard}`,niveau:'ATTENTION'});
+   }
+   for(const a of r.actions) if(a.dueDate&&new Date(a.dueDate)<now&&a.status!=='CLOSED') alertes.push({id:a.id,label:`Action en retard sur le risque ${r.hazard} : ${a.title}`,niveau:'URGENT'});
+  }
+  return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
+ }
  haccpList(){return this.db.haccpRecord.findMany({orderBy:{recordDate:'desc'}})} haccpCreate(b:any){return this.db.haccpRecord.create({data:b})} haccpUpdate(id:string,b:any){return this.db.haccpRecord.update({where:{id},data:b})} haccpDelete(id:string){return this.db.haccpRecord.delete({where:{id}})}
  auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,processus:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})} auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
 
