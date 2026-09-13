@@ -4,7 +4,43 @@ import { writeAudit } from '../common/audit-log.helper';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
  qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} qualityDelete(id:string){return this.db.qualityControl.delete({where:{id}})}
- ncList(status?:string){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true},orderBy:{createdAt:'desc'}})} ncCreate(b:any){return this.db.nonConformity.create({data:b})} ncUpdate(id:string,b:any){return this.db.nonConformity.update({where:{id},data:b})} ncDelete(id:string){return this.db.nonConformity.delete({where:{id}})}
+ ncList(status?:string){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true},orderBy:{createdAt:'desc'}})} ncCreate(b:any){return this.db.nonConformity.create({data:b})} ncUpdate(id:string,b:any){return this.db.nonConformity.update({where:{id},data:b})} ncDelete(id:string){return this.db.nonConformity.delete({where:{id}})}
+
+ // Point 19 du cahier des charges du Registre des risques : proposer de
+ // créer (ou relier) un risque à partir d'une non-conformité ou d'un
+ // accident, en préremplissant ce qui est déjà connu — jamais un risque
+ // vide, et jamais de doublon si un risque est déjà relié.
+ async nonConformityGenerateRisk(id:string){
+  const nc=await this.db.nonConformity.findUnique({where:{id}});
+  if(!nc) throw new Error('Non-conformité introuvable');
+  if(nc.riskId) throw new Error('Cette non-conformité est déjà reliée à un risque');
+  const calc=await this.calculerRisque({severity:nc.severity||3,probability:3});
+  const risk=await this.db.risk.create({data:{
+   code:`RISK-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`, hazard:nc.title, hazardousEvent:nc.description||undefined,
+   processusId:nc.processusId, fournisseurId:nc.fournisseurId, ...calc,
+  }});
+  await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
+  await this.db.nonConformity.update({where:{id},data:{riskId:risk.id}});
+  return risk;
+ }
+
+ // Un accident survenu correspond par définition à une probabilité déjà
+ // avérée — 4/5 par défaut plutôt que la valeur neutre 3/5, modifiable
+ // ensuite comme tout autre risque.
+ async safetyEventGenerateRisk(id:string){
+  const ev=await this.db.safetyEvent.findUnique({where:{id}});
+  if(!ev) throw new Error('Événement introuvable');
+  if(ev.riskId) throw new Error('Cet événement est déjà relié à un risque');
+  const calc=await this.calculerRisque({severity:ev.severity||3,probability:4});
+  const risk=await this.db.risk.create({data:{
+   code:`RISK-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`, hazard:ev.title, hazardousEvent:ev.mecanisme||ev.description||undefined,
+   potentialDamage:ev.consequenceMaterielle||ev.consequenceEnvironnementale||undefined,
+   activity:ev.activite, processusId:ev.processusId, fournisseurId:ev.fournisseurId, ...calc,
+  }});
+  await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
+  await this.db.safetyEvent.update({where:{id},data:{riskId:risk.id}});
+  return risk;
+ }
  actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true},orderBy:{dueDate:'asc'}})} actionCreate(b:any){return this.db.action.create({data:b})} actionUpdate(id:string,b:any){return this.db.action.update({where:{id},data:b})} actionDelete(id:string){return this.db.action.delete({where:{id}})}
  // === REGISTRE DES RISQUES ===================================================
 
