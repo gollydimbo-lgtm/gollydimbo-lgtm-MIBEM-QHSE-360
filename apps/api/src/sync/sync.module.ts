@@ -1,1 +1,1 @@
-import { Module } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; import { SyncController } from './sync.controller'; @Module({controllers:[SyncController],providers:[PrismaService]}) export class SyncModule{}
+import { Module } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; import { BusinessModule } from '../business/business.module'; import { SyncController } from './sync.controller'; @Module({imports:[BusinessModule],controllers:[SyncController],providers:[PrismaService]}) export class SyncModule{}
