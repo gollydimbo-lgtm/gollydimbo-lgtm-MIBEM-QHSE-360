@@ -624,14 +624,30 @@ function AuditForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
   const processusQ = useCollection('/business/processus');
-  const [form, setForm] = useState({ title: record?.title || '', reference: record?.reference || '', auditDate: record ? new Date(record.auditDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10), status: record?.status || 'PLANNED', score: record?.score ?? '', processusId: record?.processusId || '' });
+  const typesQ = useCollection('/business/audit-types');
+  const referentialsQ = useCollection('/business/audit-referentials');
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({
+    title: record?.title || '', reference: record?.reference || '',
+    auditDate: record ? new Date(record.auditDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    status: record?.status || 'PLANNED', score: record?.score ?? '', processusId: record?.processusId || '',
+    typeId: record?.typeId || '', referentialId: record?.referentialId || '', workUnitId: record?.workUnitId || '',
+    responsableAuditeId: record?.responsableAuditeId || '', scope: record?.scope || '', objectif: record?.objectif || '',
+    dureePrevueHeures: record?.dureePrevueHeures ?? '', priorite: record?.priorite || 'NORMALE',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   async function submit(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { ...form, auditDate: new Date(form.auditDate).toISOString(), score: form.score === '' ? null : Number(form.score), processusId: form.processusId || null };
+      const payload = {
+        ...form, auditDate: new Date(form.auditDate).toISOString(), score: form.score === '' ? null : Number(form.score),
+        processusId: form.processusId || null, typeId: form.typeId || null, referentialId: form.referentialId || null,
+        workUnitId: form.workUnitId || null, responsableAuditeId: form.responsableAuditeId || null,
+        dureePrevueHeures: form.dureePrevueHeures === '' ? null : Number(form.dureePrevueHeures),
+      };
       if (editing) await api.patch(`/business/audits/${record.id}`, payload);
       else await api.post('/business/audits', { code: genCode('AUD'), ...payload });
       onCreated(); onClose();
@@ -645,19 +661,57 @@ function AuditForm({ record, onClose, onCreated }) {
     setSaving(false);
   }
   return (
-    <Modal title={editing ? "Modifier l'audit" : 'Planifier un audit'} onClose={onClose}>
+    <Modal title={editing ? "Modifier l'audit" : 'Planifier un audit'} onClose={onClose} wide>
       <form onSubmit={submit}>
         <FormField label="Titre"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Audit interne ISO 9001 — Production" /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type d'audit">
+            <select value={form.typeId} onChange={(e) => setForm({ ...form, typeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(typesQ.data || []).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Référentiel">
+            <select value={form.referentialId} onChange={(e) => setForm({ ...form, referentialId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(referentialsQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+          </FormField>
+        </div>
         <FormField label="Référence (optionnel)"><input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Date"><input required type="date" value={form.auditDate} onChange={(e) => setForm({ ...form, auditDate: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-          {editing && <FormField label="Statut"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="PLANNED">PLANNED</option><option value="IN_PROGRESS">IN_PROGRESS</option><option value="COMPLETED">COMPLETED</option></select></FormField>}
+          <FormField label="Durée prévue (heures)"><input type="number" min="0" step="0.5" value={form.dureePrevueHeures} onChange={(e) => setForm({ ...form, dureePrevueHeures: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         </div>
-        <FormField label="Processus concerné (optionnel)">
-          <select value={form.processusId} onChange={(e) => setForm({ ...form, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
-            <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Unité de travail / zone">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Processus concerné">
+            <select value={form.processusId} onChange={(e) => setForm({ ...form, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Responsable audité">
+          <select value={form.responsableAuditeId} onChange={(e) => setForm({ ...form, responsableAuditeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
           </select>
         </FormField>
+        <FormField label="Objectif"><input value={form.objectif} onChange={(e) => setForm({ ...form, objectif: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Périmètre"><textarea value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Priorité">
+            <select value={form.priorite} onChange={(e) => setForm({ ...form, priorite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="BASSE">Basse</option><option value="NORMALE">Normale</option><option value="HAUTE">Haute</option><option value="CRITIQUE">Critique</option>
+            </select>
+          </FormField>
+          {editing && <FormField label="Statut">
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              {[['DRAFT', 'Brouillon'], ['PLANNED', 'Planifié'], ['TO_PREPARE', 'À préparer'], ['PREPARING', 'Préparation en cours'], ['READY', 'Prêt'], ['IN_PROGRESS', 'En cours'], ['COMPLETED', 'Réalisé'], ['REPORT_PENDING', 'Rapport à finaliser'], ['VALIDATION_PENDING', 'En attente de validation'], ['VALIDATED', 'Validé'], ['CLOSED', 'Clôturé'], ['POSTPONED', 'Reporté'], ['CANCELLED', 'Annulé']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </FormField>}
+        </div>
         {editing && <FormField label="Score (%, optionnel)"><input type="number" min="0" max="100" value={form.score} onChange={(e) => setForm({ ...form, score: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>}
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
         <div className="flex gap-2">
@@ -673,7 +727,7 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
   const C = useTheme();
   const [findings, setFindings] = useState(audit.auditFindings || []);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ description: '', classification: '', critical: false });
+  const [form, setForm] = useState({ description: '', classification: '', criticite: '', critical: false });
   const [saving, setSaving] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [error, setError] = useState(null);
@@ -682,7 +736,7 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
     e.preventDefault(); setSaving(true); setError(null);
     try {
       const f = await api.post(`/business/audits/${audit.id}/findings`, form);
-      setFindings((prev) => [...prev, f]); setForm({ description: '', classification: '', critical: false }); setShowAdd(false);
+      setFindings((prev) => [...prev, f]); setForm({ description: '', classification: '', criticite: '', critical: false }); setShowAdd(false);
       onChanged();
     } catch (err) { setError(err.message); }
     setSaving(false);
@@ -711,6 +765,14 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
     } catch (err) { alert(err.message); }
     setGeneratingId(null);
   }
+  // Point 12 : un constat peut générer une action directement, sans
+  // passer obligatoirement par une non-conformité.
+  async function generateAction(id) {
+    setGeneratingId(id);
+    try { await api.post(`/business/audit-findings/${id}/generate-action`, {}); onChanged(); }
+    catch (err) { alert(err.message); }
+    setGeneratingId(null);
+  }
 
   return (
     <Modal title={audit.title} onClose={onClose}>
@@ -731,13 +793,18 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
             <FormField label="Classification (optionnel)">
               <select value={form.classification} onChange={(e) => setForm({ ...form, classification: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
                 <option value="">—</option>
-                <option value="OBSERVATION">Observation</option><option value="ECART_MINEUR">Écart mineur</option>
+                <option value="CONFORME">Conformité</option><option value="POINT_FORT">Point fort / bonne pratique</option>
+                <option value="PISTE_AMELIORATION">Piste d'amélioration</option><option value="OBSERVATION">Observation</option>
                 <option value="NC_MINEURE">Non-conformité mineure</option><option value="NC_MAJEURE">Non-conformité majeure</option>
-                <option value="NC_CRITIQUE">Non-conformité critique</option><option value="DANGER_IMMEDIAT">Danger immédiat</option>
               </select>
             </FormField>
-            <label className="flex items-center gap-2 text-xs mt-6" style={{ color: C.textMuted }}><input type="checkbox" checked={form.critical} onChange={(e) => setForm({ ...form, critical: e.target.checked })} />Constat critique</label>
+            <FormField label="Criticité (optionnel)">
+              <select value={form.criticite} onChange={(e) => setForm({ ...form, criticite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">—</option><option value="FAIBLE">Faible</option><option value="MODEREE">Modérée</option><option value="ELEVEE">Élevée</option><option value="CRITIQUE">Critique</option>
+              </select>
+            </FormField>
           </div>
+          <label className="flex items-center gap-2 text-xs mb-2" style={{ color: C.textMuted }}><input type="checkbox" checked={form.critical} onChange={(e) => setForm({ ...form, critical: e.target.checked })} />Constat critique (déclenche une action prioritaire)</label>
           {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
           <button type="submit" disabled={saving} className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Ajouter le constat'}</button>
         </form>
@@ -752,10 +819,11 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
                   <button onClick={() => deleteFinding(f.id)} className="text-xs" style={{ color: C.red }}>×</button>
                 </div>
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[10px]" style={{ color: C.textMuted }}>{f.classification || (f.critical ? 'Critique' : 'Standard')}{f.nonConformityId ? ' · NC générée' : ''}{f.riskId ? ' · Risque généré' : ''}</span>
+                  <span className="text-[10px]" style={{ color: C.textMuted }}>{f.classification || (f.critical ? 'Critique' : 'Standard')}{f.criticite ? ` · ${f.criticite}` : ''}{f.nonConformityId ? ' · NC générée' : ''}{f.riskId ? ' · Risque généré' : ''}</span>
                   <div className="flex gap-1">
                     {!f.nonConformityId && <button onClick={() => generateNc(f.id)} disabled={generatingId === f.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{generatingId === f.id ? '…' : 'Générer une NC'}</button>}
                     {!f.riskId && <button onClick={() => generateRisk(f.id)} disabled={generatingId === f.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>{generatingId === f.id ? '…' : 'Générer un risque'}</button>}
+                    <button onClick={() => generateAction(f.id)} disabled={generatingId === f.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{generatingId === f.id ? '…' : 'Créer une action'}</button>
                   </div>
                 </div>
               </div>
@@ -6653,42 +6721,258 @@ function RisquesPage() {
   );
 }
 
+function AuditTypeForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const [form, setForm] = useState({ code: record?.code || '', label: record?.label || '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      if (record) await api.patch(`/business/audit-types/${record.id}`, form);
+      else await api.post('/business/audit-types', form);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={record ? 'Modifier le type' : "Nouveau type d'audit"} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Code"><input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. INTERNE" /></FormField>
+        <FormField label="Libellé"><input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Audit interne" /></FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          {record && <button type="button" onClick={async () => { await api.del(`/business/audit-types/${record.id}`); onCreated(); onClose(); }} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? '…' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function AuditReferentialForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const [form, setForm] = useState({ code: record?.code || '', label: record?.label || '', description: record?.description || '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      if (record) await api.patch(`/business/audit-referentials/${record.id}`, form);
+      else await api.post('/business/audit-referentials', form);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={record ? 'Modifier le référentiel' : 'Nouveau référentiel'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Code"><input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. ISO9001" /></FormField>
+        <FormField label="Libellé"><input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. ISO 9001:2015" /></FormField>
+        <FormField label="Description (optionnel)"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          {record && <button type="button" onClick={async () => { await api.del(`/business/audit-referentials/${record.id}`); onCreated(); onClose(); }} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? '…' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function AuditProgramForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const typesQ = useCollection('/business/audit-types');
+  const referentialsQ = useCollection('/business/audit-referentials');
+  const workUnitsQ = useCollection('/business/work-units');
+  const processusQ = useCollection('/business/processus');
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({
+    title: record?.title || '', year: record?.year || new Date().getFullYear(), periode: record?.periode || '',
+    typeId: record?.typeId || '', referentialId: record?.referentialId || '', workUnitId: record?.workUnitId || '',
+    processusId: record?.processusId || '', auditeurPrincipalId: record?.auditeurPrincipalId || '',
+    datePrevue: record?.datePrevue ? new Date(record.datePrevue).toISOString().slice(0, 10) : '',
+    priorite: record?.priorite || 'NORMALE', frequence: record?.frequence || '', commentaires: record?.commentaires || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      const payload = { ...form, year: Number(form.year), datePrevue: form.datePrevue ? new Date(form.datePrevue).toISOString() : null, typeId: form.typeId || null, referentialId: form.referentialId || null, workUnitId: form.workUnitId || null, processusId: form.processusId || null, auditeurPrincipalId: form.auditeurPrincipalId || null };
+      if (record) await api.patch(`/business/audit-programs/${record.id}`, payload);
+      else await api.post('/business/audit-programs', { code: genCode('PROG'), ...payload });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={record ? 'Modifier la ligne de programme' : 'Nouvelle ligne de programme'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Titre"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Année"><input required type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Période"><input value={form.periode} onChange={(e) => setForm({ ...form, periode: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. T1, Semestre 1..." /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type d'audit"><select value={form.typeId} onChange={(e) => setForm({ ...form, typeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(typesQ.data || []).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></FormField>
+          <FormField label="Référentiel"><select value={form.referentialId} onChange={(e) => setForm({ ...form, referentialId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(referentialsQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Unité de travail"><select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></FormField>
+          <FormField label="Processus"><select value={form.processusId} onChange={(e) => setForm({ ...form, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}</select></FormField>
+        </div>
+        <FormField label="Auditeur principal"><select value={form.auditeurPrincipalId} onChange={(e) => setForm({ ...form, auditeurPrincipalId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}</select></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Date prévue"><input type="date" value={form.datePrevue} onChange={(e) => setForm({ ...form, datePrevue: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Priorité"><select value={form.priorite} onChange={(e) => setForm({ ...form, priorite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="BASSE">Basse</option><option value="NORMALE">Normale</option><option value="HAUTE">Haute</option><option value="CRITIQUE">Critique</option></select></FormField>
+        </div>
+        <FormField label="Fréquence"><input value={form.frequence} onChange={(e) => setForm({ ...form, frequence: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Annuelle, trimestrielle..." /></FormField>
+        <FormField label="Commentaires"><textarea value={form.commentaires} onChange={(e) => setForm({ ...form, commentaires: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          {record && <button type="button" onClick={async () => { await api.del(`/business/audit-programs/${record.id}`); onCreated(); onClose(); }} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? '…' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function AuditsPage() {
   const C = useTheme();
   const audits = useCollection('/business/audits');
+  const dashboardQ = useCollection('/business/audit-dashboard');
+  const programsQ = useCollection('/business/audit-programs');
+  const typesQ = useCollection('/business/audit-types');
+  const referentialsQ = useCollection('/business/audit-referentials');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  if (audits.loading) return <LoadingPanel />;
+  const [tab, setTab] = useState('apercu');
+  const [showProgramForm, setShowProgramForm] = useState(false);
+  const [editingProgram, setEditingProgram] = useState(null);
+  const [showTypeForm, setShowTypeForm] = useState(false);
+  const [editingType, setEditingType] = useState(null);
+  const [showReferentialForm, setShowReferentialForm] = useState(false);
+  const [editingReferential, setEditingReferential] = useState(null);
+  const [generatingProgramId, setGeneratingProgramId] = useState(null);
+  if (audits.loading || dashboardQ.loading) return <LoadingPanel />;
   if (audits.error) return <ErrorPanel message={audits.error} onRetry={audits.reload} />;
   const list = audits.data || [];
-  const planifies = list.filter((a) => a.status === 'PLANNED').length;
-  const scores = list.filter((a) => a.score != null);
+  const dash = dashboardQ.data || {};
+  const programs = programsQ.data || [];
+  const types = typesQ.data || [];
+  const referentials = referentialsQ.data || [];
   const sorted = [...list].sort((a, b) => new Date(b.auditDate) - new Date(a.auditDate));
-  const ncGenerees = list.reduce((s, a) => s + (a.auditFindings || []).filter((f) => f.nonConformityId).length, 0);
+  const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
+  const reloadAll = () => { audits.reload(); dashboardQ.reload(); programsQ.reload(); };
+  async function generateAuditFromProgram(id) {
+    setGeneratingProgramId(id);
+    try { await api.post(`/business/audit-programs/${id}/generate-audit`, {}); reloadAll(); }
+    catch (err) { alert(err.message); }
+    setGeneratingProgramId(null);
+  }
 
   return (
     <div className="space-y-6">
-      {(showForm || editing) && <AuditForm record={editing} onClose={() => { setShowForm(false); setEditing(null); }} onCreated={audits.reload} />}
-      {viewing && <AuditDetailModal audit={viewing} onClose={() => setViewing(null)} onChanged={audits.reload} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
-      <div className="flex items-center justify-between">
-        <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Planifier un audit</button>
+      {(showForm || editing) && <AuditForm record={editing} onClose={() => { setShowForm(false); setEditing(null); }} onCreated={reloadAll} />}
+      {viewing && <AuditDetailModal audit={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
+      {(showProgramForm || editingProgram) && <AuditProgramForm record={editingProgram} onClose={() => { setShowProgramForm(false); setEditingProgram(null); }} onCreated={programsQ.reload} />}
+      {(showTypeForm || editingType) && <AuditTypeForm record={editingType} onClose={() => { setShowTypeForm(false); setEditingType(null); }} onCreated={typesQ.reload} />}
+      {(showReferentialForm || editingReferential) && <AuditReferentialForm record={editingReferential} onClose={() => { setShowReferentialForm(false); setEditingReferential(null); }} onCreated={referentialsQ.reload} />}
+
+      <div className="flex flex-wrap gap-2">
+        {[['apercu', "Vue d'ensemble"], ['mes-audits', 'Mes audits'], ['programme', "Programme d'audit"], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <KpiCard label="Audits au programme" value={list.length} color={C.blue} icon={ClipboardCheck} />
-        <KpiCard label="Planifiés" value={planifies} color={C.amber} icon={Activity} />
-        <KpiCard label="Réalisés / en cours" value={list.length - planifies} color={C.green} icon={ShieldCheck} />
-        <KpiCard label="Score moyen" value={scores.length ? `${Math.round(scores.reduce((s, a) => s + a.score, 0) / scores.length)}%` : '—'} color={C.blue} icon={ClipboardList} />
-        <KpiCard label="NC générées depuis des constats" value={ncGenerees} color={ncGenerees > 0 ? C.red : C.green} icon={FileWarning} />
-      </div>
-      <p className="text-xs" style={{ color: C.textMuted }}>Cliquez une ligne pour consulter et gérer ses constats.</p>
-      <Panel title="Programme d'audits">
-        {sorted.length
-          ? <DataTable columns={['Titre', 'Référence', 'Date', 'Statut', 'Score', 'Constats']} rows={sorted.map((a) => [a.title, a.reference || '—', new Date(a.auditDate).toLocaleDateString('fr-FR'), <StatusChip statut={a.status} />, a.score != null ? `${a.score}%` : '—', (a.auditFindings || []).length])}
-              onRowClick={(i) => setViewing(sorted[i])} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun audit programmé pour le moment</p>}
-      </Panel>
+
+      {tab === 'apercu' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Planifier un audit</button>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="Audits au programme" value={dv(dash.total)} color={C.blue} icon={ClipboardCheck} />
+            <KpiCard label="Planifiés" value={dv(dash.planifies)} color={C.amber} icon={Activity} />
+            <KpiCard label="En cours" value={dv(dash.enCours)} color={C.blue} icon={Activity} />
+            <KpiCard label="Réalisés" value={dv(dash.realises)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="Clôturés" value={dv(dash.clotures)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label="À venir" value={dv(dash.aVenir)} color={C.blue} icon={ClipboardList} />
+            <KpiCard label="Reportés / Annulés" value={`${dv(dash.reportes)} / ${dv(dash.annules)}`} color={C.textMuted} icon={FileWarning} />
+            <KpiCard label="Taux de réalisation du programme" value={dv(dash.tauxRealisationProgramme, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label="Taux de conformité" value={dv(dash.tauxConformite, '%')} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="Taux de non-conformité" value={dv(dash.tauxNonConformite, '%')} color={dash.tauxNonConformite > 20 ? C.red : C.amber} icon={AlertTriangle} />
+            <KpiCard label="Score moyen" value={dv(dash.scoreMoyen, '%')} color={C.blue} icon={ClipboardList} />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="Constats" value={dv(dash.nombreConstats)} color={C.blue} icon={FileWarning} />
+            <KpiCard label="NC majeures" value={dv(dash.ncMajeures)} color={dash.ncMajeures > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label="NC mineures" value={dv(dash.ncMineures)} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label="Pistes d'amélioration" value={dv(dash.pistesAmelioration)} color={C.blue} icon={ClipboardList} />
+            <KpiCard label="Points conformes" value={dv(dash.pointsConformes)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="Constats ouverts" value={dv(dash.constatsOuverts)} color={dash.constatsOuverts > 0 ? C.amber : C.green} icon={FileWarning} />
+            <KpiCard label="Délai moyen de clôture (jours)" value={dv(dash.delaiMoyenClotureConstats)} color={C.blue} icon={Activity} />
+          </div>
+        </div>
+      )}
+
+      {tab === 'mes-audits' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Planifier un audit</button>
+          </div>
+          <p className="text-xs" style={{ color: C.textMuted }}>Cliquez une ligne pour consulter et gérer ses constats.</p>
+          <Panel title="Programme d'audits">
+            {sorted.length
+              ? <DataTable columns={['Titre', 'Type', 'Référentiel', 'Date', 'Statut', 'Score', 'Constats']} rows={sorted.map((a) => [a.title, a.type?.label || '—', a.referential?.label || '—', new Date(a.auditDate).toLocaleDateString('fr-FR'), <StatusChip statut={a.status} />, a.score != null ? `${a.score}%` : '—', (a.auditFindings || []).length])}
+                  onRowClick={(i) => setViewing(sorted[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun audit programmé pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'programme' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowProgramForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ligne de programme</button>
+          </div>
+          <Panel title="Programme annuel / périodique">
+            {programs.length
+              ? <DataTable columns={['Titre', 'Année', 'Type', 'Unité de travail', 'Date prévue', 'Statut', 'Audit']}
+                  rows={programs.map((p) => [
+                    p.title, p.year, p.type?.label || '—', p.workUnit?.name || '—',
+                    p.datePrevue ? new Date(p.datePrevue).toLocaleDateString('fr-FR') : '—',
+                    <StatusChip statut={p.statut} />,
+                    p.auditId ? 'Généré' : <button onClick={(e) => { e.stopPropagation(); generateAuditFromProgram(p.id); }} disabled={generatingProgramId === p.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{generatingProgramId === p.id ? '…' : "Générer l'audit"}</button>,
+                  ])}
+                  onRowClick={(i) => setEditingProgram(programs[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne de programme pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'parametrage' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <Panel title="Types d'audit" right={<button onClick={() => setShowTypeForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+              {types.length
+                ? <DataTable columns={['Code', 'Libellé']} rows={types.map((t) => [t.code, t.label])} onRowClick={(i) => setEditingType(types[i])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun type défini — la liste reste entièrement libre</p>}
+            </Panel>
+            <Panel title="Référentiels" right={<button onClick={() => setShowReferentialForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+              {referentials.length
+                ? <DataTable columns={['Code', 'Libellé']} rows={referentials.map((r) => [r.code, r.label])} onRowClick={(i) => setEditingReferential(referentials[i])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun référentiel défini</p>}
+            </Panel>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
