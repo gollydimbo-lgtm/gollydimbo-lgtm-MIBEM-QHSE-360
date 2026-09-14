@@ -7090,6 +7090,13 @@ function AuditsPage() {
   const referentialsQ = useCollection('/business/audit-referentials');
   const checklistsQ = useCollection('/business/audit-checklists');
   const auditeursQ = useCollection('/business/auditeurs');
+  const trendsQ = useCollection('/business/audit-trends');
+  const ncRecurrentesQ = useCollection('/business/audit-nc-recurrentes');
+  const [comparaison, setComparaison] = useState(null);
+  const [comparaisonForm, setComparaisonForm] = useState({ debut1: '', fin1: '', debut2: '', fin2: '' });
+  const [comparaisonLoading, setComparaisonLoading] = useState(false);
+  const [synthese, setSynthese] = useState(null);
+  const [syntheseLoading, setSyntheseLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -7113,6 +7120,22 @@ function AuditsPage() {
   const referentials = referentialsQ.data || [];
   const checklists = checklistsQ.data || [];
   const auditeurs = auditeursQ.data || [];
+  const trends = trendsQ.data || [];
+  const ncRecurrentes = ncRecurrentesQ.data || [];
+  async function runComparaison() {
+    const { debut1, fin1, debut2, fin2 } = comparaisonForm;
+    if (!debut1 || !fin1 || !debut2 || !fin2) return;
+    setComparaisonLoading(true);
+    try { setComparaison(await api.get(`/business/audit-comparaison?debut1=${debut1}&fin1=${fin1}&debut2=${debut2}&fin2=${fin2}`)); }
+    catch (err) { alert(err.message); }
+    setComparaisonLoading(false);
+  }
+  async function generateSynthese() {
+    setSyntheseLoading(true);
+    try { setSynthese(await api.get('/business/audit-synthese-direction')); }
+    catch (err) { alert(err.message); }
+    setSyntheseLoading(false);
+  }
   const sorted = [...list].sort((a, b) => new Date(b.auditDate) - new Date(a.auditDate));
   // Calendrier — regroupe audits et programme par mois calendaire.
   const calendrierEvents = [
@@ -7144,7 +7167,7 @@ function AuditsPage() {
       {editingAuditeur && <AuditorProfileForm auditeur={editingAuditeur} onClose={() => setEditingAuditeur(null)} onCreated={auditeursQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['mes-audits', 'Mes audits'], ['calendrier', 'Calendrier'], ['programme', "Programme d'audit"], ['auditeurs', 'Auditeurs'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+        {[['apercu', "Vue d'ensemble"], ['mes-audits', 'Mes audits'], ['calendrier', 'Calendrier'], ['programme', "Programme d'audit"], ['auditeurs', 'Auditeurs'], ['analyses', 'Analyses'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -7255,6 +7278,84 @@ function AuditsPage() {
                   ])}
                   onRowClick={(i) => setEditingAuditeur(auditeurs[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun auditeur pour le moment — apparaît dès qu'un utilisateur est désigné auditeur sur un audit</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'analyses' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <Panel title="Évolution sur 12 mois">
+            {trends.length
+              ? <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={trends}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.textMuted }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: C.textMuted }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: C.textMuted }} />
+                    <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
+                    <Line yAxisId="left" type="monotone" dataKey="realises" name="Audits réalisés" stroke={C.blue} strokeWidth={2} />
+                    <Line yAxisId="right" type="monotone" dataKey="tauxConformiteMoyen" name="Taux de conformité (%)" stroke={C.green} strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas encore assez de données</p>}
+          </Panel>
+
+          <Panel title="Non-conformités récurrentes" subtitle="Écarts identiques constatés au moins deux fois">
+            {ncRecurrentes.length
+              ? <div className="space-y-2">
+                  {ncRecurrentes.map((nc, i) => (
+                    <div key={i} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm" style={{ color: C.text }}>{nc.description}</p>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{nc.occurrences}× constaté</span>
+                      </div>
+                      <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>{nc.processus} · dernière occurrence le {new Date(nc.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                    </div>
+                  ))}
+                  <p className="text-xs pt-1" style={{ color: C.textMuted }}>Envisager une action corrective systémique / révision du processus pour ces écarts récurrents.</p>
+                </div>
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité récurrente détectée</p>}
+          </Panel>
+
+          <Panel title="Comparer deux périodes">
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              <FormField label="Début période 1"><input type="date" value={comparaisonForm.debut1} onChange={(e) => setComparaisonForm({ ...comparaisonForm, debut1: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label="Fin période 1"><input type="date" value={comparaisonForm.fin1} onChange={(e) => setComparaisonForm({ ...comparaisonForm, fin1: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label="Début période 2"><input type="date" value={comparaisonForm.debut2} onChange={(e) => setComparaisonForm({ ...comparaisonForm, debut2: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label="Fin période 2"><input type="date" value={comparaisonForm.fin2} onChange={(e) => setComparaisonForm({ ...comparaisonForm, fin2: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            </div>
+            <button onClick={runComparaison} disabled={comparaisonLoading} className="px-4 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff' }}>{comparaisonLoading ? '…' : 'Comparer'}</button>
+            {comparaison && (
+              <DataTable columns={['Indicateur', 'Période 1', 'Période 2']} rows={[
+                ["Nombre d'audits", comparaison.periode1.nombreAudits, comparaison.periode2.nombreAudits],
+                ['Taux de conformité moyen', comparaison.periode1.tauxConformiteMoyen ?? '—', comparaison.periode2.tauxConformiteMoyen ?? '—'],
+                ['Score moyen', comparaison.periode1.scoreMoyen ?? '—', comparaison.periode2.scoreMoyen ?? '—'],
+                ['NC majeures', comparaison.periode1.ncMajeures, comparaison.periode2.ncMajeures],
+                ['NC mineures', comparaison.periode1.ncMineures, comparaison.periode2.ncMineures],
+              ]} />
+            )}
+          </Panel>
+
+          <Panel title="Synthèse Direction" right={<div className="flex gap-2">{synthese && <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button>}<button onClick={generateSynthese} disabled={syntheseLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{syntheseLoading ? '…' : 'Générer'}</button></div>}>
+            {synthese
+              ? <div className="space-y-3">
+                  <p className="text-xs" style={{ color: C.textMuted }}>Générée le {new Date(synthese.genereLe).toLocaleDateString('fr-FR')}</p>
+                  <DataTable columns={['Indicateur', 'Valeur']} rows={[
+                    ["Audits réalisés", synthese.dashboard.realises], ['Taux de réalisation du programme', synthese.dashboard.tauxRealisationProgramme != null ? `${synthese.dashboard.tauxRealisationProgramme}%` : '—'],
+                    ['Score moyen', synthese.dashboard.scoreMoyen ?? '—'], ['Taux de conformité', synthese.dashboard.tauxConformite != null ? `${synthese.dashboard.tauxConformite}%` : '—'],
+                    ['NC majeures', synthese.dashboard.ncMajeures], ['NC mineures', synthese.dashboard.ncMineures], ['Actions en retard', synthese.dashboard.actionsEnRetard ?? '—'],
+                  ]} />
+                  <p className="text-xs font-semibold" style={{ color: C.text }}>Processus les plus performants</p>
+                  <DataTable columns={['Processus', 'Taux de conformité moyen']} rows={synthese.processusLesPlusPerformants.map((p) => [p.processus, p.tauxConformiteMoyen != null ? `${p.tauxConformiteMoyen}%` : '—'])} />
+                  <p className="text-xs font-semibold" style={{ color: C.text }}>Processus les plus problématiques</p>
+                  <DataTable columns={['Processus', 'Taux de conformité moyen']} rows={synthese.processusLesPlusProblematiques.map((p) => [p.processus, p.tauxConformiteMoyen != null ? `${p.tauxConformiteMoyen}%` : '—'])} />
+                  {synthese.principalesCausesRecurrentes.length > 0 && <>
+                    <p className="text-xs font-semibold" style={{ color: C.text }}>Principales causes récurrentes</p>
+                    <DataTable columns={['Description', 'Occurrences']} rows={synthese.principalesCausesRecurrentes.map((c) => [c.description, c.occurrences])} />
+                  </>}
+                </div>
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Clique sur "Générer" pour produire la synthèse</p>}
           </Panel>
         </div>
       )}
