@@ -1,25 +1,29 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { BusinessService } from '../business/business.service';
 
 // Entités que les applications terrain peuvent créer hors-ligne puis
 // pousser une fois la connexion revenue. Le mapping traduit le nom
 // générique envoyé par le client vers le modèle Prisma réel.
-const ENTITY_CREATE: Record<string, (db: PrismaService, payload: any) => Promise<any>> = {
-  nonConformity: (db, p) => db.nonConformity.create({ data: p }),
-  action: (db, p) => db.action.create({ data: p }),
-  safetyEvent: (db, p) => db.safetyEvent.create({ data: p }),
-  risk: (db, p) => db.risk.create({ data: p }),
+// "risk" passe par BusinessService (pas un create Prisma brut) pour que le
+// risque créé hors-ligne bénéficie du même moteur de calcul, de la même
+// traçabilité et du même historique d'évaluation qu'un risque créé en ligne.
+const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessService, payload: any) => Promise<any>> = {
+  nonConformity: (db, business, p) => db.nonConformity.create({ data: p }),
+  action: (db, business, p) => db.action.create({ data: p }),
+  safetyEvent: (db, business, p) => db.safetyEvent.create({ data: p }),
+  risk: (db, business, p) => business.riskCreate(p),
 };
 
-const ENTITY_UPDATE: Record<string, (db: PrismaService, id: string, payload: any) => Promise<any>> = {
-  nonConformity: (db, id, p) => db.nonConformity.update({ where: { id }, data: p }),
-  action: (db, id, p) => db.action.update({ where: { id }, data: p }),
-  risk: (db, id, p) => db.risk.update({ where: { id }, data: p }),
+const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, id: string, payload: any) => Promise<any>> = {
+  nonConformity: (db, business, id, p) => db.nonConformity.update({ where: { id }, data: p }),
+  action: (db, business, id, p) => db.action.update({ where: { id }, data: p }),
+  risk: (db, business, id, p) => business.riskUpdate(id, p),
 };
 
 @Controller('sync')
 export class SyncController {
-  constructor(private db: PrismaService) {}
+  constructor(private db: PrismaService, private business: BusinessService) {}
 
   // Reçoit une file d'attente d'opérations créées hors-ligne par le client
   // (identifiées par un clientLocalId unique généré côté app) et les applique
@@ -46,13 +50,13 @@ export class SyncController {
         if (item.operation === 'CREATE') {
           const fn = ENTITY_CREATE[item.entity];
           if (!fn) throw new Error(`Entité inconnue : ${item.entity}`);
-          const created = await fn(this.db, item.payload);
+          const created = await fn(this.db, this.business, item.payload);
           entityId = created.id;
         } else if (item.operation === 'UPDATE') {
           const fn = ENTITY_UPDATE[item.entity];
           if (!fn) throw new Error(`Mise à jour non supportée pour : ${item.entity}`);
           if (!entityId) throw new Error('entityId requis pour une mise à jour');
-          await fn(this.db, entityId, item.payload);
+          await fn(this.db, this.business, entityId, item.payload);
         }
         await this.db.syncItem.update({ where: { id: record.id }, data: { status: 'SYNCED', entityId, syncedAt: new Date(), error: null } });
         results.push({ clientLocalId: item.clientLocalId, status: 'SYNCED', entityId });
