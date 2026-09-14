@@ -660,6 +660,7 @@ model NonConformity {
   safetyEvents SafetyEvent[]
   containmentActions NcContainmentAction[]
   causes NcCause[]
+  costs NcCost[]
   @@index([status,occurredAt])
 }
 
@@ -706,6 +707,19 @@ model NcSettings {
   seuilCritique Int @default(75)
   delaiStandardJours Int @default(30)
   updatedAt DateTime @updatedAt
+}
+
+// Coût de non-qualité (point 26) — une ligne par poste de coût, jamais un
+// seul montant global, pour permettre la ventilation par type et le calcul
+// automatique des totaux/moyennes.
+model NcCost {
+  id String @id @default(cuid())
+  nonConformityId String
+  type String
+  montant Float
+  description String?
+  createdAt DateTime @default(now())
+  nonConformity NonConformity @relation(fields:[nonConformityId], references:[id], onDelete:Cascade)
 }
 
 model Action {
