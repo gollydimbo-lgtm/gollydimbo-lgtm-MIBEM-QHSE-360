@@ -9,15 +9,16 @@ import { BusinessService } from '../business/business.service';
 // risque créé hors-ligne bénéficie du même moteur de calcul, de la même
 // traçabilité et du même historique d'évaluation qu'un risque créé en ligne.
 const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessService, payload: any) => Promise<any>> = {
-  nonConformity: (db, business, p) => db.nonConformity.create({ data: p }),
+  nonConformity: (db, business, p) => business.ncCreate(p),
   action: (db, business, p) => db.action.create({ data: p }),
   safetyEvent: (db, business, p) => db.safetyEvent.create({ data: p }),
   risk: (db, business, p) => business.riskCreate(p),
   riskMeasure: (db, business, p) => db.riskMeasure.create({ data: p }),
+  audit: (db, business, p) => db.qhseAudit.create({ data: p }),
 };
 
 const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, id: string, payload: any) => Promise<any>> = {
-  nonConformity: (db, business, id, p) => db.nonConformity.update({ where: { id }, data: p }),
+  nonConformity: (db, business, id, p) => business.ncUpdate(id, p),
   action: (db, business, id, p) => db.action.update({ where: { id }, data: p }),
   risk: (db, business, id, p) => business.riskUpdate(id, p),
   // Entité distincte plutôt qu'un simple "risk" mis à jour : une
