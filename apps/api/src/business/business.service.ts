@@ -245,7 +245,20 @@ import { writeAudit } from '../common/audit-log.helper';
  }
  haccpList(){return this.db.haccpRecord.findMany({orderBy:{recordDate:'desc'}})} haccpCreate(b:any){return this.db.haccpRecord.create({data:b})} haccpUpdate(id:string,b:any){return this.db.haccpRecord.update({where:{id},data:b})} haccpDelete(id:string){return this.db.haccpRecord.delete({where:{id}})}
  auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})}
- auditGet(id:string){return this.db.qhseAudit.findUnique({where:{id},include:{auditor:true,responsableAudite:true,processus:true,fournisseur:true,type:true,referential:true,workUnit:true,checklist:{include:{items:{orderBy:{order:'asc'}}}},responses:true,auditFindings:{include:{nonConformity:true,risk:true,actions:true,responsable:true,checklistItem:true}},programs:true}})}
+ async auditGet(id:string){
+  const audit=await this.db.qhseAudit.findUnique({where:{id},include:{
+   auditor:true,responsableAudite:true,fournisseur:true,type:true,referential:true,workUnit:true,
+   processus:{include:{pilote:true,suppleant:true}},
+   checklist:{include:{items:{orderBy:{order:'asc'}}}},responses:true,
+   auditFindings:{include:{nonConformity:true,risk:true,actions:true,responsable:true,checklistItem:true}},
+   programs:true,signatures:{include:{signataire:true}},
+  }});
+  if(!audit) return null;
+  // Point 15 : signale (sans jamais bloquer) qu'un auditeur pourrait auditer
+  // son propre processus — la politique interne peut ensuite l'autoriser.
+  const independenceWarning=!!(audit.processus&&audit.auditorId&&(audit.processus.piloteId===audit.auditorId||audit.processus.suppleantId===audit.auditorId));
+  return {...audit,independenceWarning};
+ }
  auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
 
  auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{
@@ -340,6 +353,36 @@ import { writeAudit } from '../common/audit-log.helper';
    score:tauxConformite,
   }});
  }
+
+ // === AUDITS — Phase 3 : auditeurs, indépendance, signatures ===========
+
+ // Liste les utilisateurs déjà impliqués dans au moins un audit ou ayant un
+ // profil auditeur, avec leurs statistiques calculées (point 14) — jamais
+ // stockées, toujours recalculées depuis les audits réels.
+ async auditeursList(){
+  const users=await this.db.user.findMany({
+   where:{OR:[{audits:{some:{}}},{auditorProfile:{isNot:null}}]},
+   include:{auditorProfile:true,audits:{select:{status:true,score:true}}},
+  });
+  return users.map(u=>{
+   const clotureStatuts=['COMPLETED','VALIDATED','CLOSED'];
+   const realises=u.audits.filter(a=>clotureStatuts.includes(a.status)).length;
+   const enCours=u.audits.filter(a=>!clotureStatuts.includes(a.status)&&a.status!=='CANCELLED').length;
+   const scores=u.audits.map(a=>a.score).filter((s):s is number=>s!=null);
+   const performanceMoyenne=scores.length?Math.round((scores.reduce((s,v)=>s+v,0)/scores.length)*10)/10:null;
+   return {
+    id:u.id,firstName:u.firstName,lastName:u.lastName,email:u.email,profile:u.auditorProfile,
+    nombreAuditsRealises:realises,nombreAuditsEnCours:enCours,performanceMoyenne,
+   };
+  });
+ }
+ auditorProfileUpsert(userId:string,b:any){return this.db.auditorProfile.upsert({where:{userId},update:b,create:{userId,...b}})}
+
+ auditSignatureCreate(auditId:string,b:any){return this.db.auditSignature.create({data:{auditId,role:b.role,signataireId:b.signataireId||null}})}
+ // Signer, c'est enregistrer qui a signé et quand — jamais un simple
+ // changement de statut sans identité ni horodatage.
+ auditSignatureSign(id:string,signataireId:string){return this.db.auditSignature.update({where:{id},data:{signataireId,signedAt:new Date(),statut:'SIGNE'}})}
+ auditSignatureDelete(id:string){return this.db.auditSignature.delete({where:{id}})}
  // Génère une non-conformité (et son action corrective) à partir d'un
  // constat d'audit — même principe que l'échec d'un point de contrôle
  // critique dans le moteur de contrôle universel. Le constat hérite du
