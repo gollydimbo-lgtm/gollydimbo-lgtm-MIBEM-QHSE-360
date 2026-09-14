@@ -129,6 +129,7 @@ model User {
   audits QhseAudit[] @relation("AuditAuditor")
   auditsAsResponsable QhseAudit[] @relation("AuditResponsable")
   auditProgramsAsAuditeur AuditProgram[]
+  auditFindingsResponsable AuditFinding[]
   refreshTokens RefreshToken[]
   epcResponsible Epc[]
   epcInspections EpcInspection[]
@@ -1122,6 +1123,11 @@ model QhseAudit {
   priorite String @default("NORMALE")
   scoreMax Float?
   tauxConformite Float?
+  // --- Phase 2 : check-list et moteur de notation ---
+  checklistId String?
+  scoringMethod String @default("CONFORME_NON_CONFORME")
+  scoreObtenu Float?
+  scorePondere Float?
   createdAt DateTime @default(now())
   auditor User? @relation("AuditAuditor", fields:[auditorId], references:[id], onDelete:SetNull)
   responsableAudite User? @relation("AuditResponsable", fields:[responsableAuditeId], references:[id], onDelete:SetNull)
@@ -1130,8 +1136,10 @@ model QhseAudit {
   type AuditType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
   referential AuditReferential? @relation(fields:[referentialId], references:[id], onDelete:SetNull)
   workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  checklist AuditChecklist? @relation(fields:[checklistId], references:[id], onDelete:SetNull)
   auditFindings AuditFinding[]
   programs AuditProgram[]
+  responses AuditQuestionResponse[]
 }
 
 // Bibliothèque de types d'audit configurable — jamais une liste figée
@@ -1144,6 +1152,7 @@ model AuditType {
   active Boolean @default(true)
   audits QhseAudit[]
   programs AuditProgram[]
+  checklists AuditChecklist[]
 }
 
 // Référentiel d'audit (ISO 9001, HACCP, exigences client...) — chapitres et
@@ -1158,6 +1167,7 @@ model AuditReferential {
   items AuditReferentialItem[]
   audits QhseAudit[]
   programs AuditProgram[]
+  checklists AuditChecklist[]
 }
 
 model AuditReferentialItem {
@@ -1168,6 +1178,7 @@ model AuditReferentialItem {
   exigence String
   order Int @default(0)
   referential AuditReferential @relation(fields:[referentialId], references:[id], onDelete:Cascade)
+  checklistItems AuditChecklistItem[]
 }
 
 // Programme annuel/périodique — une ligne planifiée qui peut ensuite générer
@@ -1200,6 +1211,56 @@ model AuditProgram {
   audit QhseAudit? @relation(fields:[auditId], references:[id], onDelete:SetNull)
 }
 
+// Modèle de check-list réutilisable (point 6) — une fois créée, elle peut
+// être appliquée à n'importe quel audit du même type/référentiel.
+model AuditChecklist {
+  id String @id @default(cuid())
+  code String @unique
+  title String
+  referentialId String?
+  typeId String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  referential AuditReferential? @relation(fields:[referentialId], references:[id], onDelete:SetNull)
+  type AuditType? @relation(fields:[typeId], references:[id], onDelete:SetNull)
+  items AuditChecklistItem[]
+  audits QhseAudit[]
+}
+
+model AuditChecklistItem {
+  id String @id @default(cuid())
+  checklistId String
+  chapitre String?
+  numero String?
+  question String
+  critereAttendu String?
+  preuveRecherchee String?
+  criticite String @default("FAIBLE")
+  poids Float @default(1)
+  referentialItemId String?
+  order Int @default(0)
+  checklist AuditChecklist @relation(fields:[checklistId], references:[id], onDelete:Cascade)
+  referentialItem AuditReferentialItem? @relation(fields:[referentialItemId], references:[id], onDelete:SetNull)
+  responses AuditQuestionResponse[]
+  findings AuditFinding[]
+}
+
+// Réponse à une question de check-list pour un audit donné — une ligne par
+// couple (audit, question), jamais dupliquée grâce à la contrainte unique.
+model AuditQuestionResponse {
+  id String @id @default(cuid())
+  auditId String
+  checklistItemId String
+  resultat String @default("NON_EVALUE")
+  score Float?
+  commentaire String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  audit QhseAudit @relation(fields:[auditId], references:[id], onDelete:Cascade)
+  checklistItem AuditChecklistItem @relation(fields:[checklistItemId], references:[id], onDelete:Cascade)
+  @@unique([auditId, checklistItemId])
+}
+
 // Constat d'audit structuré — remplace le champ "findings" en texte
 // libre jamais exploité. Un constat critique peut générer automatiquement
 // une non-conformité et une action, exactement comme un point de
@@ -1215,10 +1276,17 @@ model AuditFinding {
   closedAt DateTime?
   nonConformityId String?
   riskId String?
+  checklistItemId String?
+  preuveObjective String?
+  zone String?
+  responsableId String?
+  delai DateTime?
   createdAt DateTime @default(now())
   audit QhseAudit @relation(fields:[auditId], references:[id], onDelete:Cascade)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
+  checklistItem AuditChecklistItem? @relation(fields:[checklistItemId], references:[id], onDelete:SetNull)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
   actions Action[]
 }
 
