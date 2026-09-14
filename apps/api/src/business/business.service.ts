@@ -150,6 +150,91 @@ import { writeAudit } from '../common/audit-log.helper';
    tauxCloture,tauxClotureDansLesDelais,tauxEnRetard,delaiMoyenTraitement,ageMoyenOuvertes,
    ncPlusAncienneDate:plusAncienne?.createdAt??null,
    actionsEnRetard,tauxEfficaciteActions:tauxEfficacite,
+   recurrentes:await this.ncRecurrentesCount(),
+   ...await this.ncCoutStats(),
+  };
+ }
+
+ // === NON-CONFORMITÉS — Phase 3 : récurrence, coût, alertes ==============
+
+ // Regroupe les NC par processus + début de titre (approximation de la
+ // similarité, cohérente avec le même mécanisme utilisé pour les audits) —
+ // ne retient que ce qui s'est répété au moins deux fois (point 16).
+ async ncRecurrentes(){
+  const ncs=await this.db.nonConformity.findMany({
+   include:{processus:{select:{nom:true}}},
+   orderBy:{createdAt:'desc'},
+  });
+  const groupes:Record<string,any[]>={};
+  for(const n of ncs){
+   const cle=`${n.processusId||'sans-processus'}::${(n.title||'').trim().toLowerCase().slice(0,60)}`;
+   (groupes[cle]=groupes[cle]||[]).push(n);
+  }
+  return Object.values(groupes).filter(g=>g.length>=2).map(g=>({
+   titre:g[0].title, processus:g[0].processus?.nom||'Sans processus',
+   occurrences:g.length, premiereOccurrence:g[g.length-1].occurredAt, derniereOccurrence:g[0].occurredAt,
+   historique:g.map(n=>({id:n.id,code:n.code,date:n.occurredAt,statut:n.status})),
+  })).sort((a,b)=>b.occurrences-a.occurrences);
+ }
+ private async ncRecurrentesCount(){ return (await this.ncRecurrentes()).reduce((s,g)=>s+g.occurrences,0); }
+
+ ncCostList(nonConformityId:string){return this.db.ncCost.findMany({where:{nonConformityId},orderBy:{createdAt:'desc'}})}
+ ncCostCreate(b:any){return this.db.ncCost.create({data:b})}
+ ncCostUpdate(id:string,b:any){return this.db.ncCost.update({where:{id},data:b})}
+ ncCostDelete(id:string){return this.db.ncCost.delete({where:{id}})}
+ private async ncCoutStats(){
+  const costs=await this.db.ncCost.findMany({select:{montant:true,nonConformityId:true}});
+  const coutTotal=costs.reduce((s,c)=>s+c.montant,0);
+  const ncAvecCout=new Set(costs.map(c=>c.nonConformityId)).size;
+  return {coutTotalNonQualite:Math.round(coutTotal*100)/100, coutMoyenParNc:ncAvecCout?Math.round((coutTotal/ncAvecCout)*100)/100:null};
+ }
+
+ // Centre d'alertes (point 24) — les mêmes conditions que celles listées
+ // dans le cahier des charges, jamais de champ recalculé silencieusement.
+ async ncAlertes(){
+  const now=new Date();
+  const ncs=await this.db.nonConformity.findMany({where:{status:{not:'CLOSED'}},include:{actions:true,causes:true}});
+  const alertes:any[]=[];
+  for(const n of ncs){
+   if(n.criticiteNiveau==='CRITIQUE') alertes.push({id:n.id,label:`NC critique : ${n.title}`,niveau:'CRITIQUE'});
+   if(!n.responsibleId) alertes.push({id:n.id,label:`Aucun responsable désigné : ${n.title}`,niveau:'ATTENTION'});
+   if(!n.actions.length) alertes.push({id:n.id,label:`Aucune action définie : ${n.title}`,niveau:'ATTENTION'});
+   if(n.dueDate&&new Date(n.dueDate)<now) alertes.push({id:n.id,label:`Délai dépassé : ${n.title}`,niveau:'URGENT'});
+   if(n.actions.some(a=>a.status!=='CLOSED'&&a.dueDate&&new Date(a.dueDate)<now)) alertes.push({id:n.id,label:`Action en retard : ${n.title}`,niveau:'URGENT'});
+   if(!n.causes.length) alertes.push({id:n.id,label:`Aucune cause identifiée : ${n.title}`,niveau:'ATTENTION'});
+   if(!n.effectivenessCheckedAt) alertes.push({id:n.id,label:`Vérification d'efficacité non réalisée : ${n.title}`,niveau:'ATTENTION'});
+   if(n.effectivenessResult==='INEFFICACE') alertes.push({id:n.id,label:`Action inefficace : ${n.title}`,niveau:'URGENT'});
+   if(n.reopenedCount>0) alertes.push({id:n.id,label:`NC réouverte (${n.reopenedCount}x) : ${n.title}`,niveau:'ATTENTION'});
+  }
+  const poids:any={CRITIQUE:0,URGENT:1,ATTENTION:2,INFORMATION:3};
+  return alertes.sort((a,b)=>poids[a.niveau]-poids[b.niveau]);
+ }
+
+ // === NON-CONFORMITÉS — Phase 4 : tendances et synthèse ===================
+
+ async ncTrends(){
+  const depuis=new Date(); depuis.setMonth(depuis.getMonth()-11); depuis.setDate(1); depuis.setHours(0,0,0,0);
+  const ncs=await this.db.nonConformity.findMany({where:{createdAt:{gte:depuis}},select:{createdAt:true,status:true,criticiteNiveau:true}});
+  const mois:{cle:string,label:string,nouvelles:number,critiques:number}[]=[];
+  for(let i=11;i>=0;i--){
+   const d=new Date(); d.setMonth(d.getMonth()-i); d.setDate(1);
+   const label=d.toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
+   const duMois=ncs.filter(n=>{const nd=new Date(n.createdAt);return nd.getFullYear()===d.getFullYear()&&nd.getMonth()===d.getMonth();});
+   mois.push({cle:`${d.getFullYear()}-${d.getMonth()}`,label,nouvelles:duMois.length,critiques:duMois.filter(n=>n.criticiteNiveau==='CRITIQUE').length});
+  }
+  return mois;
+ }
+
+ async ncSyntheseDirection(){
+  const [dashboard,trends,recurrentes]=await Promise.all([this.ncDashboard(),this.ncTrends(),this.ncRecurrentes()]);
+  const parProcessus=await this.db.nonConformity.groupBy({by:['processusId'],_count:{_all:true},where:{processusId:{not:null}}});
+  const processusDetails=await this.db.processus.findMany({where:{id:{in:parProcessus.map(p=>p.processusId).filter((id):id is string=>!!id)}},select:{id:true,nom:true}});
+  const parProcessusLabel=parProcessus.map(p=>({processus:processusDetails.find(d=>d.id===p.processusId)?.nom||'Inconnu',nombre:p._count._all})).sort((a,b)=>b.nombre-a.nombre);
+  return {
+   dashboard, tendanceRecente:trends.slice(-3),
+   processusLesPlusProblematiques:parProcessusLabel.slice(0,5),
+   principalesRecurrences:recurrentes.slice(0,5),
+   genereLe:new Date(),
   };
  }
 
