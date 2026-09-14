@@ -700,6 +700,17 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
     } catch (err) { alert(err.message); }
     setGeneratingId(null);
   }
+  // Point 16 : un constat d'audit peut aussi générer directement un risque
+  // dans le Registre des risques, indépendamment de la NC.
+  async function generateRisk(id) {
+    setGeneratingId(id);
+    try {
+      const updated = await api.post(`/business/audit-findings/${id}/generate-risk`, {});
+      setFindings((prev) => prev.map((f) => (f.id === id ? { ...f, riskId: updated.id } : f)));
+      onChanged();
+    } catch (err) { alert(err.message); }
+    setGeneratingId(null);
+  }
 
   return (
     <Modal title={audit.title} onClose={onClose}>
@@ -741,8 +752,11 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
                   <button onClick={() => deleteFinding(f.id)} className="text-xs" style={{ color: C.red }}>×</button>
                 </div>
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[10px]" style={{ color: C.textMuted }}>{f.classification || (f.critical ? 'Critique' : 'Standard')}{f.nonConformityId ? ' · NC générée' : ''}</span>
-                  {!f.nonConformityId && <button onClick={() => generateNc(f.id)} disabled={generatingId === f.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{generatingId === f.id ? '…' : 'Générer une NC'}</button>}
+                  <span className="text-[10px]" style={{ color: C.textMuted }}>{f.classification || (f.critical ? 'Critique' : 'Standard')}{f.nonConformityId ? ' · NC générée' : ''}{f.riskId ? ' · Risque généré' : ''}</span>
+                  <div className="flex gap-1">
+                    {!f.nonConformityId && <button onClick={() => generateNc(f.id)} disabled={generatingId === f.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{generatingId === f.id ? '…' : 'Générer une NC'}</button>}
+                    {!f.riskId && <button onClick={() => generateRisk(f.id)} disabled={generatingId === f.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>{generatingId === f.id ? '…' : 'Générer un risque'}</button>}
+                  </div>
                 </div>
               </div>
             ))}
@@ -942,11 +956,12 @@ function EnvironnementAspectForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
   const processusQ = useCollection('/business/processus');
+  const risksQ = useCollection('/business/risks');
   const [form, setForm] = useState({
     aspect: record?.aspect || '', activite: record?.activite || '', source: record?.source || '', impact: record?.impact || '',
     milieu: record?.milieu || '', situation: record?.situation || 'NORMALE', processusId: record?.processusId || '',
     frequence: record?.frequence || 1, gravite: record?.gravite || 1, probabilite: record?.probabilite || 1, maitrise: record?.maitrise || 1,
-    mesuresMaitrise: record?.mesuresMaitrise || '', statut: record?.statut || 'ACTIVE',
+    mesuresMaitrise: record?.mesuresMaitrise || '', statut: record?.statut || 'ACTIVE', riskId: record?.riskId || '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -956,7 +971,7 @@ function EnvironnementAspectForm({ record, onClose, onCreated }) {
   async function submit(e) {
     e.preventDefault(); setSaving(true); setError(null);
     try {
-      const payload = { ...form, processusId: form.processusId || null };
+      const payload = { ...form, processusId: form.processusId || null, riskId: form.riskId || null };
       if (editing) await api.patch(`/business/environnement-aspects/${record.id}`, payload);
       else await api.post('/business/environnement-aspects', { code: genCode('ASP'), ...payload });
       onCreated(); onClose();
@@ -993,6 +1008,11 @@ function EnvironnementAspectForm({ record, onClose, onCreated }) {
         <FormField label="Processus concerné (optionnel)">
           <select value={form.processusId} onChange={(e) => setForm({ ...form, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
             <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Risque professionnel lié (optionnel)">
+          <select value={form.riskId} onChange={(e) => setForm({ ...form, riskId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(risksQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.hazard}</option>)}
           </select>
         </FormField>
         <p className="text-xs font-semibold uppercase tracking-wide mb-2 mt-3" style={{ color: C.textMuted }}>Cotation — Criticité = Fréquence × Gravité × Probabilité ÷ Maîtrise</p>
@@ -6142,8 +6162,10 @@ const RISK_MEASURE_TYPES = [
 function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
   const C = useTheme();
   const detailQ = useCollection(`/business/risks/${risk.id}`);
+  const epiListQ = useCollection('/epi/catalog');
+  const trainingsQ = useCollection('/business/trainings');
   const [showAddMeasure, setShowAddMeasure] = useState(false);
-  const [form, setForm] = useState({ description: '', type: 'TECHNIQUE', efficacite: 3, justificatif: '' });
+  const [form, setForm] = useState({ description: '', type: 'TECHNIQUE', efficacite: 3, justificatif: '', epiId: '', trainingId: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   if (detailQ.loading) return <Modal title={risk.hazard} onClose={onClose}><LoadingPanel /></Modal>;
@@ -6155,8 +6177,8 @@ function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
   async function addMeasure(e) {
     e.preventDefault(); setSaving(true); setError(null);
     try {
-      await api.post('/business/risk-measures', { ...form, efficacite: Number(form.efficacite), riskId: risk.id });
-      setForm({ description: '', type: 'TECHNIQUE', efficacite: 3, justificatif: '' }); setShowAddMeasure(false);
+      await api.post('/business/risk-measures', { ...form, efficacite: Number(form.efficacite), riskId: risk.id, epiId: form.epiId || null, trainingId: form.trainingId || null });
+      setForm({ description: '', type: 'TECHNIQUE', efficacite: 3, justificatif: '', epiId: '', trainingId: '' }); setShowAddMeasure(false);
       detailQ.reload(); onChanged();
     } catch (err) { setError(err.message); }
     setSaving(false);
@@ -6204,6 +6226,20 @@ function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
             </FormField>
             <FormField label="Efficacité (1-5)"><select value={form.efficacite} onChange={(e) => setForm({ ...form, efficacite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
           </div>
+          {form.type === 'EPI' && (
+            <FormField label="EPI concerné (optionnel)">
+              <select value={form.epiId} onChange={(e) => setForm({ ...form, epiId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">—</option>{(epiListQ.data || []).map((ep) => <option key={ep.id} value={ep.id}>{ep.name}</option>)}
+              </select>
+            </FormField>
+          )}
+          {form.type === 'FORMATION' && (
+            <FormField label="Formation concernée (optionnel)">
+              <select value={form.trainingId} onChange={(e) => setForm({ ...form, trainingId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">—</option>{(trainingsQ.data || []).map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </FormField>
+          )}
           <FormField label="Justificatif (optionnel)"><input value={form.justificatif} onChange={(e) => setForm({ ...form, justificatif: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
           {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
           <button type="submit" disabled={saving} className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Ajouter la mesure'}</button>
@@ -6217,7 +6253,7 @@ function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
                   <p className="text-sm flex-1" style={{ color: C.text }}>{m.description}</p>
                   <button onClick={() => deleteMeasure(m.id)} className="text-xs" style={{ color: C.red }}>×</button>
                 </div>
-                <p className="text-[10px] mt-1" style={{ color: C.textMuted }}>{RISK_MEASURE_TYPES.find(([v]) => v === m.type)?.[1] || m.type} · Efficacité {m.efficacite}/5{m.responsable ? ` · ${m.responsable.firstName} ${m.responsable.lastName}` : ''}</p>
+                <p className="text-[10px] mt-1" style={{ color: C.textMuted }}>{RISK_MEASURE_TYPES.find(([v]) => v === m.type)?.[1] || m.type} · Efficacité {m.efficacite}/5{m.responsable ? ` · ${m.responsable.firstName} ${m.responsable.lastName}` : ''}{m.epi ? ` · EPI : ${m.epi.name}` : ''}{m.training ? ` · Formation : ${m.training.title}` : ''}</p>
               </div>
             ))}
           </div>
@@ -6334,6 +6370,15 @@ function RisquesPage() {
   const [importRows, setImportRows] = useState([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults(null); return; }
+    const t = setTimeout(() => {
+      api.get(`/business/risks-search?q=${encodeURIComponent(searchQuery.trim())}`).then(setSearchResults).catch(() => setSearchResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   if (risks.loading || dashboardQ.loading) return <LoadingPanel />;
   if (risks.error) return <ErrorPanel message={risks.error} onRetry={risks.reload} />;
   const list = risks.data || [];
@@ -6457,21 +6502,22 @@ function RisquesPage() {
 
       {tab === 'registre' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <LiveBadge />
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Rechercher un risque (danger, situation, catégorie, unité de travail...)" className="flex-1 max-w-md px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} />
             <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau risque</button>
           </div>
-          <Panel title="Registre complet des risques">
-            {list.length
+          <Panel title={searchResults ? `Résultats de recherche (${searchResults.length})` : 'Registre complet des risques'}>
+            {(searchResults ?? list).length
               ? <DataTable columns={['Risque', 'Catégorie', 'Unité de travail', 'Score brut', 'Résiduel', 'Statut de maîtrise']}
-                  rows={list.map((r) => [
+                  rows={(searchResults ?? list).map((r) => [
                     r.hazard, r.category?.label || '—', r.workUnit?.name || '—',
                     <span style={{ color: niveauColor[r.grossLevel] || C.text, fontWeight: 600 }}>{r.grossScore ?? r.score} ({r.grossLevel || '—'})</span>,
                     r.residualScore != null ? <span style={{ color: niveauColor[r.residualLevel] || C.text, fontWeight: 600 }}>{r.residualScore} ({r.residualLevel})</span> : '—',
                     <StatusChip statut={r.controlStatus === 'MAITRISE' ? 'Conforme' : r.controlStatus === 'PARTIELLEMENT_MAITRISE' ? 'Sous surveillance' : 'Non conforme'} />,
                   ])}
-                  onRowClick={(i) => setViewing(list[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun risque enregistré pour le moment</p>}
+                  onRowClick={(i) => setViewing((searchResults ?? list)[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucun risque enregistré pour le moment'}</p>}
           </Panel>
         </div>
       )}
