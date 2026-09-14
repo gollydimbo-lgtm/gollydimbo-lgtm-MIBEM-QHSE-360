@@ -1,42 +1,158 @@
-
-/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Business.service · TS
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
  qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} qualityDelete(id:string){return this.db.qualityControl.delete({where:{id}})}
- ncList(status?:string){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true},orderBy:{createdAt:'desc'}})} ncCreate(b:any){return this.db.nonConformity.create({data:b})} ncUpdate(id:string,b:any){return this.db.nonConformity.update({where:{id},data:b})} ncDelete(id:string){return this.db.nonConformity.delete({where:{id}})}
- 
+ ncList(status?:string){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,containmentActions:true,causes:true},orderBy:{createdAt:'desc'}})}
+ ncGet(id:string){return this.db.nonConformity.findUnique({where:{id},include:{actions:{include:{responsible:true}},epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,processus:true,fournisseur:true,containmentActions:{include:{responsable:true},orderBy:{date:'desc'}},causes:{orderBy:{createdAt:'asc'}}}})}
+
+ // === NON-CONFORMITÉS — moteur de criticité, paramétrage ==================
+
+ async ncSettingsGet(){
+  let s=await this.db.ncSettings.findFirst();
+  if(!s) s=await this.db.ncSettings.create({data:{}});
+  return s;
+ }
+ async ncSettingsUpdate(b:any){
+  const current=await this.ncSettingsGet();
+  return this.db.ncSettings.update({where:{id:current.id},data:b});
+ }
+ private ncNiveau(score:number,seuils:{seuilModeree:number,seuilMajeure:number,seuilCritique:number}){
+  if(score>=seuils.seuilCritique) return 'CRITIQUE';
+  if(score>=seuils.seuilMajeure) return 'MAJEURE';
+  if(score>=seuils.seuilModeree) return 'MODEREE';
+  return 'MINEURE';
+ }
+ // Score de criticité sur 100, à partir de gravité/probabilité/étendue
+ // (1 à 5 chacun, donc 125 au maximum, ramené sur 100) — jamais saisi
+ // manuellement, toujours recalculé à l'écriture.
+ private async calculerCriticiteNc(b:any){
+  const settings=await this.ncSettingsGet();
+  const out:any={};
+  if(b.gravite!=null&&b.probabilite!=null){
+   const g=Number(b.gravite),p=Number(b.probabilite),e=Number(b.etendue)||1;
+   const brut=g*p*e;
+   const score=Math.min(100,Math.round((brut/125)*100));
+   out.criticiteScore=score; out.criticiteNiveau=this.ncNiveau(score,settings);
+  }
+  if(b.quantiteNc!=null&&b.quantiteControlee){
+   out.tauxNc=Math.round((Number(b.quantiteNc)/Number(b.quantiteControlee))*1000)/10;
+  }
+  if(!b.dueDate&&!b.id){
+   out.dueDate=new Date(Date.now()+settings.delaiStandardJours*86400000);
+  }
+  return out;
+ }
+ async ncCreate(b:any){
+  const calc=await this.calculerCriticiteNc(b);
+  const nc=await this.db.nonConformity.create({data:{...b,...calc}});
+  await writeAudit(this.db,'NC','CREATE',nc.id,null,nc);
+  return nc;
+ }
+ async ncUpdate(id:string,b:any){
+  const current=await this.db.nonConformity.findUnique({where:{id}});
+  if(!current) throw new Error('Non-conformité introuvable');
+  if(b.status==='CLOSED'&&current.status!=='CLOSED') throw new Error('Utilisez la clôture dédiée (vérification d\'efficacité requise) plutôt qu\'une modification directe du statut.');
+  const calc=await this.calculerCriticiteNc({...current,...b,id});
+  const nc=await this.db.nonConformity.update({where:{id},data:{...b,...calc}});
+  await writeAudit(this.db,'NC','UPDATE',id,current,nc);
+  return nc;
+ }
+ async ncDelete(id:string){
+  const current=await this.db.nonConformity.findUnique({where:{id}});
+  const nc=await this.db.nonConformity.delete({where:{id}});
+  await writeAudit(this.db,'NC','DELETE',id,current,null);
+  return nc;
+ }
+
+ // Confinement / action immédiate (point 9) — sécurise la situation tout de
+ // suite, distinct des actions correctives qui traitent la cause.
+ ncContainmentActionList(nonConformityId:string){return this.db.ncContainmentAction.findMany({where:{nonConformityId},include:{responsable:true},orderBy:{date:'desc'}})}
+ ncContainmentActionCreate(b:any){return this.db.ncContainmentAction.create({data:b})}
+ ncContainmentActionUpdate(id:string,b:any){return this.db.ncContainmentAction.update({where:{id},data:b})}
+ ncContainmentActionDelete(id:string){return this.db.ncContainmentAction.delete({where:{id}})}
+
+ // === NON-CONFORMITÉS — analyse des causes et vérification d'efficacité ===
+
+ ncCauseList(nonConformityId:string){return this.db.ncCause.findMany({where:{nonConformityId},orderBy:{createdAt:'asc'}})}
+ async ncCauseCreate(b:any){
+  const cause=await this.db.ncCause.create({data:b});
+  if(b.estRacine) await this.db.nonConformity.update({where:{id:b.nonConformityId},data:{causeRacineIdentifiee:true}});
+  return cause;
+ }
+ ncCauseUpdate(id:string,b:any){return this.db.ncCause.update({where:{id},data:b})}
+ ncCauseDelete(id:string){return this.db.ncCause.delete({where:{id}})}
+
+ // Vérification d'efficacité (point 15) — étape obligatoire avant clôture.
+ async ncEffectivenessCheck(id:string,b:any){
+  const nc=await this.db.nonConformity.update({where:{id},data:{
+   effectivenessResult:b.result, effectivenessCheckedAt:new Date(), effectivenessNotes:b.notes||null,
+  }});
+  await writeAudit(this.db,'NC','UPDATE',id,null,nc);
+  return nc;
+ }
+ // La clôture définitive est refusée tant que l'efficacité n'a pas été
+ // évaluée comme « Efficace » — une action inefficace ou non vérifiée
+ // renvoie vers une nouvelle analyse plutôt que de clore silencieusement.
+ async ncClose(id:string,b:any){
+  const nc=await this.db.nonConformity.findUnique({where:{id}});
+  if(!nc) throw new Error('Non-conformité introuvable');
+  if(nc.effectivenessResult!=='EFFICACE'){
+   throw new Error("Clôture impossible : la vérification d'efficacité doit d'abord conclure à une action efficace.");
+  }
+  const closed=await this.db.nonConformity.update({where:{id},data:{status:'CLOSED',closedAt:new Date(),effectivenessNotes:b?.notes??nc.effectivenessNotes}});
+  await writeAudit(this.db,'NC','UPDATE',id,nc,closed);
+  return closed;
+ }
+ async ncReopen(id:string){
+  const nc=await this.db.nonConformity.findUnique({where:{id}});
+  if(!nc) throw new Error('Non-conformité introuvable');
+  const reopened=await this.db.nonConformity.update({where:{id},data:{status:'OPEN',closedAt:null,reopenedCount:{increment:1}}});
+  await writeAudit(this.db,'NC','UPDATE',id,nc,reopened);
+  return reopened;
+ }
+
+ // Tableau de bord réel (point 2) — chaque KPI reste `null` si non calculable.
+ async ncDashboard(){
+  const now=new Date();
+  const [ncs,actions]=await Promise.all([
+   this.db.nonConformity.findMany({select:{id:true,status:true,classification:true,criticiteNiveau:true,createdAt:true,closedAt:true,dueDate:true,reopenedCount:true,effectivenessResult:true}}),
+   this.db.action.findMany({where:{nonConformityId:{not:null}},select:{status:true,dueDate:true}}),
+  ]);
+  const total=ncs.length;
+  const ouvertes=ncs.filter(n=>n.status!=='CLOSED').length;
+  const cloturees=ncs.filter(n=>n.status==='CLOSED').length;
+  const reouvertes=ncs.filter(n=>n.reopenedCount>0).length;
+  const enRetard=ncs.filter(n=>n.status!=='CLOSED'&&n.dueDate&&new Date(n.dueDate)<now).length;
+  const critiques=ncs.filter(n=>n.criticiteNiveau==='CRITIQUE').length;
+  const majeures=ncs.filter(n=>n.criticiteNiveau==='MAJEURE').length;
+  const nouvelles=ncs.filter(n=>new Date(n.createdAt)>new Date(now.getTime()-7*86400000)).length;
+  const tauxCloture=total?Math.round((cloturees/total)*1000)/10:null;
+  const clotureesDansLesDelais=ncs.filter(n=>n.status==='CLOSED'&&n.closedAt&&(!n.dueDate||new Date(n.closedAt)<=new Date(n.dueDate)));
+  const tauxClotureDansLesDelais=cloturees?Math.round((clotureesDansLesDelais.length/cloturees)*1000)/10:null;
+  const tauxEnRetard=ouvertes?Math.round((enRetard/ouvertes)*1000)/10:null;
+  const closedWithDelay=ncs.filter(n=>n.closedAt);
+  const delaiMoyenTraitement=closedWithDelay.length
+   ?Math.round(closedWithDelay.reduce((s,n)=>s+(new Date(n.closedAt!).getTime()-new Date(n.createdAt).getTime()),0)/closedWithDelay.length/86400000*10)/10
+   :null;
+  const ouvertesData=ncs.filter(n=>n.status!=='CLOSED');
+  const ageMoyenOuvertes=ouvertesData.length
+   ?Math.round(ouvertesData.reduce((s,n)=>s+(now.getTime()-new Date(n.createdAt).getTime()),0)/ouvertesData.length/86400000*10)/10
+   :null;
+  const plusAncienne=ouvertesData.length?ouvertesData.reduce((a,b)=>new Date(a.createdAt)<new Date(b.createdAt)?a:b):null;
+  const actionsEnRetard=actions.filter(a=>a.status!=='CLOSED'&&a.dueDate&&new Date(a.dueDate)<now).length;
+  const actionsEvaluees=ncs.filter(n=>n.effectivenessResult);
+  const actionsEfficaces=ncs.filter(n=>n.effectivenessResult==='EFFICACE');
+  const tauxEfficacite=actionsEvaluees.length?Math.round((actionsEfficaces.length/actionsEvaluees.length)*1000)/10:null;
+  return {
+   total,nouvelles,ouvertes,cloturees,reouvertes,enRetard,critiques,majeures,
+   tauxCloture,tauxClotureDansLesDelais,tauxEnRetard,delaiMoyenTraitement,ageMoyenOuvertes,
+   ncPlusAncienneDate:plusAncienne?.createdAt??null,
+   actionsEnRetard,tauxEfficaciteActions:tauxEfficacite,
+  };
+ }
+
  // Point 19 du cahier des charges du Registre des risques : proposer de
  // créer (ou relier) un risque à partir d'une non-conformité ou d'un
  // accident, en préremplissant ce qui est déjà connu — jamais un risque
@@ -54,7 +170,7 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.db.nonConformity.update({where:{id},data:{riskId:risk.id}});
   return risk;
  }
- 
+
  // Un accident survenu correspond par définition à une probabilité déjà
  // avérée — 4/5 par défaut plutôt que la valeur neutre 3/5, modifiable
  // ensuite comme tout autre risque.
@@ -74,7 +190,7 @@ import { writeAudit } from '../common/audit-log.helper';
  }
  actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true},orderBy:{dueDate:'asc'}})} actionCreate(b:any){return this.db.action.create({data:b})} actionUpdate(id:string,b:any){return this.db.action.update({where:{id},data:b})} actionDelete(id:string){return this.db.action.delete({where:{id}})}
  // === REGISTRE DES RISQUES ===================================================
- 
+
  // Paramétrage — une seule ligne, créée à la demande avec les valeurs par
  // défaut si elle n'existe pas encore.
  async riskSettingsGet(){
@@ -86,14 +202,14 @@ import { writeAudit } from '../common/audit-log.helper';
   const current=await this.riskSettingsGet();
   return this.db.riskSettings.update({where:{id:current.id},data:b});
  }
- 
+
  private riskNiveau(score:number,seuils:{seuilModere:number,seuilEleve:number,seuilCritique:number}){
   if(score>=seuils.seuilCritique) return 'CRITIQUE';
   if(score>=seuils.seuilEleve) return 'ELEVE';
   if(score>=seuils.seuilModere) return 'MODERE';
   return 'FAIBLE';
  }
- 
+
  // Calcule brut/résiduel et le statut de maîtrise depuis les seuils
  // configurés — jamais saisis manuellement, toujours recalculés à l'écriture,
  // exactement comme calculerAspect() le fait pour l'Environnement.
@@ -114,7 +230,7 @@ import { writeAudit } from '../common/audit-log.helper';
   out.nextReviewDate=new Date(Date.now()+(Number(b.reviewPeriodDays)||settings.reviewPeriodDays)*86400000);
   return out;
  }
- 
+
  // Si le risque résiduel (ou brut à défaut) dépasse le seuil défini et
  // qu'aucune action ouverte n'existe déjà pour ce risque, une action est
  // proposée automatiquement — jamais dupliquée.
@@ -132,20 +248,20 @@ import { writeAudit } from '../common/audit-log.helper';
    riskId:risk.id,
   }});
  }
- 
+
  riskCategoryList(){return this.db.riskCategory.findMany({orderBy:{order:'asc'}})}
  riskCategoryCreate(b:any){return this.db.riskCategory.create({data:b})}
  riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:b})}
  riskCategoryDelete(id:string){return this.db.riskCategory.delete({where:{id}})}
- 
+
  workUnitList(){return this.db.workUnit.findMany({include:{site:true},orderBy:{name:'asc'}})}
  workUnitCreate(b:any){return this.db.workUnit.create({data:b})}
  workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:b})}
  workUnitDelete(id:string){return this.db.workUnit.update({where:{id},data:{active:false}})}
- 
+
  riskList(){return this.db.risk.findMany({where:{archivedAt:null},include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},orderBy:{grossScore:'desc'}})}
  riskGet(id:string){return this.db.risk.findUnique({where:{id},include:{workUnit:true,category:true,processus:true,fournisseur:true,riskMeasures:{include:{responsable:true,epi:true,training:true}},evaluations:{orderBy:{evaluatedAt:'desc'}},actions:{include:{responsible:true}}}})}
- 
+
  // Recherche intelligente (point 20) — reste rapide même avec plusieurs
  // milliers de risques car limitée aux champs indexés/texte du risque
  // lui-même et des libellés de catégorie/unité, sans jointure lourde.
@@ -163,7 +279,7 @@ import { writeAudit } from '../common/audit-log.helper';
    orderBy:{grossScore:'desc'},
   });
  }
- 
+
  async riskCreate(b:any){
   const calc=await this.calculerRisque(b);
   const risk=await this.db.risk.create({data:{...b,...calc}});
@@ -172,7 +288,7 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.declencherActionSiNecessaire(risk);
   return risk;
  }
- 
+
  async riskUpdate(id:string,b:any){
   const current=await this.db.risk.findUnique({where:{id}});
   if(!current) throw new Error('Risque introuvable');
@@ -182,7 +298,7 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.declencherActionSiNecessaire(risk);
   return risk;
  }
- 
+
  // Bouton RÉÉVALUER — conserve l'ancienne évaluation dans l'historique au
  // lieu de simplement écraser les valeurs précédentes.
  async riskReevaluate(id:string,b:any){
@@ -196,7 +312,7 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.declencherActionSiNecessaire(risk);
   return risk;
  }
- 
+
  // Archivage plutôt que suppression définitive (point 17 du cahier des
  // charges) — un risque déjà évalué reste dans l'historique QHSE.
  async riskDelete(id:string){
@@ -205,12 +321,12 @@ import { writeAudit } from '../common/audit-log.helper';
   await writeAudit(this.db,'RISK','DELETE',id,current,risk);
   return risk;
  }
- 
+
  riskMeasureList(riskId:string){return this.db.riskMeasure.findMany({where:{riskId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
  riskMeasureCreate(b:any){return this.db.riskMeasure.create({data:b})}
  riskMeasureUpdate(id:string,b:any){return this.db.riskMeasure.update({where:{id},data:b})}
  riskMeasureDelete(id:string){return this.db.riskMeasure.delete({where:{id}})}
- 
+
  // Tableau de bord réel : chaque KPI reste `null` si la donnée n'existe pas.
  async riskDashboard(){
   const [risks,nombreUnitesTravail]=await Promise.all([
@@ -239,7 +355,7 @@ import { writeAudit } from '../common/audit-log.helper';
    nombreUnitesTravail,nouveauxDepuis30Jours:nouveaux,
   };
  }
- 
+
  // Heatmap 5x5 gravité x probabilité — chaque case liste les risques concernés.
  async riskMatrice(){
   const risks=await this.db.risk.findMany({where:{archivedAt:null},select:{id:true,code:true,hazard:true,severity:true,probability:true,grossLevel:true}});
@@ -254,9 +370,9 @@ import { writeAudit } from '../common/audit-log.helper';
    return {severity,probability,count:items.length,niveau:items[0]?.grossLevel,risques:items};
   });
  }
- 
+
  riskTop10(){return this.db.risk.findMany({where:{archivedAt:null},orderBy:{grossScore:'desc'},take:10,include:{workUnit:true,category:true,actions:{include:{responsible:true}}}})}
- 
+
  async riskAlertes(){
   const now=new Date();
   const dans30Jours=new Date(now.getTime()+30*86400000);
@@ -291,7 +407,7 @@ import { writeAudit } from '../common/audit-log.helper';
   return {...audit,independenceWarning};
  }
  auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
- 
+
  auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{
   auditId,description:b.description,classification:b.classification,criticite:b.criticite,critical:!!b.critical,
   checklistItemId:b.checklistItemId||null,preuveObjective:b.preuveObjective||null,zone:b.zone||null,
@@ -323,9 +439,9 @@ import { writeAudit } from '../common/audit-log.helper';
    auditFindingId:finding.id, responsibleId:b?.responsibleId||finding.responsableId||null, dueDate:b?.dueDate||finding.delai||null,
   }});
  }
- 
+
  // === AUDITS — Phase 2 : check-lists dynamiques et moteur de notation ====
- 
+
  auditChecklistList(){return this.db.auditChecklist.findMany({include:{items:{orderBy:{order:'asc'}},referential:true,type:true},orderBy:{title:'asc'}})}
  auditChecklistCreate(b:any){return this.db.auditChecklist.create({data:b})}
  auditChecklistUpdate(id:string,b:any){return this.db.auditChecklist.update({where:{id},data:b})}
@@ -333,13 +449,13 @@ import { writeAudit } from '../common/audit-log.helper';
  auditChecklistItemCreate(b:any){return this.db.auditChecklistItem.create({data:b})}
  auditChecklistItemUpdate(id:string,b:any){return this.db.auditChecklistItem.update({where:{id},data:b})}
  auditChecklistItemDelete(id:string){return this.db.auditChecklistItem.delete({where:{id}})}
- 
+
  // Valeur numérique (0 à 1) attribuée à chaque résultat possible — les
  // résultats non évaluables (non applicable, non évalué, à vérifier) sont
  // exclus du calcul plutôt que comptés comme un échec.
  private readonly RESULTAT_VALEUR:Record<string,number>={CONFORME:1,BONNE_PRATIQUE:1,PISTE_AMELIORATION:1,OBSERVATION:1,PARTIELLEMENT_CONFORME:0.5,NON_CONFORME:0};
  private readonly CRITICITE_POIDS:Record<string,number>={FAIBLE:1,MODEREE:2,ELEVEE:3,CRITIQUE:4};
- 
+
  // Enregistre (ou met à jour) la réponse à une question de check-list pour
  // un audit, puis recalcule immédiatement le score global de l'audit —
  // jamais de score obsolète affiché après une réponse.
@@ -352,7 +468,7 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.calculerScoreAudit(auditId);
   return response;
  }
- 
+
  private async calculerScoreAudit(auditId:string){
   const audit=await this.db.qhseAudit.findUnique({where:{id:auditId}});
   if(!audit) return;
@@ -384,9 +500,9 @@ import { writeAudit } from '../common/audit-log.helper';
    score:tauxConformite,
   }});
  }
- 
+
  // === AUDITS — Phase 3 : auditeurs, indépendance, signatures ===========
- 
+
  // Liste les utilisateurs déjà impliqués dans au moins un audit ou ayant un
  // profil auditeur, avec leurs statistiques calculées (point 14) — jamais
  // stockées, toujours recalculées depuis les audits réels.
@@ -408,7 +524,7 @@ import { writeAudit } from '../common/audit-log.helper';
   });
  }
  auditorProfileUpsert(userId:string,b:any){return this.db.auditorProfile.upsert({where:{userId},update:b,create:{userId,...b}})}
- 
+
  auditSignatureCreate(auditId:string,b:any){return this.db.auditSignature.create({data:{auditId,role:b.role,signataireId:b.signataireId||null}})}
  // Signer, c'est enregistrer qui a signé et quand — jamais un simple
  // changement de statut sans identité ni horodatage.
@@ -450,14 +566,14 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.db.auditFinding.update({where:{id},data:{riskId:risk.id}});
   return risk;
  }
- 
+
  // === AUDITS — Phase 1 : programme, types, référentiels, dashboard ========
- 
+
  auditTypeList(){return this.db.auditType.findMany({orderBy:{order:'asc'}})}
  auditTypeCreate(b:any){return this.db.auditType.create({data:b})}
  auditTypeUpdate(id:string,b:any){return this.db.auditType.update({where:{id},data:b})}
  auditTypeDelete(id:string){return this.db.auditType.delete({where:{id}})}
- 
+
  auditReferentialList(){return this.db.auditReferential.findMany({include:{items:{orderBy:{order:'asc'}}},orderBy:{label:'asc'}})}
  auditReferentialCreate(b:any){return this.db.auditReferential.create({data:b})}
  auditReferentialUpdate(id:string,b:any){return this.db.auditReferential.update({where:{id},data:b})}
@@ -465,7 +581,7 @@ import { writeAudit } from '../common/audit-log.helper';
  auditReferentialItemCreate(b:any){return this.db.auditReferentialItem.create({data:b})}
  auditReferentialItemUpdate(id:string,b:any){return this.db.auditReferentialItem.update({where:{id},data:b})}
  auditReferentialItemDelete(id:string){return this.db.auditReferentialItem.delete({where:{id}})}
- 
+
  auditProgramList(){return this.db.auditProgram.findMany({include:{type:true,referential:true,workUnit:true,processus:true,auditeurPrincipal:true,audit:true},orderBy:{datePrevue:'asc'}})}
  auditProgramCreate(b:any){return this.db.auditProgram.create({data:b})}
  auditProgramUpdate(id:string,b:any){return this.db.auditProgram.update({where:{id},data:b})}
@@ -486,7 +602,7 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.db.auditProgram.update({where:{id},data:{auditId:audit.id,statut:'PLANIFIE'}});
   return audit;
  }
- 
+
  // Tableau de bord réel (point 2 du cahier des charges) — chaque KPI reste
  // `null` s'il n'est pas calculable plutôt que d'afficher un faux zéro.
  async auditDashboard(){
@@ -531,9 +647,9 @@ import { writeAudit } from '../common/audit-log.helper';
    scoreMoyen,
   };
  }
- 
+
  // === AUDITS — Phase 4 : analyses, tendances, comparaisons, synthèse =====
- 
+
  // Évolution mensuelle sur 12 mois (point 23, graphique 1 et 4).
  async auditTrends(){
   const depuis=new Date(); depuis.setMonth(depuis.getMonth()-11); depuis.setDate(1); depuis.setHours(0,0,0,0);
@@ -549,7 +665,7 @@ import { writeAudit } from '../common/audit-log.helper';
   }
   return mois;
  }
- 
+
  // Détection des non-conformités récurrentes (point 25) — regroupe les
  // constats NC par processus et cause racine approximative (classification
  // + description), et ne retient que ce qui s'est répété au moins deux fois.
@@ -570,7 +686,7 @@ import { writeAudit } from '../common/audit-log.helper';
    historique:g.map(f=>({audit:f.audit.title,date:f.audit.auditDate,statut:f.status})),
   })).sort((a,b)=>b.occurrences-a.occurrences);
  }
- 
+
  // Compare deux périodes (point 34) sur les mêmes indicateurs que le
  // tableau de bord, sans dupliquer sa logique de calcul.
  async auditComparaison(debut1:string,fin1:string,debut2:string,fin2:string){
@@ -590,7 +706,7 @@ import { writeAudit } from '../common/audit-log.helper';
   const [periode1,periode2]=await Promise.all([kpiPeriode(debut1,fin1),kpiPeriode(debut2,fin2)]);
   return {periode1,periode2};
  }
- 
+
  // Synthèse Direction (point 35) — un instantané prêt à être lu ou exporté,
  // recomposé à partir des mêmes données que le tableau de bord et les
  // tendances, jamais stocké séparément (donc jamais périmé).
@@ -611,7 +727,7 @@ import { writeAudit } from '../common/audit-log.helper';
   };
  }
  envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
- 
+
  // Aspects & impacts environnementaux — la criticité et le caractère
  // significatif se recalculent à chaque écriture depuis la méthode de
  // cotation documentée, jamais ressaisis séparément.
@@ -629,7 +745,7 @@ import { writeAudit } from '../common/audit-log.helper';
   return this.db.environnementAspect.update({where:{id},data:{...b,...this.calculerAspect(merged)}});
  }
  environnementAspectDelete(id:string){return this.db.environnementAspect.delete({where:{id}})}
- 
+
  // Environnement — tableau de bord réel : chaque valeur reste `null`
  // si la donnée n'existe pas, jamais une valeur inventée à la place.
  async environnementDashboard(){
@@ -641,21 +757,21 @@ import { writeAudit } from '../common/audit-log.helper';
   const objectifsEnv=await this.db.objectifQhse.findMany({where:{pilier:'Environnement'}});
   const actionsEnv=await this.db.action.findMany({where:{environnementAspectId:{not:null}}});
   const now=new Date();
- 
+
   const sumByCategorie=(cat:string)=>{
    const items=records.filter(r=>r.categorie===cat&&r.value!=null);
    return items.length?Math.round(items.reduce((s,r)=>s+(r.value||0),0)*100)/100:null;
   };
   const avecConformite=records.filter(r=>r.conforme!=null);
   const tauxConformite=avecConformite.length?Math.round((avecConformite.filter(r=>r.conforme).length/avecConformite.length)*1000)/10:null;
- 
+
   const aspectsActifs=aspects.filter(a=>a.statut==='ACTIVE');
   const aspectsSignificatifs=aspectsActifs.filter(a=>a.significatif).length;
   const tauxAspectsMaitrises=aspectsActifs.length?Math.round((1-aspectsSignificatifs/aspectsActifs.length)*1000)/10:null;
- 
+
   const actionsEnRetard=actionsEnv.filter(a=>a.dueDate&&new Date(a.dueDate)<now&&a.status!=='CLOSED').length;
   const tauxClotureActions=actionsEnv.length?Math.round((actionsEnv.filter(a=>a.status==='CLOSED').length/actionsEnv.length)*1000)/10:null;
- 
+
   const progressionObjectif=(o:any)=>{
    if(o.valeurInitiale==null)return null;
    const denom=o.cible-o.valeurInitiale;
@@ -665,7 +781,7 @@ import { writeAudit } from '../common/audit-log.helper';
   };
   const objectifsAvecProgression=objectifsEnv.map(o=>({...o,progression:progressionObjectif(o)})).filter(o=>o.progression!=null);
   const tauxObjectifsAtteints=objectifsAvecProgression.length?Math.round((objectifsAvecProgression.filter(o=>(o.progression as number)>=90).length/objectifsAvecProgression.length)*1000)/10:null;
- 
+
   const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
   const composantesScore=[
    {key:'env_conformite',nom:'Conformité des relevés',valeur:tauxConformite},
@@ -680,17 +796,17 @@ import { writeAudit } from '../common/audit-log.helper';
    return {...c,poids};
   });
   const scoreGlobal=poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null;
- 
+
   const dechetsRecords=records.filter(r=>r.categorie==='Déchets'&&r.value!=null);
   const dechetsValorises=dechetsRecords.filter(r=>r.modeTraitement&&/recycl|valoris|r[ée]utilis/i.test(r.modeTraitement));
   const totalDechets=dechetsRecords.reduce((s,r)=>s+(r.value||0),0);
   const tauxValorisationDechets=dechetsRecords.length&&totalDechets>0?Math.round((dechetsValorises.reduce((s,r)=>s+(r.value||0),0)/totalDechets)*1000)/10:null;
- 
+
   const veilleEnv=await this.db.veilleReglementaire.findMany({where:{domaine:'Environnement'}});
   const veilleConformes=veilleEnv.filter(v=>['CONFORME','INTEGREE'].includes(v.statut));
   const veilleApplicable=veilleEnv.filter(v=>v.statut!=='NON_APPLICABLE');
   const tauxConformiteReglementaire=veilleApplicable.length?Math.round((veilleConformes.length/veilleApplicable.length)*1000)/10:null;
- 
+
   return {
    score:scoreGlobal,scoreDetail:detailScore,
    tauxConformite,
@@ -704,7 +820,7 @@ import { writeAudit } from '../common/audit-log.helper';
    tauxConformiteReglementaire,
   };
  }
- 
+
  async environnementAlertes(){
   const now=new Date();
   const dans30Jours=new Date(now.getTime()+30*86400000);
@@ -732,12 +848,12 @@ import { writeAudit } from '../common/audit-log.helper';
   }
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
- 
+
  produitChimiqueList(){return this.db.produitChimique.findMany({include:{fournisseur:true},orderBy:{nom:'asc'}})}
  produitChimiqueCreate(b:any){return this.db.produitChimique.create({data:b})}
  produitChimiqueUpdate(id:string,b:any){return this.db.produitChimique.update({where:{id},data:b})}
  produitChimiqueDelete(id:string){return this.db.produitChimique.delete({where:{id}})}
- 
+
  // Tendances mensuelles — calculées uniquement sur les mois où des
  // relevés existent réellement, jamais une valeur comblée à zéro.
  async environnementTendances(){
@@ -762,7 +878,7 @@ import { writeAudit } from '../common/audit-log.helper';
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
  eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
  eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
- 
+
  // Statistiques Phase 2 — répartitions et Pareto des causes, calculés à
  // la demande depuis les événements déjà enregistrés.
  async safetyEventsStats(){
@@ -789,7 +905,7 @@ import { writeAudit } from '../common/audit-log.helper';
    parType,parMecanisme,parLesion,parZone,pareto,
   };
  }
- 
+
  // Alertes automatiques — chaque événement encore ouvert passé au
  // crible de plusieurs critères indépendants.
  async safetyEventsAlertes(){
@@ -809,7 +925,7 @@ import { writeAudit } from '../common/audit-log.helper';
   }
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
- 
+
  // Détection de récidive — même cause racine, même zone ou même
  // mécanisme apparu plus d'une fois.
  async safetyEventsRecidives(){
@@ -825,7 +941,7 @@ import { writeAudit } from '../common/audit-log.helper';
    parMecanisme:buildGroups(e=>e.mecanisme).sort((a,b)=>b.nombre-a.nombre),
   };
  }
- 
+
  processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
    risks:{where:{status:'ACTIVE'}},
    actions:{where:{status:{not:'CLOSED'}}},
@@ -836,12 +952,12 @@ import { writeAudit } from '../common/audit-log.helper';
  processusCreate(b:any){return this.db.processus.create({data:b})}
  processusUpdate(id:string,b:any){return this.db.processus.update({where:{id},data:b})}
  processusDelete(id:string){return this.db.processus.delete({where:{id}})}
- 
+
  processusActivityList(processusId:string){return this.db.processusActivity.findMany({where:{processusId},include:{responsible:true,racis:{include:{user:true}}},orderBy:{order:'asc'}})}
  processusActivityCreate(b:any){return this.db.processusActivity.create({data:b})}
  processusActivityUpdate(id:string,b:any){return this.db.processusActivity.update({where:{id},data:b})}
  processusActivityDelete(id:string){return this.db.processusActivity.delete({where:{id}})}
- 
+
  processusRaciUpsert(activityId:string,b:any){
   // Une seule ligne RACI par (activité, utilisateur ou libellé de rôle) —
   // on remplace plutôt que d'empiler des doublons à chaque saisie.
@@ -849,17 +965,17 @@ import { writeAudit } from '../common/audit-log.helper';
   return this.db.processusRaci.create({data:{activityId,userId:b.userId,roleLabel:b.roleLabel,raci:b.raci}});
  }
  processusRaciDelete(id:string){return this.db.processusRaci.delete({where:{id}})}
- 
+
  processusExigenceList(processusId:string){return this.db.processusExigence.findMany({where:{processusId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
  processusExigenceCreate(b:any){return this.db.processusExigence.create({data:b})}
  processusExigenceUpdate(id:string,b:any){return this.db.processusExigence.update({where:{id},data:b})}
  processusExigenceDelete(id:string){return this.db.processusExigence.delete({where:{id}})}
- 
+
  processusLinkList(){return this.db.processusLink.findMany()}
  processusLinkCreate(b:any){return this.db.processusLink.create({data:{sourceId:b.sourceId,targetId:b.targetId,label:b.label}})}
  processusLinkDelete(id:string){return this.db.processusLink.delete({where:{id}})}
  indicateurList(domaine?:string){return this.db.indicateurQualite.findMany({where:domaine?{domaine}:undefined,include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
- 
+
  // Ajouter une mesure met aussi à jour la valeur actuelle affichée sur
  // la fiche — pas besoin de le faire deux fois séparément.
  async indicateurMesureCreate(indicateurId:string,b:any){
@@ -870,7 +986,7 @@ import { writeAudit } from '../common/audit-log.helper';
   });
  }
  indicateurMesureList(indicateurId:string){return this.db.indicateurMesure.findMany({where:{indicateurId},orderBy:{periode:'desc'}})}
- 
+
  // Bibliothèque d'indicateurs calculés automatiquement depuis les
  // données déjà enregistrées dans les autres modules — le principe de
  // convergence demandé : Contrôle → NC → Action → KPI, Réclamation →
@@ -901,7 +1017,7 @@ import { writeAudit } from '../common/audit-log.helper';
    {key:'taux_realisation_audits',nom:'Taux de réalisation des audits',categorie:'Audits',formule:'Audits réalisés / Audits planifiés × 100',unite:'%',sensInverse:false,valeur:pct(audits,'status',['COMPLETED'],['PLANNED','IN_PROGRESS','COMPLETED'])},
   ];
  }
- 
+
  // Comparaison mois en cours / mois précédent — même bibliothèque,
  // juste calculée sur deux fenêtres de dates différentes.
  async indicateursAutoCompare(){
@@ -914,12 +1030,12 @@ import { writeAudit } from '../common/audit-log.helper';
   ]);
   return current.map((c,i)=>({...c,valeurPrecedente:previous[i]?.valeur??null}));
  }
- 
+
  indicateurPonderationList(){return this.db.indicateurPonderation.findMany()}
  async indicateurPonderationSet(autoKey:string,poids:number){
   return this.db.indicateurPonderation.upsert({where:{autoKey},update:{poids},create:{autoKey,poids}});
  }
- 
+
  // Indice global de performance qualité — moyenne pondérée des
  // indicateurs de la bibliothèque automatique, pondérations
  // entièrement configurables (poids égal à 1 par défaut si non réglé).
@@ -937,7 +1053,7 @@ import { writeAudit } from '../common/audit-log.helper';
   });
   return {indice:sommePoids>0?Math.round((sommePonderee/sommePoids)*10)/10:null,detail};
  }
- 
+
  async reclamationList(){
   const list=await this.db.reclamation.findMany({include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:true},orderBy:{date:'desc'}});
   return list.map(r=>({...r,coutTotal:[r.coutRemboursement,r.coutRemplacement,r.coutTransport,r.coutMainOeuvre,r.coutAutres,r.actionCurativeCout].reduce((s:number,v)=>s+(v||0),0)}));
@@ -946,7 +1062,7 @@ import { writeAudit } from '../common/audit-log.helper';
  reclamationCreate(b:any){return this.db.reclamation.create({data:b})}
  reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})}
  reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
- 
+
  // Tableau de bord Phase 2 — tout calculé à la demande depuis les
  // réclamations déjà enregistrées, rien de nouveau à saisir.
  async reclamationsStats(){
@@ -997,7 +1113,7 @@ import { writeAudit } from '../common/audit-log.helper';
    recurrencesDetectees,
   };
  }
- 
+
  // Alertes automatiques — chaque réclamation ouverte est passée au
  // crible de plusieurs critères indépendants, avec un niveau de
  // sévérité par alerte plutôt qu'un seul statut global.
@@ -1018,7 +1134,7 @@ import { writeAudit } from '../common/audit-log.helper';
   }
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2,INFORMATION:3} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2,INFORMATION:3} as any)[b.niveau]);
  }
- 
+
  // Score global de performance réclamations — même principe que
  // l'indice global de performance qualité : moyenne pondérée,
  // pondérations réutilisant la même table de configuration.
@@ -1055,12 +1171,12 @@ import { writeAudit } from '../common/audit-log.helper';
  fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})}
  fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})}
  fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
- 
+
  fournisseurCertificationList(fournisseurId:string){return this.db.fournisseurCertification.findMany({where:{fournisseurId},orderBy:{dateExpiration:'asc'}})}
  fournisseurCertificationCreate(b:any){return this.db.fournisseurCertification.create({data:b})}
  fournisseurCertificationUpdate(id:string,b:any){return this.db.fournisseurCertification.update({where:{id},data:b})}
  fournisseurCertificationDelete(id:string){return this.db.fournisseurCertification.delete({where:{id}})}
- 
+
  // Score global pondéré — même principe que l'indice qualité et le
  // score réclamations : moyenne pondérée des scores par domaine,
  // pondérations réutilisant la même table de configuration.
@@ -1084,7 +1200,7 @@ import { writeAudit } from '../common/audit-log.helper';
   });
   return {score:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
- 
+
  // Classement automatique — tous les fournisseurs ayant au moins un
  // score renseigné, triés du meilleur au moins bon.
  async fournisseursClassement(){
@@ -1102,7 +1218,7 @@ import { writeAudit } from '../common/audit-log.helper';
   }).filter(f=>f.score!=null).sort((a,b)=>(b.score as number)-(a.score as number));
   return {top:withScore.slice(0,10),flop:[...withScore].reverse().slice(0,10)};
  }
- 
+
  // Alertes automatiques — chaque fournisseur passé au crible de
  // plusieurs critères indépendants, avec un niveau de sévérité par
  // alerte plutôt qu'un seul statut global.
@@ -1128,7 +1244,7 @@ import { writeAudit } from '../common/audit-log.helper';
   }
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
- 
+
  // Matrice de risque — réutilise le module Risques déjà existant
  // (probabilité × gravité déjà calculées là-bas), simplement filtré
  // sur les risques liés à un fournisseur.
@@ -1137,7 +1253,7 @@ import { writeAudit } from '../common/audit-log.helper';
   return risks.map(r=>({id:r.id,fournisseur:r.fournisseur?.nom,hazard:r.hazard,severity:r.severity,probability:r.probability,score:r.score}));
  }
  visiteMedicaleList(){return this.db.visiteMedicale.findMany({include:{employee:true},orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
- 
+
  // Risques sanitaires — la criticité se recalcule à chaque écriture,
  // jamais ressaisie séparément par l'utilisateur.
  risqueSanitaireList(){return this.db.risqueSanitaire.findMany({include:{site:true,processus:true,responsable:true,expositions:true,actions:true},orderBy:{criticite:'desc'}})}
@@ -1153,10 +1269,10 @@ import { writeAudit } from '../common/audit-log.helper';
   return this.db.risqueSanitaire.update({where:{id},data:{...b,gravite,probabilite,criticite:gravite*probabilite}});
  }
  risqueSanitaireDelete(id:string){return this.db.risqueSanitaire.delete({where:{id}})}
- 
+
  expositionCreate(b:any){return this.db.expositionSurveillance.create({data:{...b,valeurMesuree:b.valeurMesuree!==undefined?Number(b.valeurMesuree):undefined,valeurLimite:b.valeurLimite!==undefined?Number(b.valeurLimite):undefined,conforme:b.valeurMesuree!=null&&b.valeurLimite!=null?Number(b.valeurMesuree)<=Number(b.valeurLimite):b.conforme}})}
  expositionDelete(id:string){return this.db.expositionSurveillance.delete({where:{id}})}
- 
+
  // Ergonomie — le score se recalcule depuis les facteurs cochés à
  // chaque écriture, jamais ressaisi séparément par l'utilisateur.
  private calculerScoreErgonomique(b:any):string{
@@ -1173,20 +1289,20 @@ import { writeAudit } from '../common/audit-log.helper';
   return this.db.analyseErgonomique.update({where:{id},data:{...b,scoreErgonomique:this.calculerScoreErgonomique(merged)}});
  }
  analyseErgonomiqueDelete(id:string){return this.db.analyseErgonomique.delete({where:{id}})}
- 
+
  tmsSignalementList(){return this.db.tmsSignalement.findMany({include:{employee:true,analyseErgonomique:true},orderBy:{dateSignalement:'desc'}})}
  tmsSignalementCreate(b:any){return this.db.tmsSignalement.create({data:b})}
  tmsSignalementUpdate(id:string,b:any){return this.db.tmsSignalement.update({where:{id},data:b})}
  tmsSignalementDelete(id:string){return this.db.tmsSignalement.delete({where:{id}})}
- 
+
  penibiliteFactorList(){return this.db.penibiliteFactor.findMany({where:{actif:true},orderBy:{nom:'asc'}})}
  penibiliteFactorCreate(b:any){return this.db.penibiliteFactor.create({data:b})}
  penibiliteFactorDelete(id:string){return this.db.penibiliteFactor.update({where:{id},data:{actif:false}})}
- 
+
  penibiliteExpositionList(){return this.db.penibiliteExposition.findMany({include:{employee:true,facteur:true},orderBy:{dateEvaluation:'desc'}})}
  penibiliteExpositionCreate(b:any){return this.db.penibiliteExposition.create({data:b})}
  penibiliteExpositionDelete(id:string){return this.db.penibiliteExposition.delete({where:{id}})}
- 
+
  // Alertes automatiques hygiène au travail — chaque critère est
  // indépendant, avec un niveau de sévérité propre.
  async hygieneAlertes(){
@@ -1218,7 +1334,7 @@ import { writeAudit } from '../common/audit-log.helper';
   }
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
- 
+
  // Indice global Hygiène au travail — remplace les données de
  // démonstration figées du tableau de bord général par un vrai calcul,
  // pondérations réutilisant la même table de configuration que les
@@ -1267,4 +1383,3 @@ import { writeAudit } from '../common/audit-log.helper';
  objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0,valeurInitiale:b.valeurInitiale!==undefined?Number(b.valeurInitiale):undefined,budget:b.budget!==undefined?Number(b.budget):undefined}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.valeurInitiale!==undefined?{valeurInitiale:Number(b.valeurInitiale)}:{}),...(b.budget!==undefined?{budget:Number(b.budget)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
  workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} workedHoursDelete(id:string){return this.db.workedHours.delete({where:{id}})}
 }
- 
