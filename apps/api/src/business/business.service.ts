@@ -113,7 +113,25 @@ import { writeAudit } from '../common/audit-log.helper';
  workUnitDelete(id:string){return this.db.workUnit.update({where:{id},data:{active:false}})}
 
  riskList(){return this.db.risk.findMany({where:{archivedAt:null},include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},orderBy:{grossScore:'desc'}})}
- riskGet(id:string){return this.db.risk.findUnique({where:{id},include:{workUnit:true,category:true,processus:true,fournisseur:true,riskMeasures:{include:{responsable:true}},evaluations:{orderBy:{evaluatedAt:'desc'}},actions:{include:{responsible:true}}}})}
+ riskGet(id:string){return this.db.risk.findUnique({where:{id},include:{workUnit:true,category:true,processus:true,fournisseur:true,riskMeasures:{include:{responsable:true,epi:true,training:true}},evaluations:{orderBy:{evaluatedAt:'desc'}},actions:{include:{responsible:true}}}})}
+
+ // Recherche intelligente (point 20) — reste rapide même avec plusieurs
+ // milliers de risques car limitée aux champs indexés/texte du risque
+ // lui-même et des libellés de catégorie/unité, sans jointure lourde.
+ riskSearch(q:string){
+  if(!q||!q.trim()) return this.riskList();
+  const contains=(field:string)=>({[field]:{contains:q,mode:'insensitive'}});
+  return this.db.risk.findMany({
+   where:{archivedAt:null,OR:[
+    contains('code'),contains('hazard'),contains('hazardousSituation'),contains('hazardousEvent'),
+    contains('activity'),contains('exposedPersons'),
+    {category:{label:{contains:q,mode:'insensitive'}}},
+    {workUnit:{name:{contains:q,mode:'insensitive'}}},
+   ]},
+   include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},
+   orderBy:{grossScore:'desc'},
+  });
+ }
 
  async riskCreate(b:any){
   const calc=await this.calculerRisque(b);
@@ -251,6 +269,22 @@ import { writeAudit } from '../common/audit-log.helper';
    return tx.auditFinding.update({where:{id},data:{nonConformityId:nc.id,status:'CLOSED'},include:{nonConformity:true}});
   });
  }
+ // Un constat d'audit peut aussi générer directement un risque dans le
+ // Registre — même principe que pour une non-conformité ou un accident.
+ async auditFindingGenerateRisk(id:string){
+  const finding=await this.db.auditFinding.findUnique({where:{id},include:{audit:true}});
+  if(!finding) throw new Error('Constat introuvable');
+  if(finding.riskId) throw new Error('Un risque a déjà été généré pour ce constat');
+  const calc=await this.calculerRisque({severity:finding.critical?4:2,probability:3});
+  const risk=await this.db.risk.create({data:{
+   code:`RISK-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   hazard:`Constat d'audit — ${finding.audit.title}`, hazardousEvent:finding.description,
+   processusId:finding.audit.processusId, ...calc,
+  }});
+  await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
+  await this.db.auditFinding.update({where:{id},data:{riskId:risk.id}});
+  return risk;
+ }
  envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
 
  // Aspects & impacts environnementaux — la criticité et le caractère
@@ -261,8 +295,8 @@ import { writeAudit } from '../common/audit-log.helper';
   const criticite=Math.round((frequence*gravite*probabilite)/maitrise);
   return {frequence,gravite,probabilite,maitrise,criticite,significatif:criticite>=12};
  }
- environnementAspectList(){return this.db.environnementAspect.findMany({include:{site:true,processus:true,responsable:true,actions:true},orderBy:{criticite:'desc'}})}
- environnementAspectGet(id:string){return this.db.environnementAspect.findUnique({where:{id},include:{site:true,processus:true,responsable:true,actions:{include:{responsible:true}}}})}
+ environnementAspectList(){return this.db.environnementAspect.findMany({include:{site:true,processus:true,responsable:true,actions:true,risk:true},orderBy:{criticite:'desc'}})}
+ environnementAspectGet(id:string){return this.db.environnementAspect.findUnique({where:{id},include:{site:true,processus:true,responsable:true,actions:{include:{responsible:true}},risk:true}})}
  environnementAspectCreate(b:any){return this.db.environnementAspect.create({data:{...b,...this.calculerAspect(b)}})}
  async environnementAspectUpdate(id:string,b:any){
   const current=await this.db.environnementAspect.findUnique({where:{id}});

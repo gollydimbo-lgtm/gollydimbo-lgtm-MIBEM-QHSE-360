@@ -13,12 +13,17 @@ const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessServic
   action: (db, business, p) => db.action.create({ data: p }),
   safetyEvent: (db, business, p) => db.safetyEvent.create({ data: p }),
   risk: (db, business, p) => business.riskCreate(p),
+  riskMeasure: (db, business, p) => db.riskMeasure.create({ data: p }),
 };
 
 const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, id: string, payload: any) => Promise<any>> = {
   nonConformity: (db, business, id, p) => db.nonConformity.update({ where: { id }, data: p }),
   action: (db, business, id, p) => db.action.update({ where: { id }, data: p }),
   risk: (db, business, id, p) => business.riskUpdate(id, p),
+  // Entité distincte plutôt qu'un simple "risk" mis à jour : une
+  // réévaluation doit passer par le moteur dédié (historique conservé),
+  // jamais par un update générique qui écraserait silencieusement.
+  riskReevaluate: (db, business, id, p) => business.riskReevaluate(id, p),
 };
 
 @Controller('sync')

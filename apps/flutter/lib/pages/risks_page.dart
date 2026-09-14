@@ -566,10 +566,22 @@ Future<void> showRiskMeasureDialog(BuildContext context, Api api, {required Stri
       FilledButton(onPressed: saving ? null : () async {
         if (description.text.trim().isEmpty) { setD(() => formError = 'La description est obligatoire'); return; }
         setD(() => saving = true);
+        final payload = {'riskId': riskId, 'description': description.text.trim(), 'type': type, 'efficacite': efficacite};
         try {
-          await api.post('/business/risk-measures', {'riskId': riskId, 'description': description.text.trim(), 'type': type, 'efficacite': efficacite});
+          await api.post('/business/risk-measures', payload);
           if (context.mounted) Navigator.pop(c);
           onSaved();
+        } on ApiException catch (e) {
+          if (e.networkError) {
+            await SyncQueue.enqueue('riskMeasure', 'CREATE', payload);
+            if (context.mounted) {
+              Navigator.pop(c);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : mesure enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+            }
+            onSaved();
+          } else {
+            setD(() { saving = false; formError = '$e'; });
+          }
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
       }, child: Text(saving ? '…' : 'Ajouter')),
     ],
@@ -605,14 +617,26 @@ Future<void> showReevaluateDialog(BuildContext context, Api api, {required Map r
       TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
+        final payload = {
+          'severity': severity, 'probability': probability,
+          'residualSeverity': residualSeverity, 'residualProbability': residualProbability,
+          'note': note.text.trim().isEmpty ? null : note.text.trim(),
+        };
         try {
-          await api.post('/business/risks/${risk['id']}/reevaluate', {
-            'severity': severity, 'probability': probability,
-            'residualSeverity': residualSeverity, 'residualProbability': residualProbability,
-            'note': note.text.trim().isEmpty ? null : note.text.trim(),
-          });
+          await api.post('/business/risks/${risk['id']}/reevaluate', payload);
           if (context.mounted) Navigator.pop(c);
           onSaved();
+        } on ApiException catch (e) {
+          if (e.networkError) {
+            await SyncQueue.enqueue('riskReevaluate', 'UPDATE', payload, entityId: risk['id'] as String);
+            if (context.mounted) {
+              Navigator.pop(c);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : réévaluation enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+            }
+            onSaved();
+          } else {
+            setD(() { saving = false; formError = '$e'; });
+          }
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
       }, child: Text(saving ? '…' : 'Réévaluer')),
     ],

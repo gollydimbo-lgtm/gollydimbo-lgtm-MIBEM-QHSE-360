@@ -328,6 +328,7 @@ model Epi {
   nonConformities NonConformity[]
   qualityControls QualityControl[]
   safetyEvents SafetyEvent[]
+  riskMeasures RiskMeasure[]
 }
 
 model Employee {
@@ -985,6 +986,8 @@ model Risk {
   riskMeasures RiskMeasure[]
   evaluations RiskEvaluation[]
   nonConformities NonConformity[]
+  auditFindings AuditFinding[]
+  environnementAspects EnvironnementAspect[]
   @@index([status,score])
 }
 
@@ -1029,9 +1032,13 @@ model RiskMeasure {
   datePrise DateTime?
   efficacite Int @default(1)
   justificatif String?
+  epiId String?
+  trainingId String?
   createdAt DateTime @default(now())
   risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
   responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
+  training Training? @relation(fields:[trainingId], references:[id], onDelete:SetNull)
 }
 
 // Historique des évaluations successives d'un risque — sans cette table,
@@ -1116,9 +1123,11 @@ model AuditFinding {
   critical Boolean @default(false)
   status String @default("OPEN")
   nonConformityId String?
+  riskId String?
   createdAt DateTime @default(now())
   audit QhseAudit @relation(fields:[auditId], references:[id], onDelete:Cascade)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
 }
 
 model EnvironmentRecord {
@@ -1165,11 +1174,13 @@ model EnvironnementAspect {
   responsableId String?
   echeance DateTime?
   statut String @default("ACTIVE")
+  riskId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
   actions Action[]
 }
 
@@ -1210,6 +1221,7 @@ model Training {
   expiryAt DateTime?
   processusId String?
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  riskMeasures RiskMeasure[]
 }
 
 model Equipment {
