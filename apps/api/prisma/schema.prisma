@@ -132,6 +132,9 @@ model User {
   auditFindingsResponsable AuditFinding[]
   auditorProfile AuditorProfile?
   auditSignatures AuditSignature[]
+  nonConformitiesDeclarees NonConformity[] @relation("NcDeclarant")
+  nonConformitiesResponsable NonConformity[] @relation("NcResponsible")
+  ncContainmentActionsResponsable NcContainmentAction[]
   refreshTokens RefreshToken[]
   epcResponsible Epc[]
   epcInspections EpcInspection[]
@@ -618,6 +621,30 @@ model NonConformity {
   processusId String?
   fournisseurId String?
   riskId String?
+  // --- Phase 1 : criticité, confinement, étendue ---
+  workUnitId String?
+  declarantId String?
+  responsibleId String?
+  gravite Int?
+  probabilite Int?
+  etendue Int?
+  criticiteScore Int?
+  criticiteNiveau String?
+  quantiteNc Float?
+  quantiteControlee Float?
+  quantiteBloquee Float?
+  quantiteLiberee Float?
+  quantiteDetruite Float?
+  quantiteReparee Float?
+  tauxNc Float?
+  dueDate DateTime?
+  closedAt DateTime?
+  reopenedCount Int @default(0)
+  // --- Phase 2 : analyse des causes et vérification d'efficacité ---
+  causeRacineIdentifiee Boolean @default(false)
+  effectivenessResult String?
+  effectivenessCheckedAt DateTime?
+  effectivenessNotes String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
@@ -625,10 +652,60 @@ model NonConformity {
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  declarant User? @relation("NcDeclarant", fields:[declarantId], references:[id], onDelete:SetNull)
+  responsible User? @relation("NcResponsible", fields:[responsibleId], references:[id], onDelete:SetNull)
   auditFindings AuditFinding[]
   reclamations Reclamation[]
   safetyEvents SafetyEvent[]
+  containmentActions NcContainmentAction[]
+  causes NcCause[]
   @@index([status,occurredAt])
+}
+
+// Action de confinement / action immédiate (point 9) — distincte des
+// actions correctives/préventives du module Actions, car elle vise à
+// sécuriser tout de suite, pas à traiter la cause.
+model NcContainmentAction {
+  id String @id @default(cuid())
+  nonConformityId String
+  type String
+  description String?
+  responsableId String?
+  date DateTime @default(now())
+  echeance DateTime?
+  resultat String?
+  cout Float?
+  createdAt DateTime @default(now())
+  nonConformity NonConformity @relation(fields:[nonConformityId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+}
+
+// Analyse des causes structurée (point 11-12) — chaque ligne est un niveau
+// de "Pourquoi", une branche Ishikawa, ou toute autre méthode, avec une
+// classification de cause (5M + variantes) et un marqueur "cause racine".
+model NcCause {
+  id String @id @default(cuid())
+  nonConformityId String
+  methode String
+  niveau String?
+  categorie String?
+  description String
+  type String?
+  estRacine Boolean @default(false)
+  createdAt DateTime @default(now())
+  nonConformity NonConformity @relation(fields:[nonConformityId], references:[id], onDelete:Cascade)
+}
+
+// Paramétrage du module NC — seuils de criticité et délai standard,
+// modifiables par l'administrateur sans toucher au code.
+model NcSettings {
+  id String @id @default(cuid())
+  seuilModeree Int @default(20)
+  seuilMajeure Int @default(50)
+  seuilCritique Int @default(75)
+  delaiStandardJours Int @default(30)
+  updatedAt DateTime @updatedAt
 }
 
 model Action {
@@ -1014,6 +1091,7 @@ model WorkUnit {
   risks Risk[]
   audits QhseAudit[]
   auditPrograms AuditProgram[]
+  nonConformities NonConformity[]
 }
 
 // Bibliothèque de catégories de risques configurable par l'administrateur —
