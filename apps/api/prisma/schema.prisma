@@ -130,6 +130,8 @@ model User {
   auditsAsResponsable QhseAudit[] @relation("AuditResponsable")
   auditProgramsAsAuditeur AuditProgram[]
   auditFindingsResponsable AuditFinding[]
+  auditorProfile AuditorProfile?
+  auditSignatures AuditSignature[]
   refreshTokens RefreshToken[]
   epcResponsible Epc[]
   epcInspections EpcInspection[]
@@ -1140,6 +1142,7 @@ model QhseAudit {
   auditFindings AuditFinding[]
   programs AuditProgram[]
   responses AuditQuestionResponse[]
+  signatures AuditSignature[]
 }
 
 // Bibliothèque de types d'audit configurable — jamais une liste figée
@@ -1259,6 +1262,34 @@ model AuditQuestionResponse {
   audit QhseAudit @relation(fields:[auditId], references:[id], onDelete:Cascade)
   checklistItem AuditChecklistItem @relation(fields:[checklistItemId], references:[id], onDelete:Cascade)
   @@unique([auditId, checklistItemId])
+}
+
+// Profil auditeur (point 14) — un enregistrement optionnel par utilisateur,
+// créé seulement quand quelqu'un est réellement désigné comme auditeur.
+model AuditorProfile {
+  id String @id @default(cuid())
+  userId String @unique
+  competence String?
+  domainesExpertise Json?
+  formation String?
+  experienceAnnees Int?
+  disponible Boolean @default(true)
+  habilitation String?
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+}
+
+// Signature électronique (point 18) — une ligne par rôle attendu sur
+// l'audit (auditeur, responsable audité, responsable QHSE, validateur).
+model AuditSignature {
+  id String @id @default(cuid())
+  auditId String
+  role String
+  signataireId String?
+  signedAt DateTime?
+  statut String @default("EN_ATTENTE")
+  audit QhseAudit @relation(fields:[auditId], references:[id], onDelete:Cascade)
+  signataire User? @relation(fields:[signataireId], references:[id], onDelete:SetNull)
 }
 
 // Constat d'audit structuré — remplace le champ "findings" en texte
