@@ -743,16 +743,28 @@ function AuditForm({ record, onClose, onCreated }) {
 function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
   const C = useTheme();
   const detailQ = useCollection(`/business/audits/${audit.id}`);
+  const usersQ = useCollection('/users');
   const [findings, setFindings] = useState(audit.auditFindings || []);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ description: '', classification: '', criticite: '', critical: false });
   const [saving, setSaving] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [error, setError] = useState(null);
+  const [showReport, setShowReport] = useState(false);
+  const ROLES_SIGNATURE = [['AUDITEUR', 'Auditeur'], ['RESPONSABLE_AUDITE', 'Responsable audité'], ['RESPONSABLE_QHSE', 'Responsable QHSE'], ['VALIDATEUR', 'Validateur']];
   const RESULTATS = [['NON_EVALUE', 'Non évalué'], ['CONFORME', 'Conforme'], ['NON_CONFORME', 'Non conforme'], ['PARTIELLEMENT_CONFORME', 'Partiellement conforme'], ['NON_APPLICABLE', 'Non applicable'], ['OBSERVATION', 'Observation'], ['PISTE_AMELIORATION', "Piste d'amélioration"], ['BONNE_PRATIQUE', 'Bonne pratique'], ['A_VERIFIER', 'À vérifier']];
   const resultatColor = { CONFORME: C.green, BONNE_PRATIQUE: C.green, NON_CONFORME: C.red, PARTIELLEMENT_CONFORME: C.amber, OBSERVATION: C.blue, PISTE_AMELIORATION: C.blue };
   async function saveResponse(itemId, patch) {
     try { await api.post(`/business/audits/${audit.id}/responses/${itemId}`, patch); detailQ.reload(); }
+    catch (err) { alert(err.message); }
+  }
+  async function addSignatureRole(role) {
+    try { await api.post(`/business/audits/${audit.id}/signatures`, { role }); detailQ.reload(); }
+    catch (err) { alert(err.message); }
+  }
+  async function signAs(signatureId, signataireId) {
+    if (!signataireId) return;
+    try { await api.post(`/business/audit-signatures/${signatureId}/sign`, { signataireId }); detailQ.reload(); }
     catch (err) { alert(err.message); }
   }
 
@@ -802,8 +814,40 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
     <Modal title={audit.title} onClose={onClose} wide>
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs" style={{ color: C.textMuted }}>{new Date(audit.auditDate).toLocaleDateString('fr-FR')} · {audit.reference || 'sans référence'} · {audit.processus?.nom || 'aucun processus rattaché'}</p>
-        <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier l'audit</button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowReport((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{showReport ? 'Fermer le rapport' : 'Rapport'}</button>
+          <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier l'audit</button>
+        </div>
       </div>
+
+      {detailQ.data?.independenceWarning && (
+        <div className="p-2.5 rounded-lg mb-3 text-xs" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>
+          ⚠ Vérifier l'indépendance et l'impartialité de l'auditeur — il pilote ou supplée le processus audité.
+        </div>
+      )}
+
+      {showReport && detailQ.data && (
+        <div className="p-4 rounded-lg mb-5" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <div className="flex justify-end mb-2"><button onClick={() => window.print()} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button></div>
+          <div className="text-center border-b pb-3 mb-3" style={{ borderColor: C.border }}>
+            <h2 className="text-lg font-bold" style={{ color: C.text }}>RAPPORT D'AUDIT QHSE</h2>
+            <p className="text-xs" style={{ color: C.textMuted }}>{detailQ.data.title} · {detailQ.data.code}</p>
+          </div>
+          <DataTable columns={['Champ', 'Valeur']} rows={[
+            ['Date', new Date(detailQ.data.auditDate).toLocaleDateString('fr-FR')],
+            ['Type', detailQ.data.type?.label || '—'], ['Référentiel', detailQ.data.referential?.label || '—'],
+            ['Auditeur', detailQ.data.auditor ? `${detailQ.data.auditor.firstName} ${detailQ.data.auditor.lastName}` : '—'],
+            ['Responsable audité', detailQ.data.responsableAudite ? `${detailQ.data.responsableAudite.firstName} ${detailQ.data.responsableAudite.lastName}` : '—'],
+            ['Objectif', detailQ.data.objectif || '—'], ['Périmètre', detailQ.data.scope || '—'],
+            ['Score', detailQ.data.scoreObtenu != null ? `${detailQ.data.scoreObtenu} / ${detailQ.data.scoreMax}` : (detailQ.data.score != null ? `${detailQ.data.score}%` : '—')],
+            ['Taux de conformité', detailQ.data.tauxConformite != null ? `${detailQ.data.tauxConformite}%` : '—'],
+          ]} />
+          <p className="text-xs font-semibold mt-3 mb-1" style={{ color: C.text }}>Constats ({findings.length})</p>
+          {findings.length
+            ? <DataTable columns={['Description', 'Classification', 'Criticité']} rows={findings.map((f) => [f.description, f.classification || '—', f.criticite || '—'])} />
+            : <p className="text-xs" style={{ color: C.textMuted }}>Aucun constat</p>}
+        </div>
+      )}
 
       {detailQ.data?.checklist && (
         <div className="mb-5">
@@ -894,6 +938,27 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
             ))}
           </div>
         : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun constat enregistré pour cet audit</p>}
+
+      <p className="text-sm font-semibold mt-5 mb-2" style={{ color: C.text }}>Signatures</p>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {ROLES_SIGNATURE.filter(([role]) => !(detailQ.data?.signatures || []).some((s) => s.role === role)).map(([role, label]) => (
+          <button key={role} onClick={() => addSignatureRole(role)} className="text-[11px] px-2 py-1 rounded-full" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.textMuted }}>+ {label}</button>
+        ))}
+      </div>
+      {(detailQ.data?.signatures || []).length
+        ? <div className="space-y-1.5">
+            {detailQ.data.signatures.map((s) => (
+              <div key={s.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                <span className="text-xs" style={{ color: C.text }}>{ROLES_SIGNATURE.find(([r]) => r === s.role)?.[1] || s.role}</span>
+                {s.statut === 'SIGNE'
+                  ? <span className="text-[11px]" style={{ color: C.green }}>Signé par {s.signataire?.firstName} {s.signataire?.lastName} le {new Date(s.signedAt).toLocaleDateString('fr-FR')}</span>
+                  : <select defaultValue="" onChange={(e) => signAs(s.id, e.target.value)} className="text-[11px] px-2 py-1 rounded-lg outline-none" style={inputStyle(C)}>
+                      <option value="" disabled>Signer en tant que…</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+                    </select>}
+              </div>
+            ))}
+          </div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucune signature demandée</p>}
     </Modal>
   );
 }
@@ -6977,6 +7042,45 @@ function AuditProgramForm({ record, onClose, onCreated }) {
   );
 }
 
+function AuditorProfileForm({ auditeur, onClose, onCreated }) {
+  const C = useTheme();
+  const p = auditeur.profile || {};
+  const [form, setForm] = useState({
+    competence: p.competence || '', formation: p.formation || '', experienceAnnees: p.experienceAnnees ?? '',
+    habilitation: p.habilitation || '', disponible: p.disponible ?? true,
+    domainesExpertise: (p.domainesExpertise || []).join(', '),
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      await api.patch(`/business/auditeurs/${auditeur.id}/profile`, {
+        ...form, experienceAnnees: form.experienceAnnees === '' ? null : Number(form.experienceAnnees),
+        domainesExpertise: form.domainesExpertise.split(',').map((s) => s.trim()).filter(Boolean),
+      });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={`Profil auditeur — ${auditeur.firstName} ${auditeur.lastName}`} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Compétence"><input value={form.competence} onChange={(e) => setForm({ ...form, competence: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Domaines d'expertise (séparés par des virgules)"><input value={form.domainesExpertise} onChange={(e) => setForm({ ...form, domainesExpertise: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. ISO 9001, HACCP, sécurité machines" /></FormField>
+        <FormField label="Formation"><input value={form.formation} onChange={(e) => setForm({ ...form, formation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Expérience (années)"><input type="number" min="0" value={form.experienceAnnees} onChange={(e) => setForm({ ...form, experienceAnnees: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Habilitation"><input value={form.habilitation} onChange={(e) => setForm({ ...form, habilitation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <label className="flex items-center gap-2 text-xs mb-3" style={{ color: C.textMuted }}><input type="checkbox" checked={form.disponible} onChange={(e) => setForm({ ...form, disponible: e.target.checked })} />Disponible pour de nouveaux audits</label>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? '…' : 'Enregistrer'}</button>
+      </form>
+    </Modal>
+  );
+}
+
 function AuditsPage() {
   const C = useTheme();
   const audits = useCollection('/business/audits');
@@ -6985,6 +7089,7 @@ function AuditsPage() {
   const typesQ = useCollection('/business/audit-types');
   const referentialsQ = useCollection('/business/audit-referentials');
   const checklistsQ = useCollection('/business/audit-checklists');
+  const auditeursQ = useCollection('/business/auditeurs');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -6997,6 +7102,7 @@ function AuditsPage() {
   const [editingReferential, setEditingReferential] = useState(null);
   const [showChecklistForm, setShowChecklistForm] = useState(false);
   const [editingChecklist, setEditingChecklist] = useState(null);
+  const [editingAuditeur, setEditingAuditeur] = useState(null);
   const [generatingProgramId, setGeneratingProgramId] = useState(null);
   if (audits.loading || dashboardQ.loading) return <LoadingPanel />;
   if (audits.error) return <ErrorPanel message={audits.error} onRetry={audits.reload} />;
@@ -7006,7 +7112,18 @@ function AuditsPage() {
   const types = typesQ.data || [];
   const referentials = referentialsQ.data || [];
   const checklists = checklistsQ.data || [];
+  const auditeurs = auditeursQ.data || [];
   const sorted = [...list].sort((a, b) => new Date(b.auditDate) - new Date(a.auditDate));
+  // Calendrier — regroupe audits et programme par mois calendaire.
+  const calendrierEvents = [
+    ...list.map((a) => ({ date: new Date(a.auditDate), label: a.title, type: 'audit', statut: a.status })),
+    ...programs.filter((p) => p.datePrevue && !p.auditId).map((p) => ({ date: new Date(p.datePrevue), label: p.title, type: 'programme', statut: p.statut })),
+  ].sort((a, b) => a.date - b.date);
+  const calendrierParMois = {};
+  calendrierEvents.forEach((ev) => {
+    const key = ev.date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    (calendrierParMois[key] = calendrierParMois[key] || []).push(ev);
+  });
   const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
   const reloadAll = () => { audits.reload(); dashboardQ.reload(); programsQ.reload(); };
   async function generateAuditFromProgram(id) {
@@ -7024,9 +7141,10 @@ function AuditsPage() {
       {(showTypeForm || editingType) && <AuditTypeForm record={editingType} onClose={() => { setShowTypeForm(false); setEditingType(null); }} onCreated={typesQ.reload} />}
       {(showReferentialForm || editingReferential) && <AuditReferentialForm record={editingReferential} onClose={() => { setShowReferentialForm(false); setEditingReferential(null); }} onCreated={referentialsQ.reload} />}
       {(showChecklistForm || editingChecklist) && <AuditChecklistForm record={editingChecklist} onClose={() => { setShowChecklistForm(false); setEditingChecklist(null); }} onCreated={checklistsQ.reload} />}
+      {editingAuditeur && <AuditorProfileForm auditeur={editingAuditeur} onClose={() => setEditingAuditeur(null)} onCreated={auditeursQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['mes-audits', 'Mes audits'], ['programme', "Programme d'audit"], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+        {[['apercu', "Vue d'ensemble"], ['mes-audits', 'Mes audits'], ['calendrier', 'Calendrier'], ['programme', "Programme d'audit"], ['auditeurs', 'Auditeurs'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -7079,6 +7197,30 @@ function AuditsPage() {
         </div>
       )}
 
+      {tab === 'calendrier' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          {Object.keys(calendrierParMois).length
+            ? Object.entries(calendrierParMois).map(([mois, events]) => (
+                <Panel key={mois} title={mois.charAt(0).toUpperCase() + mois.slice(1)}>
+                  <div className="space-y-1.5">
+                    {events.map((ev, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold w-14" style={{ color: C.text }}>{ev.date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
+                          <span className="text-sm" style={{ color: C.text }}>{ev.label}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: ev.type === 'audit' ? `${C.blue}22` : `${C.amber}22`, color: ev.type === 'audit' ? C.blue : C.amber }}>{ev.type === 'audit' ? 'Audit' : 'Programme'}</span>
+                        </div>
+                        <StatusChip statut={ev.statut} />
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              ))
+            : <Panel title="Calendrier"><p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun audit ni ligne de programme datée</p></Panel>}
+        </div>
+      )}
+
       {tab === 'programme' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -7096,6 +7238,23 @@ function AuditsPage() {
                   ])}
                   onRowClick={(i) => setEditingProgram(programs[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne de programme pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'auditeurs' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <Panel title="Auditeurs">
+            {auditeurs.length
+              ? <DataTable columns={['Auditeur', 'Compétence', 'Habilitation', 'Disponible', 'Audits réalisés', 'Audits en cours', 'Performance moyenne']}
+                  rows={auditeurs.map((a) => [
+                    `${a.firstName} ${a.lastName}`, a.profile?.competence || '—', a.profile?.habilitation || '—',
+                    a.profile ? (a.profile.disponible ? 'Oui' : 'Non') : '—',
+                    a.nombreAuditsRealises, a.nombreAuditsEnCours, a.performanceMoyenne != null ? `${a.performanceMoyenne}%` : '—',
+                  ])}
+                  onRowClick={(i) => setEditingAuditeur(auditeurs[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun auditeur pour le moment — apparaît dès qu'un utilisateur est désigné auditeur sur un audit</p>}
           </Panel>
         </div>
       )}
