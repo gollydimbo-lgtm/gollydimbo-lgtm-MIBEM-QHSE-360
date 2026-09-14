@@ -244,11 +244,34 @@ import { writeAudit } from '../common/audit-log.helper';
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
  haccpList(){return this.db.haccpRecord.findMany({orderBy:{recordDate:'desc'}})} haccpCreate(b:any){return this.db.haccpRecord.create({data:b})} haccpUpdate(id:string,b:any){return this.db.haccpRecord.update({where:{id},data:b})} haccpDelete(id:string){return this.db.haccpRecord.delete({where:{id}})}
- auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,processus:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})} auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
+ auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})}
+ auditGet(id:string){return this.db.qhseAudit.findUnique({where:{id},include:{auditor:true,responsableAudite:true,processus:true,fournisseur:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true,risk:true,actions:true}},programs:true}})}
+ auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
 
- auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{auditId,description:b.description,classification:b.classification,critical:!!b.critical}})}
- auditFindingUpdate(id:string,b:any){return this.db.auditFinding.update({where:{id},data:{description:b.description,classification:b.classification,critical:b.critical,status:b.status}})}
+ auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{auditId,description:b.description,classification:b.classification,criticite:b.criticite,critical:!!b.critical}})}
+ // La date de clôture se fixe automatiquement au moment où le statut passe
+ // à CLOSED (et se libère si le constat est rouvert) — jamais saisie à la
+ // main, pour que le délai moyen de clôture reste fiable.
+ auditFindingUpdate(id:string,b:any){
+  const data:any={description:b.description,classification:b.classification,criticite:b.criticite,critical:b.critical,status:b.status};
+  if(b.status==='CLOSED') data.closedAt=new Date();
+  else if(b.status) data.closedAt=null;
+  return this.db.auditFinding.update({where:{id},data});
+ }
  auditFindingDelete(id:string){return this.db.auditFinding.delete({where:{id}})}
+ // Un constat nécessitant une action peut en générer une directement,
+ // sans passer obligatoirement par une NC (point 12 du cahier des charges).
+ async auditFindingGenerateAction(id:string,b:any){
+  const finding=await this.db.auditFinding.findUnique({where:{id},include:{audit:true}});
+  if(!finding) throw new Error('Constat introuvable');
+  return this.db.action.create({data:{
+   code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   title:b?.title||`Traiter le constat — ${finding.audit.title}`,
+   description:b?.description||finding.description,
+   priority:finding.critical?1:2, processusId:finding.audit.processusId,
+   auditFindingId:finding.id, responsibleId:b?.responsibleId||null, dueDate:b?.dueDate||null,
+  }});
+ }
  // Génère une non-conformité (et son action corrective) à partir d'un
  // constat d'audit — même principe que l'échec d'un point de contrôle
  // critique dans le moteur de contrôle universel. Le constat hérite du
@@ -284,6 +307,87 @@ import { writeAudit } from '../common/audit-log.helper';
   await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
   await this.db.auditFinding.update({where:{id},data:{riskId:risk.id}});
   return risk;
+ }
+
+ // === AUDITS — Phase 1 : programme, types, référentiels, dashboard ========
+
+ auditTypeList(){return this.db.auditType.findMany({orderBy:{order:'asc'}})}
+ auditTypeCreate(b:any){return this.db.auditType.create({data:b})}
+ auditTypeUpdate(id:string,b:any){return this.db.auditType.update({where:{id},data:b})}
+ auditTypeDelete(id:string){return this.db.auditType.delete({where:{id}})}
+
+ auditReferentialList(){return this.db.auditReferential.findMany({include:{items:{orderBy:{order:'asc'}}},orderBy:{label:'asc'}})}
+ auditReferentialCreate(b:any){return this.db.auditReferential.create({data:b})}
+ auditReferentialUpdate(id:string,b:any){return this.db.auditReferential.update({where:{id},data:b})}
+ auditReferentialDelete(id:string){return this.db.auditReferential.delete({where:{id}})}
+ auditReferentialItemCreate(b:any){return this.db.auditReferentialItem.create({data:b})}
+ auditReferentialItemUpdate(id:string,b:any){return this.db.auditReferentialItem.update({where:{id},data:b})}
+ auditReferentialItemDelete(id:string){return this.db.auditReferentialItem.delete({where:{id}})}
+
+ auditProgramList(){return this.db.auditProgram.findMany({include:{type:true,referential:true,workUnit:true,processus:true,auditeurPrincipal:true,audit:true},orderBy:{datePrevue:'asc'}})}
+ auditProgramCreate(b:any){return this.db.auditProgram.create({data:b})}
+ auditProgramUpdate(id:string,b:any){return this.db.auditProgram.update({where:{id},data:b})}
+ auditProgramDelete(id:string){return this.db.auditProgram.delete({where:{id}})}
+ // Génère l'audit réel à partir d'une ligne de programme, préremplie,
+ // jamais ressaisie — même principe que pour le Registre des risques.
+ async auditProgramGenerateAudit(id:string){
+  const program=await this.db.auditProgram.findUnique({where:{id}});
+  if(!program) throw new Error('Programme introuvable');
+  if(program.auditId) throw new Error('Un audit a déjà été généré pour ce programme');
+  const audit=await this.db.qhseAudit.create({data:{
+   code:`AUD-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   title:program.title, auditDate:program.datePrevue||new Date(), status:'PLANNED',
+   typeId:program.typeId, referentialId:program.referentialId, workUnitId:program.workUnitId,
+   processusId:program.processusId, auditorId:program.auditeurPrincipalId,
+   dureePrevueHeures:program.dureePrevueHeures, priorite:program.priorite,
+  }});
+  await this.db.auditProgram.update({where:{id},data:{auditId:audit.id,statut:'PLANIFIE'}});
+  return audit;
+ }
+
+ // Tableau de bord réel (point 2 du cahier des charges) — chaque KPI reste
+ // `null` s'il n'est pas calculable plutôt que d'afficher un faux zéro.
+ async auditDashboard(){
+  const now=new Date();
+  const enCoursStatuts=['PLANNED','TO_PREPARE','PREPARING','READY','IN_PROGRESS','REPORT_PENDING','VALIDATION_PENDING'];
+  const clotureStatuts=['COMPLETED','VALIDATED','CLOSED'];
+  const [audits,programs,findings]=await Promise.all([
+   this.db.qhseAudit.findMany({select:{id:true,status:true,auditDate:true,score:true}}),
+   this.db.auditProgram.findMany({select:{id:true,statut:true,auditId:true}}),
+   this.db.auditFinding.findMany({select:{id:true,classification:true,criticite:true,status:true,createdAt:true,closedAt:true,auditId:true}}),
+  ]);
+  const total=audits.length;
+  const parStatut=(s:string)=>audits.filter(a=>a.status===s).length;
+  const enRetard=audits.filter(a=>new Date(a.auditDate)<now&&!clotureStatuts.includes(a.status)&&a.status!=='CANCELLED'&&a.status!=='POSTPONED').length;
+  const aVenir=audits.filter(a=>new Date(a.auditDate)>now&&enCoursStatuts.includes(a.status)).length;
+  const clotures=audits.filter(a=>clotureStatuts.includes(a.status)).length;
+  const programsRealises=programs.filter(p=>p.auditId).length;
+  const tauxRealisationProgramme=programs.length?Math.round((programsRealises/programs.length)*1000)/10:null;
+  const conformes=findings.filter(f=>f.classification==='CONFORME').length;
+  const ncMineures=findings.filter(f=>f.classification==='NC_MINEURE').length;
+  const ncMajeures=findings.filter(f=>f.classification==='NC_MAJEURE').length;
+  const pistesAmelioration=findings.filter(f=>f.classification==='PISTE_AMELIORATION').length;
+  const evaluables=conformes+ncMineures+ncMajeures;
+  const tauxConformite=evaluables?Math.round((conformes/evaluables)*1000)/10:null;
+  const tauxNonConformite=evaluables?Math.round(((ncMineures+ncMajeures)/evaluables)*1000)/10:null;
+  const constatsOuverts=findings.filter(f=>f.status!=='CLOSED').length;
+  const constatsClotures=findings.filter(f=>f.status==='CLOSED').length;
+  const closedWithDelay=findings.filter(f=>f.closedAt);
+  const delaiMoyenClotureConstats=closedWithDelay.length
+   ?Math.round(closedWithDelay.reduce((s,f)=>s+(new Date(f.closedAt!).getTime()-new Date(f.createdAt).getTime()),0)/closedWithDelay.length/86400000*10)/10
+   :null;
+  const scores=audits.map(a=>a.score).filter((s):s is number=>s!=null);
+  const scoreMoyen=scores.length?Math.round((scores.reduce((s,v)=>s+v,0)/scores.length)*10)/10:null;
+  return {
+   total,
+   planifies:parStatut('PLANNED'),enPreparation:parStatut('PREPARING')+parStatut('TO_PREPARE'),enCours:parStatut('IN_PROGRESS'),
+   realises:parStatut('COMPLETED'),reportes:parStatut('POSTPONED'),annules:parStatut('CANCELLED'),
+   enRetard,aVenir,clotures,
+   tauxRealisationProgramme,tauxConformite,tauxNonConformite,
+   nombreConstats:findings.length,ncMajeures,ncMineures,pistesAmelioration,pointsConformes:conformes,
+   constatsOuverts,constatsClotures,delaiMoyenClotureConstats,
+   scoreMoyen,
+  };
  }
  envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
 
