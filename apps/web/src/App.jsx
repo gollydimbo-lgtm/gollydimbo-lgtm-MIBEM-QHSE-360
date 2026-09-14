@@ -628,6 +628,7 @@ function AuditForm({ record, onClose, onCreated }) {
   const referentialsQ = useCollection('/business/audit-referentials');
   const workUnitsQ = useCollection('/business/work-units');
   const usersQ = useCollection('/users');
+  const checklistsQ = useCollection('/business/audit-checklists');
   const [form, setForm] = useState({
     title: record?.title || '', reference: record?.reference || '',
     auditDate: record ? new Date(record.auditDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -635,6 +636,7 @@ function AuditForm({ record, onClose, onCreated }) {
     typeId: record?.typeId || '', referentialId: record?.referentialId || '', workUnitId: record?.workUnitId || '',
     responsableAuditeId: record?.responsableAuditeId || '', scope: record?.scope || '', objectif: record?.objectif || '',
     dureePrevueHeures: record?.dureePrevueHeures ?? '', priorite: record?.priorite || 'NORMALE',
+    checklistId: record?.checklistId || '', scoringMethod: record?.scoringMethod || 'CONFORME_NON_CONFORME',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -647,6 +649,7 @@ function AuditForm({ record, onClose, onCreated }) {
         processusId: form.processusId || null, typeId: form.typeId || null, referentialId: form.referentialId || null,
         workUnitId: form.workUnitId || null, responsableAuditeId: form.responsableAuditeId || null,
         dureePrevueHeures: form.dureePrevueHeures === '' ? null : Number(form.dureePrevueHeures),
+        checklistId: form.checklistId || null,
       };
       if (editing) await api.patch(`/business/audits/${record.id}`, payload);
       else await api.post('/business/audits', { code: genCode('AUD'), ...payload });
@@ -677,6 +680,20 @@ function AuditForm({ record, onClose, onCreated }) {
           </FormField>
         </div>
         <FormField label="Référence (optionnel)"><input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Check-list appliquée (optionnel)">
+            <select value={form.checklistId} onChange={(e) => setForm({ ...form, checklistId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(checklistsQ.data || []).map((c) => <option key={c.id} value={c.id}>{c.title} ({(c.items || []).length} questions)</option>)}
+            </select>
+          </FormField>
+          <FormField label="Méthode de notation">
+            <select value={form.scoringMethod} onChange={(e) => setForm({ ...form, scoringMethod: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="CONFORME_NON_CONFORME">Conforme / Non conforme</option>
+              <option value="ECHELLE_0_5">Échelle 0 à 5</option><option value="ECHELLE_0_10">Échelle 0 à 10</option>
+              <option value="POURCENTAGE">Pourcentage</option><option value="CRITICITE">Criticité</option><option value="PONDERATION">Pondération</option>
+            </select>
+          </FormField>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Date"><input required type="date" value={form.auditDate} onChange={(e) => setForm({ ...form, auditDate: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
           <FormField label="Durée prévue (heures)"><input type="number" min="0" step="0.5" value={form.dureePrevueHeures} onChange={(e) => setForm({ ...form, dureePrevueHeures: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
@@ -725,12 +742,19 @@ function AuditForm({ record, onClose, onCreated }) {
 
 function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
   const C = useTheme();
+  const detailQ = useCollection(`/business/audits/${audit.id}`);
   const [findings, setFindings] = useState(audit.auditFindings || []);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ description: '', classification: '', criticite: '', critical: false });
   const [saving, setSaving] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [error, setError] = useState(null);
+  const RESULTATS = [['NON_EVALUE', 'Non évalué'], ['CONFORME', 'Conforme'], ['NON_CONFORME', 'Non conforme'], ['PARTIELLEMENT_CONFORME', 'Partiellement conforme'], ['NON_APPLICABLE', 'Non applicable'], ['OBSERVATION', 'Observation'], ['PISTE_AMELIORATION', "Piste d'amélioration"], ['BONNE_PRATIQUE', 'Bonne pratique'], ['A_VERIFIER', 'À vérifier']];
+  const resultatColor = { CONFORME: C.green, BONNE_PRATIQUE: C.green, NON_CONFORME: C.red, PARTIELLEMENT_CONFORME: C.amber, OBSERVATION: C.blue, PISTE_AMELIORATION: C.blue };
+  async function saveResponse(itemId, patch) {
+    try { await api.post(`/business/audits/${audit.id}/responses/${itemId}`, patch); detailQ.reload(); }
+    catch (err) { alert(err.message); }
+  }
 
   async function addFinding(e) {
     e.preventDefault(); setSaving(true); setError(null);
@@ -775,11 +799,51 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
   }
 
   return (
-    <Modal title={audit.title} onClose={onClose}>
+    <Modal title={audit.title} onClose={onClose} wide>
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs" style={{ color: C.textMuted }}>{new Date(audit.auditDate).toLocaleDateString('fr-FR')} · {audit.reference || 'sans référence'} · {audit.processus?.nom || 'aucun processus rattaché'}</p>
         <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier l'audit</button>
       </div>
+
+      {detailQ.data?.checklist && (
+        <div className="mb-5">
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+              <p className="text-[10px]" style={{ color: C.textMuted }}>Score obtenu</p>
+              <p className="text-lg font-bold" style={{ color: C.text }}>{detailQ.data.scoreObtenu ?? '—'}{detailQ.data.scoreMax != null ? ` / ${detailQ.data.scoreMax}` : ''}</p>
+            </div>
+            <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+              <p className="text-[10px]" style={{ color: C.textMuted }}>Taux de conformité</p>
+              <p className="text-lg font-bold" style={{ color: detailQ.data.tauxConformite >= 80 ? C.green : detailQ.data.tauxConformite >= 50 ? C.amber : C.red }}>{detailQ.data.tauxConformite != null ? `${detailQ.data.tauxConformite}%` : '—'}</p>
+            </div>
+            <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+              <p className="text-[10px]" style={{ color: C.textMuted }}>Check-list</p>
+              <p className="text-sm font-bold mt-1.5" style={{ color: C.text }}>{detailQ.data.checklist.title}</p>
+            </div>
+          </div>
+          <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Questions ({detailQ.data.checklist.items.length})</p>
+          <div className="space-y-2">
+            {detailQ.data.checklist.items.map((it) => {
+              const resp = (detailQ.data.responses || []).find((r) => r.checklistItemId === it.id);
+              return (
+                <div key={it.id} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${resp ? resultatColor[resp.resultat] || C.border : C.border}` }}>
+                  <p className="text-sm" style={{ color: C.text }}>{it.numero ? `${it.numero}. ` : ''}{it.question}</p>
+                  {it.critereAttendu && <p className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>Critère attendu : {it.critereAttendu}</p>}
+                  <div className="flex items-center gap-2 mt-2">
+                    <select value={resp?.resultat || 'NON_EVALUE'} onChange={(e) => saveResponse(it.id, { resultat: e.target.value, score: resp?.score, commentaire: resp?.commentaire })} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+                      {RESULTATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    {['ECHELLE_0_5', 'ECHELLE_0_10', 'POURCENTAGE'].includes(detailQ.data.scoringMethod) && (
+                      <input type="number" placeholder="Score" defaultValue={resp?.score ?? ''} onBlur={(e) => saveResponse(it.id, { resultat: resp?.resultat || 'CONFORME', score: e.target.value === '' ? null : Number(e.target.value), commentaire: resp?.commentaire })} className="w-20 px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)} />
+                    )}
+                    <span className="text-[10px]" style={{ color: C.textMuted }}>Poids {it.poids} · {it.criticite}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold" style={{ color: C.text }}>Constats ({findings.length})</p>
@@ -6780,6 +6844,80 @@ function AuditReferentialForm({ record, onClose, onCreated }) {
   );
 }
 
+function AuditChecklistForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const typesQ = useCollection('/business/audit-types');
+  const referentialsQ = useCollection('/business/audit-referentials');
+  const [checklist, setChecklist] = useState(record);
+  const [form, setForm] = useState({ title: record?.title || '', typeId: record?.typeId || '', referentialId: record?.referentialId || '' });
+  const [items, setItems] = useState(record?.items || []);
+  const [itemForm, setItemForm] = useState({ chapitre: '', numero: '', question: '', critereAttendu: '', criticite: 'FAIBLE', poids: 1 });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      if (checklist) { await api.patch(`/business/audit-checklists/${checklist.id}`, form); }
+      else { const created = await api.post('/business/audit-checklists', { code: genCode('CHK'), ...form }); setChecklist(created); }
+      onCreated();
+      if (checklist) onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function addItem(e) {
+    e.preventDefault();
+    if (!itemForm.question.trim()) return;
+    try {
+      const created = await api.post('/business/audit-checklist-items', { ...itemForm, poids: Number(itemForm.poids) || 1, checklistId: checklist.id, order: items.length });
+      setItems((prev) => [...prev, created]); setItemForm({ chapitre: '', numero: '', question: '', critereAttendu: '', criticite: 'FAIBLE', poids: 1 });
+      onCreated();
+    } catch (err) { setError(err.message); }
+  }
+  async function deleteItem(id) {
+    await api.del(`/business/audit-checklist-items/${id}`); setItems((prev) => prev.filter((i) => i.id !== id)); onCreated();
+  }
+  return (
+    <Modal title={checklist ? 'Modifier la check-list' : 'Nouvelle check-list'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <FormField label="Titre"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Audit sécurité mensuel — atelier" /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type d'audit"><select value={form.typeId} onChange={(e) => setForm({ ...form, typeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(typesQ.data || []).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></FormField>
+          <FormField label="Référentiel"><select value={form.referentialId} onChange={(e) => setForm({ ...form, referentialId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(referentialsQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></FormField>
+        </div>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium mb-4" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? '…' : checklist ? 'Enregistrer les modifications' : 'Créer la check-list, puis ajouter des questions'}</button>
+      </form>
+
+      {checklist && (
+        <>
+          <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Questions ({items.length})</p>
+          <form onSubmit={addItem} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Chapitre"><input value={itemForm.chapitre} onChange={(e) => setItemForm({ ...itemForm, chapitre: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label="Numéro"><input value={itemForm.numero} onChange={(e) => setItemForm({ ...itemForm, numero: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            </div>
+            <FormField label="Question"><textarea required value={itemForm.question} onChange={(e) => setItemForm({ ...itemForm, question: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Critère attendu"><input value={itemForm.critereAttendu} onChange={(e) => setItemForm({ ...itemForm, critereAttendu: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Criticité"><select value={itemForm.criticite} onChange={(e) => setItemForm({ ...itemForm, criticite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="FAIBLE">Faible</option><option value="MODEREE">Modérée</option><option value="ELEVEE">Élevée</option><option value="CRITIQUE">Critique</option></select></FormField>
+              <FormField label="Poids"><input type="number" min="0.5" step="0.5" value={itemForm.poids} onChange={(e) => setItemForm({ ...itemForm, poids: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            </div>
+            <button type="submit" className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter la question</button>
+          </form>
+          {items.length
+            ? <div className="space-y-1">{items.map((it) => (
+                <div key={it.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                  <span className="text-xs" style={{ color: C.text }}>{it.numero ? `${it.numero}. ` : ''}{it.question}</span>
+                  <button onClick={() => deleteItem(it.id)} className="text-xs" style={{ color: C.red }}>×</button>
+                </div>
+              ))}</div>
+            : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>Aucune question pour le moment</p>}
+        </>
+      )}
+    </Modal>
+  );
+}
+
 function AuditProgramForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const typesQ = useCollection('/business/audit-types');
@@ -6846,6 +6984,7 @@ function AuditsPage() {
   const programsQ = useCollection('/business/audit-programs');
   const typesQ = useCollection('/business/audit-types');
   const referentialsQ = useCollection('/business/audit-referentials');
+  const checklistsQ = useCollection('/business/audit-checklists');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -6856,6 +6995,8 @@ function AuditsPage() {
   const [editingType, setEditingType] = useState(null);
   const [showReferentialForm, setShowReferentialForm] = useState(false);
   const [editingReferential, setEditingReferential] = useState(null);
+  const [showChecklistForm, setShowChecklistForm] = useState(false);
+  const [editingChecklist, setEditingChecklist] = useState(null);
   const [generatingProgramId, setGeneratingProgramId] = useState(null);
   if (audits.loading || dashboardQ.loading) return <LoadingPanel />;
   if (audits.error) return <ErrorPanel message={audits.error} onRetry={audits.reload} />;
@@ -6864,6 +7005,7 @@ function AuditsPage() {
   const programs = programsQ.data || [];
   const types = typesQ.data || [];
   const referentials = referentialsQ.data || [];
+  const checklists = checklistsQ.data || [];
   const sorted = [...list].sort((a, b) => new Date(b.auditDate) - new Date(a.auditDate));
   const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
   const reloadAll = () => { audits.reload(); dashboardQ.reload(); programsQ.reload(); };
@@ -6881,6 +7023,7 @@ function AuditsPage() {
       {(showProgramForm || editingProgram) && <AuditProgramForm record={editingProgram} onClose={() => { setShowProgramForm(false); setEditingProgram(null); }} onCreated={programsQ.reload} />}
       {(showTypeForm || editingType) && <AuditTypeForm record={editingType} onClose={() => { setShowTypeForm(false); setEditingType(null); }} onCreated={typesQ.reload} />}
       {(showReferentialForm || editingReferential) && <AuditReferentialForm record={editingReferential} onClose={() => { setShowReferentialForm(false); setEditingReferential(null); }} onCreated={referentialsQ.reload} />}
+      {(showChecklistForm || editingChecklist) && <AuditChecklistForm record={editingChecklist} onClose={() => { setShowChecklistForm(false); setEditingChecklist(null); }} onCreated={checklistsQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
         {[['apercu', "Vue d'ensemble"], ['mes-audits', 'Mes audits'], ['programme', "Programme d'audit"], ['parametrage', 'Paramétrage']].map(([id, label]) => (
@@ -6971,6 +7114,11 @@ function AuditsPage() {
                 : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun référentiel défini</p>}
             </Panel>
           </div>
+          <Panel title="Check-lists" right={<button onClick={() => setShowChecklistForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle check-list</button>}>
+            {checklists.length
+              ? <DataTable columns={['Titre', 'Type', 'Référentiel', 'Questions']} rows={checklists.map((c) => [c.title, c.type?.label || '—', c.referential?.label || '—', (c.items || []).length])} onRowClick={(i) => setEditingChecklist(checklists[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune check-list créée — utilisées ensuite pour noter automatiquement les audits</p>}
+          </Panel>
         </div>
       )}
     </div>
