@@ -967,12 +967,17 @@ function NonConformityForm({ record, prefill, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
   const risksQ = useCollection('/business/risks');
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
   const [form, setForm] = useState({
     title: record?.title || prefill?.title || '', description: record?.description || prefill?.description || '',
-    source: record?.source || prefill?.source || '', severity: record?.severity || prefill?.severity || 2,
+    source: record?.source || prefill?.source || '', classification: record?.classification || '',
+    severity: record?.severity || prefill?.severity || 2,
     occurredAt: record ? new Date(record.occurredAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     status: record?.status || 'OPEN', epiId: record?.epiId || prefill?.epiId || null, epcId: record?.epcId || prefill?.epcId || null,
-    riskId: record?.riskId || '',
+    riskId: record?.riskId || '', workUnitId: record?.workUnitId || '', declarantId: record?.declarantId || '', responsibleId: record?.responsibleId || '',
+    gravite: record?.gravite ?? '', probabilite: record?.probabilite ?? '', etendue: record?.etendue ?? '',
+    dueDate: record?.dueDate ? new Date(record.dueDate).toISOString().slice(0, 10) : '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -981,7 +986,12 @@ function NonConformityForm({ record, prefill, onClose, onCreated }) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { ...form, severity: Number(form.severity), occurredAt: new Date(form.occurredAt).toISOString(), riskId: form.riskId || null };
+      const payload = {
+        ...form, severity: Number(form.severity), occurredAt: new Date(form.occurredAt).toISOString(), riskId: form.riskId || null,
+        workUnitId: form.workUnitId || null, declarantId: form.declarantId || null, responsibleId: form.responsibleId || null,
+        gravite: form.gravite === '' ? null : Number(form.gravite), probabilite: form.probabilite === '' ? null : Number(form.probabilite),
+        etendue: form.etendue === '' ? null : Number(form.etendue), dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
+      };
       if (editing) await api.patch(`/business/non-conformities/${record.id}`, payload);
       else await api.post('/business/non-conformities', { code: genCode('NC'), ...payload });
       onCreated(); onClose();
@@ -1003,16 +1013,42 @@ function NonConformityForm({ record, prefill, onClose, onCreated }) {
     setGeneratingRisk(false);
   }
   return (
-    <Modal title={editing ? 'Modifier la non-conformité' : 'Déclarer une non-conformité'} onClose={onClose}>
+    <Modal title={editing ? 'Modifier la non-conformité' : 'Déclarer une non-conformité'} onClose={onClose} wide>
       <form onSubmit={submit}>
         <FormField label="Titre"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Source"><input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Contrôle qualité, réclamation client..." /></FormField>
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Date"><input required type="date" value={form.occurredAt} onChange={(e) => setForm({ ...form, occurredAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-          <FormField label="Sévérité (1-5)"><select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          <FormField label="Source / origine"><input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Contrôle qualité, réclamation client..." /></FormField>
+          <FormField label="Type de NC"><input value={form.classification} onChange={(e) => setForm({ ...form, classification: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Produit, Processus, Fournisseur..." /></FormField>
         </div>
-        {editing && <FormField label="Statut"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="OPEN">OPEN</option><option value="CLOSED">CLOSED</option></select></FormField>}
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Unité de travail / zone">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Date"><input required type="date" value={form.occurredAt} onChange={(e) => setForm({ ...form, occurredAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Déclarant">
+            <select value={form.declarantId} onChange={(e) => setForm({ ...form, declarantId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Responsable du traitement">
+            <select value={form.responsibleId} onChange={(e) => setForm({ ...form, responsibleId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2 mt-1" style={{ color: C.textMuted }}>Criticité — score calculé automatiquement</p>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Gravité (1-5)"><select value={form.gravite} onChange={(e) => setForm({ ...form, gravite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          <FormField label="Probabilité (1-5)"><select value={form.probabilite} onChange={(e) => setForm({ ...form, probabilite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          <FormField label="Étendue (1-5)"><select value={form.etendue} onChange={(e) => setForm({ ...form, etendue: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+        </div>
+        {editing && record.criticiteScore != null && <p className="text-xs mb-3" style={{ color: C.textMuted }}>Score actuel : <strong style={{ color: C.text }}>{record.criticiteScore}/100</strong> ({record.criticiteNiveau})</p>}
+        <FormField label="Échéance de traitement"><input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         <FormField label="Risque lié (Registre des risques)">
           <select value={form.riskId} onChange={(e) => setForm({ ...form, riskId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
             <option value="">—</option>{(risksQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.hazard}</option>)}
@@ -7385,38 +7421,278 @@ function AuditsPage() {
   );
 }
 
+const NC_CAUSE_CATEGORIES = ['Main-d\'œuvre', 'Méthode', 'Machine', 'Matière', 'Milieu', 'Mesure', 'Management', 'Organisation'];
+const NC_CRITICITE_COLOR = (C, n) => ({ CRITIQUE: C.red, MAJEURE: C.amber, MODEREE: '#B45309', MINEURE: C.green }[n] || C.textMuted);
+
+function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/non-conformities/${nc.id}`);
+  const usersQ = useCollection('/users');
+  const [showAddContainment, setShowAddContainment] = useState(false);
+  const [containmentForm, setContainmentForm] = useState({ type: '', description: '', responsableId: '', echeance: '' });
+  const [showAddCause, setShowAddCause] = useState(false);
+  const [causeForm, setCauseForm] = useState({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false });
+  const [effForm, setEffForm] = useState({ result: '', notes: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (detailQ.loading) return <Modal title={nc.title} onClose={onClose}><LoadingPanel /></Modal>;
+  const d = detailQ.data || nc;
+
+  async function addContainment(e) {
+    e.preventDefault();
+    try {
+      await api.post('/business/nc-containment-actions', { ...containmentForm, nonConformityId: nc.id, responsableId: containmentForm.responsableId || null, echeance: containmentForm.echeance || null });
+      setContainmentForm({ type: '', description: '', responsableId: '', echeance: '' }); setShowAddContainment(false); detailQ.reload();
+    } catch (err) { setError(err.message); }
+  }
+  async function addCause(e) {
+    e.preventDefault();
+    try {
+      await api.post('/business/nc-causes', { ...causeForm, nonConformityId: nc.id });
+      setCauseForm({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false }); setShowAddCause(false); detailQ.reload(); onChanged();
+    } catch (err) { setError(err.message); }
+  }
+  async function saveEffectiveness() {
+    setBusy(true); setError(null);
+    try { await api.post(`/business/non-conformities/${nc.id}/effectiveness`, effForm); detailQ.reload(); onChanged(); }
+    catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+  async function close() {
+    setBusy(true); setError(null);
+    try { await api.post(`/business/non-conformities/${nc.id}/close`, {}); detailQ.reload(); onChanged(); }
+    catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+  async function reopen() {
+    setBusy(true);
+    try { await api.post(`/business/non-conformities/${nc.id}/reopen`, {}); detailQ.reload(); onChanged(); }
+    catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+
+  const effLabel = { EFFICACE: 'Efficace', PARTIELLEMENT_EFFICACE: 'Partiellement efficace', INEFFICACE: 'Inefficace' };
+
+  return (
+    <Modal title={d.title} onClose={onClose} wide>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs" style={{ color: C.textMuted }}>{d.code} · {new Date(d.occurredAt).toLocaleDateString('fr-FR')} · {d.workUnit?.name || 'Sans unité de travail'}</p>
+        <div className="flex gap-2">
+          {d.status === 'CLOSED'
+            ? <button onClick={reopen} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Réouvrir</button>
+            : <button onClick={close} disabled={busy || d.effectivenessResult !== 'EFFICACE'} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: d.effectivenessResult === 'EFFICACE' ? C.green : C.cardAlt, color: d.effectivenessResult === 'EFFICACE' ? '#052e1f' : C.textMuted, border: d.effectivenessResult === 'EFFICACE' ? 'none' : `1px solid ${C.border}` }} title={d.effectivenessResult !== 'EFFICACE' ? "Vérification d'efficacité 'Efficace' requise" : ''}>Clôturer</button>}
+          <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+          <p className="text-[10px]" style={{ color: C.textMuted }}>Criticité</p>
+          <p className="text-lg font-bold" style={{ color: NC_CRITICITE_COLOR(C, d.criticiteNiveau) }}>{d.criticiteScore != null ? `${d.criticiteScore}/100` : '—'}</p>
+          <p className="text-[10px]" style={{ color: NC_CRITICITE_COLOR(C, d.criticiteNiveau) }}>{d.criticiteNiveau || '—'}</p>
+        </div>
+        <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+          <p className="text-[10px]" style={{ color: C.textMuted }}>Statut</p>
+          <p className="text-sm font-bold mt-1.5" style={{ color: C.text }}><StatusChip statut={d.status} /></p>
+        </div>
+        <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+          <p className="text-[10px]" style={{ color: C.textMuted }}>Échéance</p>
+          <p className="text-sm font-bold mt-1.5" style={{ color: d.dueDate && new Date(d.dueDate) < new Date() && d.status !== 'CLOSED' ? C.red : C.text }}>{d.dueDate ? new Date(d.dueDate).toLocaleDateString('fr-FR') : '—'}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Confinement / actions immédiates ({(d.containmentActions || []).length})</p>
+        <button onClick={() => setShowAddContainment((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Action</button>
+      </div>
+      {showAddContainment && (
+        <form onSubmit={addContainment} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <FormField label="Type"><input required value={containmentForm.type} onChange={(e) => setContainmentForm({ ...containmentForm, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Blocage produit, quarantaine, tri..." /></FormField>
+          <FormField label="Description"><textarea value={containmentForm.description} onChange={(e) => setContainmentForm({ ...containmentForm, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Responsable"><select value={containmentForm.responsableId} onChange={(e) => setContainmentForm({ ...containmentForm, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}</select></FormField>
+            <FormField label="Échéance"><input type="date" value={containmentForm.echeance} onChange={(e) => setContainmentForm({ ...containmentForm, echeance: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          </div>
+          <button type="submit" className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Ajouter</button>
+        </form>
+      )}
+      {(d.containmentActions || []).length
+        ? <div className="space-y-1.5 mb-5">{d.containmentActions.map((ca) => (
+            <div key={ca.id} className="p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+              <p className="text-sm" style={{ color: C.text }}>{ca.type}{ca.description ? ` — ${ca.description}` : ''}</p>
+              <p className="text-[10px]" style={{ color: C.textMuted }}>{ca.responsable ? `${ca.responsable.firstName} ${ca.responsable.lastName} · ` : ''}{new Date(ca.date).toLocaleDateString('fr-FR')}{ca.echeance ? ` · échéance ${new Date(ca.echeance).toLocaleDateString('fr-FR')}` : ''}</p>
+            </div>
+          ))}</div>
+        : <p className="text-xs mb-5" style={{ color: C.textMuted }}>Aucune action de confinement enregistrée</p>}
+
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Analyse des causes ({(d.causes || []).length}){d.causeRacineIdentifiee && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${C.green}22`, color: C.green }}>Cause racine identifiée</span>}</p>
+        <button onClick={() => setShowAddCause((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Cause</button>
+      </div>
+      {showAddCause && (
+        <form onSubmit={addCause} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Méthode">
+              <select value={causeForm.methode} onChange={(e) => setCauseForm({ ...causeForm, methode: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="5_POURQUOI">5 Pourquoi</option><option value="ISHIKAWA">Ishikawa (5M)</option><option value="PARETO">Pareto</option><option value="ARBRE_CAUSES">Arbre des causes</option><option value="AUTRE">Autre</option>
+              </select>
+            </FormField>
+            {causeForm.methode === '5_POURQUOI'
+              ? <FormField label="Niveau"><select value={causeForm.niveau} onChange={(e) => setCauseForm({ ...causeForm, niveau: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{['POURQUOI_1', 'POURQUOI_2', 'POURQUOI_3', 'POURQUOI_4', 'POURQUOI_5'].map((n, i) => <option key={n} value={n}>Pourquoi {i + 1}</option>)}</select></FormField>
+              : <FormField label="Catégorie (5M)"><select value={causeForm.categorie} onChange={(e) => setCauseForm({ ...causeForm, categorie: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{NC_CAUSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></FormField>}
+          </div>
+          <FormField label="Description"><textarea required value={causeForm.description} onChange={(e) => setCauseForm({ ...causeForm, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+          <div className="flex items-center gap-3 mb-2">
+            <select value={causeForm.type} onChange={(e) => setCauseForm({ ...causeForm, type: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="IMMEDIATE">Cause immédiate</option><option value="CONTRIBUTIVE">Cause contributive</option><option value="PROFONDE">Cause profonde</option><option value="RACINE">Cause racine</option>
+            </select>
+            <label className="flex items-center gap-1.5 text-xs" style={{ color: C.textMuted }}><input type="checkbox" checked={causeForm.estRacine} onChange={(e) => setCauseForm({ ...causeForm, estRacine: e.target.checked })} />Marquer comme cause racine</label>
+          </div>
+          <button type="submit" className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Ajouter</button>
+        </form>
+      )}
+      {(d.causes || []).length
+        ? <div className="space-y-1.5 mb-5">{d.causes.map((cs) => (
+            <div key={cs.id} className="p-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: cs.estRacine ? `1px solid ${C.green}` : 'none' }}>
+              <p className="text-sm" style={{ color: C.text }}>{cs.description}</p>
+              <p className="text-[10px]" style={{ color: C.textMuted }}>{cs.methode}{cs.niveau ? ` · ${cs.niveau}` : ''}{cs.categorie ? ` · ${cs.categorie}` : ''} · {cs.type}{cs.estRacine ? ' · Racine' : ''}</p>
+            </div>
+          ))}</div>
+        : <p className="text-xs mb-5" style={{ color: C.textMuted }}>Aucune cause enregistrée</p>}
+
+      <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Vérification d'efficacité</p>
+      {d.effectivenessResult && <p className="text-xs mb-2" style={{ color: d.effectivenessResult === 'EFFICACE' ? C.green : d.effectivenessResult === 'INEFFICACE' ? C.red : C.amber }}>Dernier résultat : {effLabel[d.effectivenessResult]}{d.effectivenessCheckedAt ? ` (${new Date(d.effectivenessCheckedAt).toLocaleDateString('fr-FR')})` : ''}</p>}
+      <div className="flex gap-2 mb-2">
+        <select value={effForm.result} onChange={(e) => setEffForm({ ...effForm, result: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+          <option value="">Sélectionner un résultat</option><option value="EFFICACE">Efficace</option><option value="PARTIELLEMENT_EFFICACE">Partiellement efficace</option><option value="INEFFICACE">Inefficace</option>
+        </select>
+        <input value={effForm.notes} onChange={(e) => setEffForm({ ...effForm, notes: e.target.value })} placeholder="Notes (optionnel)" className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+      </div>
+      <button onClick={saveEffectiveness} disabled={busy || !effForm.result} className="px-4 py-2 rounded-lg text-xs font-medium mb-2" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy || !effForm.result ? 0.6 : 1 }}>Enregistrer la vérification</button>
+      {d.effectivenessResult === 'INEFFICACE' && <p className="text-xs mb-3" style={{ color: C.red }}>Action inefficace : engager une nouvelle analyse des causes ou une nouvelle action corrective avant de pouvoir clôturer.</p>}
+
+      {error && <p className="text-xs mt-2" style={{ color: C.red }}>{error}</p>}
+    </Modal>
+  );
+}
+
 function NonConformitesPage() {
   const C = useTheme();
   const ncs = useCollection('/business/non-conformities');
+  const dashboardQ = useCollection('/business/nc-dashboard');
+  const settingsQ = useCollection('/business/nc-settings');
   const [showForm, setShowForm] = useState(false);
-  const [selected, setSelected] = useState(null);
-  if (ncs.loading) return <LoadingPanel />;
+  const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  const [tab, setTab] = useState('apercu');
+  const [settingsForm, setSettingsForm] = useState(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+  useEffect(() => { if (!settingsForm && settingsQ.data) setSettingsForm(settingsQ.data); }, [settingsQ.data]);
+  if (ncs.loading || dashboardQ.loading) return <LoadingPanel />;
   if (ncs.error) return <ErrorPanel message={ncs.error} onRetry={ncs.reload} />;
   const list = ncs.data || [];
+  const dash = dashboardQ.data || {};
   const bySource = groupCount(list, (n) => n.source).map((s) => ({ cause: s.name, occurrences: s.value }));
-  const ouvertes = list.filter((n) => n.status !== 'CLOSED').length;
   const sorted = [...list].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt));
+  const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
+  const reloadAll = () => { ncs.reload(); dashboardQ.reload(); };
+  const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MODEREE: '#B45309', MINEURE: C.green };
+  async function saveSettings() {
+    setSavingSettings(true);
+    try { await api.patch('/business/nc-settings', { seuilModeree: Number(settingsForm.seuilModeree), seuilMajeure: Number(settingsForm.seuilMajeure), seuilCritique: Number(settingsForm.seuilCritique), delaiStandardJours: Number(settingsForm.delaiStandardJours) }); settingsQ.reload(); }
+    catch (err) { alert(err.message); }
+    setSavingSettings(false);
+  }
 
   return (
     <div className="space-y-6">
-      {(showForm || selected) && <NonConformityForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={ncs.reload} />}
-      <div className="flex items-center justify-between">
-        <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
+      {(showForm || editing) && <NonConformityForm record={editing} onClose={() => { setShowForm(false); setEditing(null); }} onCreated={reloadAll} />}
+      {viewing && <NcDetailModal nc={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
+
+      <div className="flex flex-wrap gap-2">
+        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <KpiCard label="Non-conformités" value={list.length} objectif={`${ouvertes} ouverte(s)`} color={C.red} icon={FileWarning} />
-        <KpiCard label="Sources identifiées" value={bySource.length} color={C.blue} icon={ClipboardList} />
-      </div>
-      <Panel title="Diagramme de Pareto — par source de non-conformité" subtitle="Loi des 80/20 : occurrences (barres) et % cumulé (courbe)">
-        {bySource.length ? <ParetoChart causes={bySource} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
-      </Panel>
-      <Panel title="Registre des non-conformités">
-        {list.length
-          ? <DataTable columns={['Titre', 'Source', 'Sévérité', 'Date', 'Statut']} rows={sorted.map((n) => [n.title, n.source || '—', n.severity, new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={n.status} />])}
-              onRowClick={(i) => setSelected(sorted[i])} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée pour le moment</p>}
-      </Panel>
+
+      {tab === 'apercu' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="Total" value={dv(dash.total)} color={C.blue} icon={FileWarning} />
+            <KpiCard label="Nouvelles (7 jours)" value={dv(dash.nouvelles)} color={C.blue} icon={FileWarning} />
+            <KpiCard label="Ouvertes" value={dv(dash.ouvertes)} color={C.amber} icon={FileWarning} />
+            <KpiCard label="Clôturées" value={dv(dash.cloturees)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="Réouvertes" value={dv(dash.reouvertes)} color={dash.reouvertes > 0 ? C.amber : C.green} icon={RefreshCw} />
+            <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
+            <KpiCard label="Majeures" value={dv(dash.majeures)} color={C.amber} icon={AlertTriangle} />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="Taux de clôture" value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label="Clôture dans les délais" value={dv(dash.tauxClotureDansLesDelais, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label="Taux en retard" value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
+            <KpiCard label="Délai moyen de traitement (j)" value={dv(dash.delaiMoyenTraitement)} color={C.blue} icon={Activity} />
+            <KpiCard label="Âge moyen des NC ouvertes (j)" value={dv(dash.ageMoyenOuvertes)} color={C.blue} icon={Activity} />
+            <KpiCard label="Actions en retard" value={dv(dash.actionsEnRetard)} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label="Taux d'efficacité des actions" value={dv(dash.tauxEfficaciteActions, '%')} color={C.green} icon={ShieldCheck} />
+          </div>
+          <Panel title="Diagramme de Pareto — par source de non-conformité" subtitle="Loi des 80/20 : occurrences (barres) et % cumulé (courbe)">
+            {bySource.length ? <ParetoChart causes={bySource} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'registre' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
+          </div>
+          <Panel title="Registre des non-conformités">
+            {sorted.length
+              ? <DataTable columns={['Titre', 'Source', 'Criticité', 'Responsable', 'Date', 'Statut']}
+                  rows={sorted.map((n) => [
+                    n.title, n.source || '—',
+                    n.criticiteNiveau ? <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600 }}>{n.criticiteScore} ({n.criticiteNiveau})</span> : '—',
+                    n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '—',
+                    new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={n.status} />,
+                  ])}
+                  onRowClick={(i) => setViewing(sorted[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'parametrage' && (
+        <div className="space-y-6">
+          <Panel title="Seuils de criticité et délai standard">
+            {settingsQ.loading
+              ? <LoadingPanel />
+              : (() => {
+                  const s = settingsForm || settingsQ.data;
+                  if (!s) return null;
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField label="Seuil Modérée (score ≥)"><input type="number" value={s.seuilModeree} onChange={(e) => setSettingsForm({ ...s, seuilModeree: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                        <FormField label="Seuil Majeure (score ≥)"><input type="number" value={s.seuilMajeure} onChange={(e) => setSettingsForm({ ...s, seuilMajeure: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField label="Seuil Critique (score ≥)"><input type="number" value={s.seuilCritique} onChange={(e) => setSettingsForm({ ...s, seuilCritique: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                        <FormField label="Délai standard de traitement (jours)"><input type="number" value={s.delaiStandardJours} onChange={(e) => setSettingsForm({ ...s, delaiStandardJours: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                      </div>
+                      <button onClick={saveSettings} disabled={savingSettings} className="px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{savingSettings ? '…' : 'Enregistrer'}</button>
+                    </div>
+                  );
+                })()}
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }
