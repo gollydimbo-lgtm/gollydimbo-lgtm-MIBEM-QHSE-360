@@ -7433,6 +7433,8 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
   const [showAddCause, setShowAddCause] = useState(false);
   const [causeForm, setCauseForm] = useState({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false });
   const [effForm, setEffForm] = useState({ result: '', notes: '' });
+  const [showAddCost, setShowAddCost] = useState(false);
+  const [costForm, setCostForm] = useState({ type: '', montant: '', description: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -7451,6 +7453,13 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
     try {
       await api.post('/business/nc-causes', { ...causeForm, nonConformityId: nc.id });
       setCauseForm({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false }); setShowAddCause(false); detailQ.reload(); onChanged();
+    } catch (err) { setError(err.message); }
+  }
+  async function addCost(e) {
+    e.preventDefault();
+    try {
+      await api.post('/business/nc-costs', { ...costForm, montant: Number(costForm.montant) || 0, nonConformityId: nc.id });
+      setCostForm({ type: '', montant: '', description: '' }); setShowAddCost(false); detailQ.reload(); onChanged();
     } catch (err) { setError(err.message); }
   }
   async function saveEffectiveness() {
@@ -7561,6 +7570,29 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
           ))}</div>
         : <p className="text-xs mb-5" style={{ color: C.textMuted }}>Aucune cause enregistrée</p>}
 
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Coût de non-qualité {(d.costs || []).length > 0 && <span style={{ color: C.textMuted, fontWeight: 400 }}>({(d.costs || []).reduce((s, c) => s + c.montant, 0).toLocaleString('fr-FR')})</span>}</p>
+        <button onClick={() => setShowAddCost((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Coût</button>
+      </div>
+      {showAddCost && (
+        <form onSubmit={addCost} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Type"><input required value={costForm.type} onChange={(e) => setCostForm({ ...costForm, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Rebuts, retouches, transport..." /></FormField>
+            <FormField label="Montant"><input required type="number" step="0.01" value={costForm.montant} onChange={(e) => setCostForm({ ...costForm, montant: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          </div>
+          <FormField label="Description (optionnel)"><input value={costForm.description} onChange={(e) => setCostForm({ ...costForm, description: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <button type="submit" className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Ajouter</button>
+        </form>
+      )}
+      {(d.costs || []).length
+        ? <div className="space-y-1.5 mb-5">{d.costs.map((c) => (
+            <div key={c.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+              <span className="text-sm" style={{ color: C.text }}>{c.type}{c.description ? ` — ${c.description}` : ''}</span>
+              <span className="text-sm font-semibold" style={{ color: C.text }}>{c.montant.toLocaleString('fr-FR')}</span>
+            </div>
+          ))}</div>
+        : <p className="text-xs mb-5" style={{ color: C.textMuted }}>Aucun coût enregistré</p>}
+
       <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Vérification d'efficacité</p>
       {d.effectivenessResult && <p className="text-xs mb-2" style={{ color: d.effectivenessResult === 'EFFICACE' ? C.green : d.effectivenessResult === 'INEFFICACE' ? C.red : C.amber }}>Dernier résultat : {effLabel[d.effectivenessResult]}{d.effectivenessCheckedAt ? ` (${new Date(d.effectivenessCheckedAt).toLocaleDateString('fr-FR')})` : ''}</p>}
       <div className="flex gap-2 mb-2">
@@ -7582,6 +7614,11 @@ function NonConformitesPage() {
   const ncs = useCollection('/business/non-conformities');
   const dashboardQ = useCollection('/business/nc-dashboard');
   const settingsQ = useCollection('/business/nc-settings');
+  const alertesQ = useCollection('/business/nc-alertes');
+  const recurrentesQ = useCollection('/business/nc-recurrentes');
+  const trendsQ = useCollection('/business/nc-trends');
+  const [synthese, setSynthese] = useState(null);
+  const [syntheseLoading, setSyntheseLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -7598,6 +7635,24 @@ function NonConformitesPage() {
   const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
   const reloadAll = () => { ncs.reload(); dashboardQ.reload(); };
   const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MODEREE: '#B45309', MINEURE: C.green };
+  const alertes = alertesQ.data || [];
+  const recurrentes = recurrentesQ.data || [];
+  const trends = trendsQ.data || [];
+  const alerteColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber, INFORMATION: C.blue };
+  async function generateSynthese() {
+    setSyntheseLoading(true);
+    try { setSynthese(await api.get('/business/nc-synthese-direction')); }
+    catch (err) { alert(err.message); }
+    setSyntheseLoading(false);
+  }
+  function exportNcExcel() {
+    downloadWorkbook([
+      ['Non-conformités', [
+        ['Code', 'Titre', 'Source', 'Type', 'Criticité', 'Score', 'Unité de travail', 'Responsable', 'Date', 'Échéance', 'Statut', 'Efficacité'],
+        ...list.map((n) => [n.code, n.title, n.source || '', n.classification || '', n.criticiteNiveau || '', n.criticiteScore ?? '', n.workUnit?.name || '', n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '', new Date(n.occurredAt).toLocaleDateString('fr-FR'), n.dueDate ? new Date(n.dueDate).toLocaleDateString('fr-FR') : '', n.status, n.effectivenessResult || '']),
+      ]],
+    ], `Non-conformites-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
   async function saveSettings() {
     setSavingSettings(true);
     try { await api.patch('/business/nc-settings', { seuilModeree: Number(settingsForm.seuilModeree), seuilMajeure: Number(settingsForm.seuilMajeure), seuilCritique: Number(settingsForm.seuilCritique), delaiStandardJours: Number(settingsForm.delaiStandardJours) }); settingsQ.reload(); }
@@ -7611,7 +7666,7 @@ function NonConformitesPage() {
       {viewing && <NcDetailModal nc={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre'], ['recurrence', 'Récurrence'], ['analyses', 'Analyses & Export'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -7640,9 +7695,22 @@ function NonConformitesPage() {
             <KpiCard label="Âge moyen des NC ouvertes (j)" value={dv(dash.ageMoyenOuvertes)} color={C.blue} icon={Activity} />
             <KpiCard label="Actions en retard" value={dv(dash.actionsEnRetard)} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
             <KpiCard label="Taux d'efficacité des actions" value={dv(dash.tauxEfficaciteActions, '%')} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="NC récurrentes" value={dv(dash.recurrentes)} color={dash.recurrentes > 0 ? C.amber : C.green} icon={RefreshCw} />
+            <KpiCard label="Coût total de non-qualité" value={dv(dash.coutTotalNonQualite)} color={C.red} icon={FileWarning} />
+            <KpiCard label="Coût moyen par NC" value={dv(dash.coutMoyenParNc)} color={C.amber} icon={FileWarning} />
           </div>
           <Panel title="Diagramme de Pareto — par source de non-conformité" subtitle="Loi des 80/20 : occurrences (barres) et % cumulé (courbe)">
             {bySource.length ? <ParetoChart causes={bySource} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
+          </Panel>
+          <Panel title="Alertes" subtitle={`${alertes.length} point(s) nécessitant attention`}>
+            {alertes.length
+              ? <div className="space-y-2 max-h-64 overflow-y-auto">{alertes.map((a, i) => (
+                  <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                    <span className="text-sm" style={{ color: C.text }}>{a.label}</span>
+                    <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${alerteColor[a.niveau]}22`, color: alerteColor[a.niveau] }}>{a.niveau}</span>
+                  </div>
+                ))}</div>
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
           </Panel>
         </div>
       )}
@@ -7664,6 +7732,67 @@ function NonConformitesPage() {
                   ])}
                   onRowClick={(i) => setViewing(sorted[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'recurrence' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <Panel title="Non-conformités récurrentes" subtitle="Écarts identiques constatés au moins deux fois">
+            {recurrentes.length
+              ? <div className="space-y-2">
+                  {recurrentes.map((r, i) => (
+                    <div key={i} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm" style={{ color: C.text }}>{r.titre}</p>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{r.occurrences}× constatée</span>
+                      </div>
+                      <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>{r.processus} · dernière occurrence le {new Date(r.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                    </div>
+                  ))}
+                  <p className="text-xs pt-1" style={{ color: C.textMuted }}>Envisager une action corrective systémique pour ces écarts récurrents.</p>
+                </div>
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité récurrente détectée</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'analyses' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <Panel title="Évolution sur 12 mois">
+            {trends.length
+              ? <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={trends}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.textMuted }} />
+                    <YAxis tick={{ fontSize: 11, fill: C.textMuted }} />
+                    <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
+                    <Line type="monotone" dataKey="nouvelles" name="Nouvelles NC" stroke={C.blue} strokeWidth={2} />
+                    <Line type="monotone" dataKey="critiques" name="Dont critiques" stroke={C.red} strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas encore assez de données</p>}
+          </Panel>
+          <Panel title="Export et synthèse Direction" right={<div className="flex gap-2"><button onClick={exportNcExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Exporter Excel</button>{synthese && <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button>}<button onClick={generateSynthese} disabled={syntheseLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{syntheseLoading ? '…' : 'Générer synthèse'}</button></div>}>
+            {synthese
+              ? <div className="space-y-3">
+                  <p className="text-xs" style={{ color: C.textMuted }}>Générée le {new Date(synthese.genereLe).toLocaleDateString('fr-FR')}</p>
+                  <DataTable columns={['Indicateur', 'Valeur']} rows={[
+                    ['Total NC', synthese.dashboard.total], ['NC critiques', synthese.dashboard.critiques], ['NC majeures', synthese.dashboard.majeures],
+                    ['Taux de clôture', synthese.dashboard.tauxCloture != null ? `${synthese.dashboard.tauxCloture}%` : '—'],
+                    ['Taux de récurrence', synthese.dashboard.total ? `${Math.round((synthese.dashboard.recurrentes / synthese.dashboard.total) * 1000) / 10}%` : '—'],
+                    ['Actions en retard', synthese.dashboard.actionsEnRetard], ['Coût total de non-qualité', synthese.dashboard.coutTotalNonQualite],
+                  ]} />
+                  <p className="text-xs font-semibold" style={{ color: C.text }}>Processus les plus problématiques</p>
+                  <DataTable columns={['Processus', 'Nombre de NC']} rows={synthese.processusLesPlusProblematiques.map((p) => [p.processus, p.nombre])} />
+                  {synthese.principalesRecurrences.length > 0 && <>
+                    <p className="text-xs font-semibold" style={{ color: C.text }}>Principales récurrences</p>
+                    <DataTable columns={['Titre', 'Occurrences']} rows={synthese.principalesRecurrences.map((r) => [r.titre, r.occurrences])} />
+                  </>}
+                </div>
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Clique sur "Générer synthèse" pour produire le rapport Direction</p>}
           </Panel>
         </div>
       )}
