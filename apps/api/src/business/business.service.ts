@@ -500,6 +500,85 @@ import { writeAudit } from '../common/audit-log.helper';
    scoreMoyen,
   };
  }
+
+ // === AUDITS — Phase 4 : analyses, tendances, comparaisons, synthèse =====
+
+ // Évolution mensuelle sur 12 mois (point 23, graphique 1 et 4).
+ async auditTrends(){
+  const depuis=new Date(); depuis.setMonth(depuis.getMonth()-11); depuis.setDate(1); depuis.setHours(0,0,0,0);
+  const audits=await this.db.qhseAudit.findMany({where:{auditDate:{gte:depuis}},select:{auditDate:true,tauxConformite:true,status:true}});
+  const mois:{cle:string,label:string,realises:number,tauxConformiteMoyen:number|null}[]=[];
+  for(let i=11;i>=0;i--){
+   const d=new Date(); d.setMonth(d.getMonth()-i); d.setDate(1);
+   const cle=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+   const label=d.toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
+   const duMois=audits.filter(a=>{const ad=new Date(a.auditDate);return ad.getFullYear()===d.getFullYear()&&ad.getMonth()===d.getMonth();});
+   const taux=duMois.map(a=>a.tauxConformite).filter((t):t is number=>t!=null);
+   mois.push({cle,label,realises:duMois.length,tauxConformiteMoyen:taux.length?Math.round((taux.reduce((s,v)=>s+v,0)/taux.length)*10)/10:null});
+  }
+  return mois;
+ }
+
+ // Détection des non-conformités récurrentes (point 25) — regroupe les
+ // constats NC par processus et cause racine approximative (classification
+ // + description), et ne retient que ce qui s'est répété au moins deux fois.
+ async auditNcRecurrentes(){
+  const findings=await this.db.auditFinding.findMany({
+   where:{classification:{in:['NC_MINEURE','NC_MAJEURE']}},
+   include:{audit:{select:{title:true,auditDate:true,processusId:true,processus:{select:{nom:true}}}}},
+   orderBy:{createdAt:'desc'},
+  });
+  const groupes:Record<string,any[]>={};
+  for(const f of findings){
+   const cle=`${f.audit.processusId||'sans-processus'}::${(f.description||'').trim().toLowerCase().slice(0,60)}`;
+   (groupes[cle]=groupes[cle]||[]).push(f);
+  }
+  return Object.values(groupes).filter(g=>g.length>=2).map(g=>({
+   description:g[0].description, processus:g[0].audit.processus?.nom||'Sans processus',
+   occurrences:g.length, derniereOccurrence:g[0].audit.auditDate,
+   historique:g.map(f=>({audit:f.audit.title,date:f.audit.auditDate,statut:f.status})),
+  })).sort((a,b)=>b.occurrences-a.occurrences);
+ }
+
+ // Compare deux périodes (point 34) sur les mêmes indicateurs que le
+ // tableau de bord, sans dupliquer sa logique de calcul.
+ async auditComparaison(debut1:string,fin1:string,debut2:string,fin2:string){
+  const kpiPeriode=async(debut:string,fin:string)=>{
+   const audits=await this.db.qhseAudit.findMany({where:{auditDate:{gte:new Date(debut),lte:new Date(fin)}},select:{tauxConformite:true,score:true,status:true}});
+   const findings=await this.db.auditFinding.findMany({where:{audit:{auditDate:{gte:new Date(debut),lte:new Date(fin)}}},select:{classification:true}});
+   const taux=audits.map(a=>a.tauxConformite).filter((t):t is number=>t!=null);
+   const scores=audits.map(a=>a.score).filter((s):s is number=>s!=null);
+   return {
+    nombreAudits:audits.length,
+    tauxConformiteMoyen:taux.length?Math.round((taux.reduce((s,v)=>s+v,0)/taux.length)*10)/10:null,
+    scoreMoyen:scores.length?Math.round((scores.reduce((s,v)=>s+v,0)/scores.length)*10)/10:null,
+    ncMajeures:findings.filter(f=>f.classification==='NC_MAJEURE').length,
+    ncMineures:findings.filter(f=>f.classification==='NC_MINEURE').length,
+   };
+  };
+  const [periode1,periode2]=await Promise.all([kpiPeriode(debut1,fin1),kpiPeriode(debut2,fin2)]);
+  return {periode1,periode2};
+ }
+
+ // Synthèse Direction (point 35) — un instantané prêt à être lu ou exporté,
+ // recomposé à partir des mêmes données que le tableau de bord et les
+ // tendances, jamais stocké séparément (donc jamais périmé).
+ async auditSyntheseDirection(){
+  const [dashboard,trends,ncRecurrentes]=await Promise.all([this.auditDashboard(),this.auditTrends(),this.auditNcRecurrentes()]);
+  const parProcessus=await this.db.qhseAudit.groupBy({by:['processusId'],_avg:{tauxConformite:true},where:{processusId:{not:null}}});
+  const processusDetails=await this.db.processus.findMany({where:{id:{in:parProcessus.map(p=>p.processusId).filter((id):id is string=>!!id)}},select:{id:true,nom:true}});
+  const performance=parProcessus.map(p=>({
+   processus:processusDetails.find(d=>d.id===p.processusId)?.nom||'Inconnu',
+   tauxConformiteMoyen:p._avg.tauxConformite!=null?Math.round(p._avg.tauxConformite*10)/10:null,
+  })).sort((a,b)=>(b.tauxConformiteMoyen||0)-(a.tauxConformiteMoyen||0));
+  return {
+   dashboard, tendanceRecente:trends.slice(-3),
+   processusLesPlusPerformants:performance.slice(0,5),
+   processusLesPlusProblematiques:[...performance].reverse().slice(0,5),
+   principalesCausesRecurrentes:ncRecurrentes.slice(0,5),
+   genereLe:new Date(),
+  };
+ }
  envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
 
  // Aspects & impacts environnementaux — la criticité et le caractère
