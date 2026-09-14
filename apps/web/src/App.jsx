@@ -6331,6 +6331,9 @@ function RisquesPage() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showWorkUnitForm, setShowWorkUnitForm] = useState(false);
   const [tab, setTab] = useState('apercu');
+  const [importRows, setImportRows] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
   if (risks.loading || dashboardQ.loading) return <LoadingPanel />;
   if (risks.error) return <ErrorPanel message={risks.error} onRetry={risks.reload} />;
   const list = risks.data || [];
@@ -6343,6 +6346,54 @@ function RisquesPage() {
   const alerteColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber };
   const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
   const reloadAll = () => { risks.reload(); dashboardQ.reload(); top10Q.reload(); alertesQ.reload(); };
+  const normalize = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const pick = (row, keys) => { const e = Object.entries(row); for (const k of keys) { const f = e.find(([kk]) => normalize(kk).includes(k)); if (f && f[1] !== '') return f[1]; } return ''; };
+  function exportRisquesExcel() {
+    downloadWorkbook([
+      ['Risques', [
+        ['Code', 'Danger', 'Catégorie', 'Unité de travail', 'Situation dangereuse', 'Événement redouté', 'Dommage potentiel', 'Personnes exposées', 'Méthode', 'Gravité', 'Probabilité', 'Exposition', 'Score brut', 'Niveau', 'Gravité résiduelle', 'Probabilité résiduelle', 'Score résiduel', 'Niveau résiduel', 'Statut de maîtrise', 'Prochaine réévaluation'],
+        ...list.map((r) => [r.code, r.hazard, r.category?.label || '', r.workUnit?.name || '', r.hazardousSituation || '', r.hazardousEvent || '', r.potentialDamage || '', r.exposedPersons || '', r.method, r.severity, r.probability, r.exposure, r.grossScore ?? r.score, r.grossLevel || '', r.residualSeverity ?? '', r.residualProbability ?? '', r.residualScore ?? '', r.residualLevel || '', r.controlStatus, r.nextReviewDate ? new Date(r.nextReviewDate).toLocaleDateString('fr-FR') : '']),
+      ]],
+    ], `Registre-des-risques-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+  async function handleImportFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImportResult(null);
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    setImportRows(XLSX.utils.sheet_to_json(sheet, { defval: '' }));
+  }
+  const importCandidates = importRows.map((row) => {
+    const hazard = pick(row, ['danger', 'hazard']);
+    const activity = pick(row, ['activite', 'activity']);
+    const severity = Number(pick(row, ['gravite', 'severity'])) || null;
+    const probability = Number(pick(row, ['probabilite', 'probability'])) || null;
+    const measures = pick(row, ['mesure', 'measure']);
+    const categorieLabel = pick(row, ['categorie', 'category']);
+    const workUnitName = pick(row, ['unite de travail', 'unite', 'workunit']);
+    const category = categories.find((cc) => normalize(cc.label) === normalize(categorieLabel));
+    const workUnit = workUnits.find((w) => normalize(w.name) === normalize(workUnitName));
+    const errors = [];
+    if (!hazard) errors.push('Danger manquant');
+    if (!severity || severity < 1 || severity > 5) errors.push('Gravité invalide (1-5)');
+    if (!probability || probability < 1 || probability > 5) errors.push('Probabilité invalide (1-5)');
+    return { hazard, activity, severity, probability, measures, categoryId: category?.id || null, workUnitId: workUnit?.id || null, categorieLabel, workUnitName, errors };
+  });
+  async function runImport() {
+    setImporting(true);
+    let ok = 0, ko = 0;
+    for (const row of importCandidates.filter((r) => r.errors.length === 0)) {
+      try { await api.post('/business/risks', { code: genCode('RISK'), status: 'ACTIVE', hazard: row.hazard, activity: row.activity || null, severity: row.severity, probability: row.probability, measures: row.measures || null, categoryId: row.categoryId, workUnitId: row.workUnitId }); ok++; }
+      catch { ko++; }
+    }
+    setImportResult({ ok, ko });
+    setImportRows([]);
+    setImporting(false);
+    reloadAll();
+  }
+  const currentUser = getStoredUser();
   // Hiérarchisation (point 12) — un risque a une action en retard s'il porte
   // au moins une action ouverte dont l'échéance est dépassée.
   const hasActionEnRetard = (r) => (r.actions || []).some((a) => a.dueDate && new Date(a.dueDate) < new Date() && a.status !== 'CLOSED');
@@ -6361,7 +6412,7 @@ function RisquesPage() {
       {showWorkUnitForm && <WorkUnitForm onClose={() => setShowWorkUnitForm(false)} onCreated={workUnitsQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre complet'], ['hierarchisation', 'Hiérarchisation'], ['cartographie', 'Cartographie'], ['top10', 'Top 10'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre complet'], ['hierarchisation', 'Hiérarchisation'], ['cartographie', 'Cartographie'], ['top10', 'Top 10'], ['rapport', 'Rapport & Export'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -6464,6 +6515,57 @@ function RisquesPage() {
           </Panel>
           <Panel title="Pareto des risques (par score brut)">
             {list.length ? <ParetoChart causes={list.map((r) => ({ cause: r.hazard, occurrences: r.grossScore ?? r.score ?? 0 }))} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'rapport' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <Panel title="Rapport QHSE imprimable" right={<div className="flex gap-2"><button onClick={exportRisquesExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Exporter Excel</button><button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button></div>}>
+            <div className="space-y-4">
+              <div className="text-center border-b pb-3" style={{ borderColor: C.border }}>
+                <h2 className="text-lg font-bold" style={{ color: C.text }}>REGISTRE DES RISQUES — RAPPORT QHSE</h2>
+                <p className="text-xs" style={{ color: C.textMuted }}>Généré le {new Date().toLocaleDateString('fr-FR')} par {currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'un utilisateur du système'}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div><p className="text-xl font-bold" style={{ color: C.text }}>{dash.total ?? list.length}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Risques recensés</p></div>
+                <div><p className="text-xl font-bold" style={{ color: C.red }}>{dash.critiques ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Critiques</p></div>
+                <div><p className="text-xl font-bold" style={{ color: C.amber }}>{dash.eleves ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Élevés</p></div>
+                <div><p className="text-xl font-bold" style={{ color: dash.nonMaitrises > 0 ? C.red : C.green }}>{dash.nonMaitrises ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Non maîtrisés</p></div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>Matrice de criticité</p>
+                {list.length ? <RiskMatrix5x5 risques={list.map((r) => ({ gravite: r.severity, probabilite: r.probability }))} /> : <p className="text-xs" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+              </div>
+              <div>
+                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>Risques critiques et élevés</p>
+                {list.filter((r) => ['CRITIQUE', 'ELEVE'].includes(r.grossLevel)).length
+                  ? <DataTable columns={['Risque', 'Unité de travail', 'Score', 'Actions ouvertes']} rows={list.filter((r) => ['CRITIQUE', 'ELEVE'].includes(r.grossLevel)).sort((a, b) => b.grossScore - a.grossScore).map((r) => [r.hazard, r.workUnit?.name || '—', r.grossScore, (r.actions || []).filter((a) => a.status !== 'CLOSED').length])} />
+                  : <p className="text-xs" style={{ color: C.textMuted }}>Aucun risque critique ou élevé</p>}
+              </div>
+              <div>
+                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>Statistiques</p>
+                <DataTable columns={['Indicateur', 'Valeur']} rows={[
+                  ['Taux de maîtrise', dv(dash.tauxMaitrise, '%')], ['Taux de mise à jour du registre', dv(dash.tauxMiseAJour, '%')],
+                  ['Taux de clôture des actions', dv(dash.tauxClotureActions, '%')], ['Actions en retard', dv(dash.actionsEnRetard)],
+                  ['Risques à réévaluer', dv(dash.aReevaluer)], ['Nouveaux risques (30 derniers jours)', dv(dash.nouveauxDepuis30Jours)],
+                ]} />
+              </div>
+            </div>
+          </Panel>
+          <Panel title="Import de risques (Excel / CSV)">
+            <p className="text-xs mb-3" style={{ color: C.textMuted }}>Colonnes reconnues automatiquement : Danger, Activité, Catégorie, Unité de travail, Gravité, Probabilité, Mesures. La catégorie et l'unité de travail sont reliées si leur nom correspond exactement à une entrée existante, sinon laissées vides.</p>
+            <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImportFile} className="text-xs mb-3" style={{ color: C.text }} />
+            {importRows.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs" style={{ color: C.textMuted }}>{importRows.length} ligne(s) détectée(s) — {importCandidates.filter((r) => r.errors.length === 0).length} valide(s), {importCandidates.filter((r) => r.errors.length > 0).length} en erreur.</p>
+                <DataTable columns={['Danger', 'Catégorie', 'Unité de travail', 'Gravité', 'Probabilité', 'Statut']}
+                  rows={importCandidates.slice(0, 15).map((r) => [r.hazard || '—', r.categorieLabel || '—', r.workUnitName || '—', r.severity ?? '—', r.probability ?? '—', r.errors.length ? <span style={{ color: C.red }}>{r.errors.join(', ')}</span> : <span style={{ color: C.green }}>Valide</span>])} />
+                <button onClick={runImport} disabled={importing || !importCandidates.some((r) => r.errors.length === 0)} className="px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: importing ? 0.7 : 1 }}>{importing ? 'Import en cours…' : `Importer ${importCandidates.filter((r) => r.errors.length === 0).length} risque(s)`}</button>
+              </div>
+            )}
+            {importResult && <p className="text-xs mt-3" style={{ color: importResult.ko > 0 ? C.amber : C.green }}>{importResult.ok} risque(s) importé(s){importResult.ko > 0 ? `, ${importResult.ko} échec(s)` : ''}.</p>}
           </Panel>
         </div>
       )}
