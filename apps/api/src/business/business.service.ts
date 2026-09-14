@@ -245,15 +245,22 @@ import { writeAudit } from '../common/audit-log.helper';
  }
  haccpList(){return this.db.haccpRecord.findMany({orderBy:{recordDate:'desc'}})} haccpCreate(b:any){return this.db.haccpRecord.create({data:b})} haccpUpdate(id:string,b:any){return this.db.haccpRecord.update({where:{id},data:b})} haccpDelete(id:string){return this.db.haccpRecord.delete({where:{id}})}
  auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})}
- auditGet(id:string){return this.db.qhseAudit.findUnique({where:{id},include:{auditor:true,responsableAudite:true,processus:true,fournisseur:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true,risk:true,actions:true}},programs:true}})}
+ auditGet(id:string){return this.db.qhseAudit.findUnique({where:{id},include:{auditor:true,responsableAudite:true,processus:true,fournisseur:true,type:true,referential:true,workUnit:true,checklist:{include:{items:{orderBy:{order:'asc'}}}},responses:true,auditFindings:{include:{nonConformity:true,risk:true,actions:true,responsable:true,checklistItem:true}},programs:true}})}
  auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
 
- auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{auditId,description:b.description,classification:b.classification,criticite:b.criticite,critical:!!b.critical}})}
+ auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{
+  auditId,description:b.description,classification:b.classification,criticite:b.criticite,critical:!!b.critical,
+  checklistItemId:b.checklistItemId||null,preuveObjective:b.preuveObjective||null,zone:b.zone||null,
+  responsableId:b.responsableId||null,delai:b.delai||null,
+ }})}
  // La date de clôture se fixe automatiquement au moment où le statut passe
  // à CLOSED (et se libère si le constat est rouvert) — jamais saisie à la
  // main, pour que le délai moyen de clôture reste fiable.
  auditFindingUpdate(id:string,b:any){
-  const data:any={description:b.description,classification:b.classification,criticite:b.criticite,critical:b.critical,status:b.status};
+  const data:any={
+   description:b.description,classification:b.classification,criticite:b.criticite,critical:b.critical,status:b.status,
+   preuveObjective:b.preuveObjective,zone:b.zone,responsableId:b.responsableId,delai:b.delai,
+  };
   if(b.status==='CLOSED') data.closedAt=new Date();
   else if(b.status) data.closedAt=null;
   return this.db.auditFinding.update({where:{id},data});
@@ -269,7 +276,68 @@ import { writeAudit } from '../common/audit-log.helper';
    title:b?.title||`Traiter le constat — ${finding.audit.title}`,
    description:b?.description||finding.description,
    priority:finding.critical?1:2, processusId:finding.audit.processusId,
-   auditFindingId:finding.id, responsibleId:b?.responsibleId||null, dueDate:b?.dueDate||null,
+   auditFindingId:finding.id, responsibleId:b?.responsibleId||finding.responsableId||null, dueDate:b?.dueDate||finding.delai||null,
+  }});
+ }
+
+ // === AUDITS — Phase 2 : check-lists dynamiques et moteur de notation ====
+
+ auditChecklistList(){return this.db.auditChecklist.findMany({include:{items:{orderBy:{order:'asc'}},referential:true,type:true},orderBy:{title:'asc'}})}
+ auditChecklistCreate(b:any){return this.db.auditChecklist.create({data:b})}
+ auditChecklistUpdate(id:string,b:any){return this.db.auditChecklist.update({where:{id},data:b})}
+ auditChecklistDelete(id:string){return this.db.auditChecklist.delete({where:{id}})}
+ auditChecklistItemCreate(b:any){return this.db.auditChecklistItem.create({data:b})}
+ auditChecklistItemUpdate(id:string,b:any){return this.db.auditChecklistItem.update({where:{id},data:b})}
+ auditChecklistItemDelete(id:string){return this.db.auditChecklistItem.delete({where:{id}})}
+
+ // Valeur numérique (0 à 1) attribuée à chaque résultat possible — les
+ // résultats non évaluables (non applicable, non évalué, à vérifier) sont
+ // exclus du calcul plutôt que comptés comme un échec.
+ private readonly RESULTAT_VALEUR:Record<string,number>={CONFORME:1,BONNE_PRATIQUE:1,PISTE_AMELIORATION:1,OBSERVATION:1,PARTIELLEMENT_CONFORME:0.5,NON_CONFORME:0};
+ private readonly CRITICITE_POIDS:Record<string,number>={FAIBLE:1,MODEREE:2,ELEVEE:3,CRITIQUE:4};
+
+ // Enregistre (ou met à jour) la réponse à une question de check-list pour
+ // un audit, puis recalcule immédiatement le score global de l'audit —
+ // jamais de score obsolète affiché après une réponse.
+ async auditResponseSave(auditId:string,checklistItemId:string,b:any){
+  const response=await this.db.auditQuestionResponse.upsert({
+   where:{auditId_checklistItemId:{auditId,checklistItemId}},
+   update:{resultat:b.resultat,score:b.score,commentaire:b.commentaire},
+   create:{auditId,checklistItemId,resultat:b.resultat||'NON_EVALUE',score:b.score,commentaire:b.commentaire},
+  });
+  await this.calculerScoreAudit(auditId);
+  return response;
+ }
+
+ private async calculerScoreAudit(auditId:string){
+  const audit=await this.db.qhseAudit.findUnique({where:{id:auditId}});
+  if(!audit) return;
+  const responses=await this.db.auditQuestionResponse.findMany({where:{auditId},include:{checklistItem:true}});
+  const evaluables=responses.filter(r=>['CONFORME','NON_CONFORME','PARTIELLEMENT_CONFORME','OBSERVATION','PISTE_AMELIORATION','BONNE_PRATIQUE'].includes(r.resultat));
+  if(!evaluables.length){
+   await this.db.qhseAudit.update({where:{id:auditId},data:{scoreObtenu:null,scoreMax:null,tauxConformite:null,scorePondere:null}});
+   return;
+  }
+  let scoreObtenu=0,scoreMaximum=0;
+  const methode=audit.scoringMethod;
+  for(const r of evaluables){
+   let valeur:number,poids=1;
+   if(methode==='ECHELLE_0_5'||methode==='ECHELLE_0_10'||methode==='POURCENTAGE'){
+    const echelle=methode==='ECHELLE_0_5'?5:methode==='ECHELLE_0_10'?10:100;
+    valeur=(r.score??this.RESULTAT_VALEUR[r.resultat]*echelle)/echelle;
+   } else {
+    valeur=this.RESULTAT_VALEUR[r.resultat]??0;
+   }
+   if(methode==='PONDERATION') poids=r.checklistItem.poids||1;
+   else if(methode==='CRITICITE') poids=this.CRITICITE_POIDS[r.checklistItem.criticite]||1;
+   scoreObtenu+=valeur*poids;
+   scoreMaximum+=poids;
+  }
+  const tauxConformite=scoreMaximum?Math.round((scoreObtenu/scoreMaximum)*1000)/10:null;
+  await this.db.qhseAudit.update({where:{id:auditId},data:{
+   scoreObtenu:Math.round(scoreObtenu*100)/100, scoreMax:Math.round(scoreMaximum*100)/100,
+   tauxConformite, scorePondere:methode==='PONDERATION'||methode==='CRITICITE'?Math.round(scoreObtenu*100)/100:null,
+   score:tauxConformite,
   }});
  }
  // Génère une non-conformité (et son action corrective) à partir d'un
