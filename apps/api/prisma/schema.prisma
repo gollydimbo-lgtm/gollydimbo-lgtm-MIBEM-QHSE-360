@@ -137,6 +137,7 @@ model User {
   ncContainmentActionsResponsable NcContainmentAction[]
   actionExtensionsDemandees ActionExtension[] @relation("ActionExtensionDemandeur")
   actionExtensionsValidees ActionExtension[] @relation("ActionExtensionValidateur")
+  capaLinksCreated CapaLink[]
   refreshTokens RefreshToken[]
   epcResponsible Epc[]
   epcInspections EpcInspection[]
@@ -779,9 +780,30 @@ model Action {
   subActions Action[] @relation("ActionParent")
   causes ActionCause[]
   extensions ActionExtension[]
+  links CapaLink[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
+}
+
+// Matrice de liaison générique (points 2, 6, 7, 8, 26 du cahier des
+// charges) — une seule table de liaison plutôt qu'une table CAPA par
+// module. Permet réellement N sources → 1 CAPA et 1 source → N CAPA,
+// ce que les colonnes dédiées existantes (nonConformityId, riskId...) ne
+// permettent pas seules. Ces colonnes restent utilisées telles quelles
+// pour la source principale ; CapaLink complète pour tout le reste.
+model CapaLink {
+  id String @id @default(cuid())
+  actionId String
+  sourceModule String
+  sourceEntityId String
+  relationType String @default("GENEREE_PAR")
+  metadata Json?
+  createdAt DateTime @default(now())
+  createdById String?
+  action Action @relation(fields:[actionId], references:[id], onDelete:Cascade)
+  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  @@index([sourceModule,sourceEntityId])
 }
 
 // Prolongation d'échéance (point 26) — l'ancienne échéance n'est jamais
