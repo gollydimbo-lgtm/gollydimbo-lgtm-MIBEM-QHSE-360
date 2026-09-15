@@ -274,7 +274,7 @@ import { writeAudit } from '../common/audit-log.helper';
   return risk;
  }
  actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true,responsible:true,workUnit:true,parentAction:true,subActions:true},orderBy:{dueDate:'asc'}})}
- actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}},extensions:{include:{demandeur:true,validateur:true},orderBy:{createdAt:'desc'}}}})}
+ actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}},extensions:{include:{demandeur:true,validateur:true},orderBy:{createdAt:'desc'}},links:true}})}
  actionCreate(b:any){return this.db.action.create({data:b})}
  async actionUpdate(id:string,b:any){
   const current=await this.db.action.findUnique({where:{id}});
@@ -384,6 +384,52 @@ import { writeAudit } from '../common/audit-log.helper';
  }
 
  actionCauseList(actionId:string){return this.db.actionCause.findMany({where:{actionId},orderBy:{createdAt:'asc'}})}
+
+ // === MATRICE DE LIAISON CAPA GÉNÉRIQUE ===================================
+ // Une seule table de liaison, réutilisée par tous les modules, plutôt
+ // qu'une table CAPA par module (recommandation explicite du cahier des
+ // charges). Les colonnes dédiées existantes sur Action restent utilisées
+ // pour la source principale ; CapaLink complète pour le reste :
+ // N sources -> 1 CAPA et 1 source -> N CAPA.
+ private readonly CAPA_LEGACY_FIELD:Record<string,string>={
+  NON_CONFORMITY:'nonConformityId', RISK:'riskId', AUDIT_FINDING:'auditFindingId', SAFETY_EVENT:'safetyEventId',
+  RECLAMATION:'reclamationId', FOURNISSEUR:'fournisseurId', PROCESSUS:'processusId',
+  RISQUE_SANITAIRE:'risqueSanitaireId', ERGONOMIE:'ergonomieId', ENVIRONNEMENT_ASPECT:'environnementAspectId',
+ };
+
+ capaLinksByAction(actionId:string){return this.db.capaLink.findMany({where:{actionId},include:{createdBy:true},orderBy:{createdAt:'desc'}})}
+ capaLinksBySource(sourceModule:string,sourceEntityId:string){
+  return this.db.capaLink.findMany({where:{sourceModule,sourceEntityId},include:{action:{include:{responsible:true}}},orderBy:{createdAt:'desc'}});
+ }
+ // Rattache une source supplémentaire à une CAPA déjà existante — c'est ce
+ // qui permet à une même action de traiter plusieurs sources (point 8).
+ capaLinkAdd(actionId:string,b:any){
+  return this.db.capaLink.create({data:{actionId,sourceModule:b.sourceModule,sourceEntityId:b.sourceEntityId,relationType:b.relationType||'GENEREE_PAR',metadata:b.metadata,createdById:b.createdById||null}});
+ }
+ capaLinkDelete(id:string){return this.db.capaLink.delete({where:{id}})}
+
+ // Détecte les CAPA déjà liées à cette source, via la matrice générique ET
+ // via la colonne dédiée quand ce module en possède une — pour ne jamais
+ // proposer un doublon silencieusement (point 5).
+ async capaDetectDuplicates(sourceModule:string,sourceEntityId:string){
+  const viaLink=await this.db.capaLink.findMany({where:{sourceModule,sourceEntityId},include:{action:{include:{responsible:true}}}});
+  const champ=this.CAPA_LEGACY_FIELD[sourceModule];
+  let viaLegacy:any[]=[];
+  if(champ) viaLegacy=await this.db.action.findMany({where:{[champ]:sourceEntityId},include:{responsible:true}});
+  const actions=[...viaLink.map(l=>l.action),...viaLegacy];
+  return Array.from(new Map(actions.map(a=>[a.id,a])).values());
+ }
+
+ // Point de création générique — le bouton « Créer une CAPA » de chaque
+ // module passe par ici plutôt que par une implémentation par module.
+ async capaCreateFromSource(sourceModule:string,sourceEntityId:string,b:any){
+  const champ=this.CAPA_LEGACY_FIELD[sourceModule];
+  const data:any={...b}; delete data.sourceModule; delete data.sourceEntityId; delete data.relationType; delete data.createdById;
+  if(champ) data[champ]=sourceEntityId;
+  const action=await this.db.action.create({data});
+  await this.db.capaLink.create({data:{actionId:action.id,sourceModule,sourceEntityId,relationType:b.relationType||'GENEREE_PAR',createdById:b.createdById||null}});
+  return action;
+ }
  // La présence d'une ActionCause avec estRacine=true répond à elle seule à
  // « cause racine identifiée ? » — pas besoin d'un champ dupliqué sur Action.
  actionCauseCreate(b:any){return this.db.actionCause.create({data:b})}
