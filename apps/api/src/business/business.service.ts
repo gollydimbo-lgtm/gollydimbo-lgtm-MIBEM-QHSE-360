@@ -398,8 +398,20 @@ import { writeAudit } from '../common/audit-log.helper';
  };
 
  capaLinksByAction(actionId:string){return this.db.capaLink.findMany({where:{actionId},include:{createdBy:true},orderBy:{createdAt:'desc'}})}
- capaLinksBySource(sourceModule:string,sourceEntityId:string){
-  return this.db.capaLink.findMany({where:{sourceModule,sourceEntityId},include:{action:{include:{responsible:true}}},orderBy:{createdAt:'desc'}});
+ // Union de la matrice générique ET de la colonne dédiée héritée quand ce
+ // module en a une — sinon une CAPA créée via un ancien bouton "+ Action"
+ // (qui ne passe pas par CapaLink) resterait invisible ici alors qu'elle
+ // existe bien (même logique que capaDetectDuplicates, pour rester cohérent).
+ async capaLinksBySource(sourceModule:string,sourceEntityId:string){
+  const viaLink=await this.db.capaLink.findMany({where:{sourceModule,sourceEntityId},include:{action:{include:{responsible:true}}}});
+  const champ=this.CAPA_LEGACY_FIELD[sourceModule];
+  let viaLegacy:{action:any}[]=[];
+  if(champ){
+   const actions=await this.db.action.findMany({where:{[champ]:sourceEntityId},include:{responsible:true}});
+   viaLegacy=actions.map(action=>({action}));
+  }
+  const tous=[...viaLink.map(l=>({id:l.id,action:l.action})),...viaLegacy.map((l,i)=>({id:`legacy-${i}`,action:l.action}))];
+  return Array.from(new Map(tous.map(l=>[l.action.id,l])).values());
  }
  // Rattache une source supplémentaire à une CAPA déjà existante — c'est ce
  // qui permet à une même action de traiter plusieurs sources (point 8).
