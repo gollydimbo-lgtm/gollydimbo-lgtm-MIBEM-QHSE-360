@@ -1092,6 +1092,10 @@ function ActionForm({ record, prefill, onClose, onCreated }) {
         reclamationId: prefill?.reclamationId || record?.reclamationId || undefined, safetyEventId: prefill?.safetyEventId || record?.safetyEventId || undefined,
       };
       if (editing) await api.patch(`/business/actions/${record.id}`, payload);
+      // Matrice de liaison générique : quand une source est fournie sans
+      // colonne dédiée (indicateur, EPI, formation, équipement...), passer
+      // par le point de création générique plutôt que par un champ propre.
+      else if (prefill?.sourceModule && prefill?.sourceEntityId) await api.post('/business/capa-links/create-from-source', { code: genCode('ACT'), ...payload, sourceModule: prefill.sourceModule, sourceEntityId: prefill.sourceEntityId });
       else await api.post('/business/actions', { code: genCode('ACT'), ...payload });
       onCreated(); onClose();
     } catch (err) { setError(err.message); }
@@ -6500,6 +6504,8 @@ function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
         </div>
       </div>
 
+      <CapaLinksPanel sourceModule="RISK" sourceEntityId={d.id} prefill={{ title: `Traiter le risque — ${d.hazard}`, source: 'Registre des risques', riskId: d.id, criticite: d.grossLevel }} />
+
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold" style={{ color: C.text }}>Mesures de prévention ({measures.length})</p>
         <button onClick={() => setShowAddMeasure((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Mesure</button>
@@ -7480,6 +7486,52 @@ function AuditsPage() {
 const NC_CAUSE_CATEGORIES = ['Main-d\'œuvre', 'Méthode', 'Machine', 'Matière', 'Milieu', 'Mesure', 'Management', 'Organisation'];
 const NC_CRITICITE_COLOR = (C, n) => ({ CRITIQUE: C.red, MAJEURE: C.amber, MODEREE: '#B45309', MINEURE: C.green }[n] || C.textMuted);
 
+// Panneau réutilisable "N CAPA associées" (points 11, 6) — un seul
+// composant pour tous les modules plutôt qu'une implémentation par module,
+// avec détection de doublon avant création (point 5).
+function CapaLinksPanel({ sourceModule, sourceEntityId, prefill }) {
+  const C = useTheme();
+  const linksQ = useCollection(`/business/capa-links/by-source?sourceModule=${sourceModule}&sourceEntityId=${sourceEntityId}`);
+  const [showForm, setShowForm] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [duplicates, setDuplicates] = useState(null);
+  const links = linksQ.data || [];
+  async function checkAndOpen() {
+    setChecking(true);
+    try {
+      const dup = await api.get(`/business/capa-links/duplicates?sourceModule=${sourceModule}&sourceEntityId=${sourceEntityId}`);
+      if (dup.length) setDuplicates(dup); else setShowForm(true);
+    } catch (err) { setShowForm(true); }
+    setChecking(false);
+  }
+  return (
+    <div className="mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Actions CAPA associées ({links.length})</p>
+        <button onClick={checkAndOpen} disabled={checking} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>{checking ? '…' : '+ Créer une CAPA'}</button>
+      </div>
+      {duplicates && (
+        <div className="p-2.5 rounded-lg mb-2 text-xs" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>
+          Une action similaire existe déjà : {duplicates.map((d) => d.code).join(', ')}.
+          <div className="flex gap-3 mt-1">
+            <button onClick={() => setDuplicates(null)} className="underline">Annuler</button>
+            <button onClick={() => { setDuplicates(null); setShowForm(true); }} className="underline">Créer quand même</button>
+          </div>
+        </div>
+      )}
+      {showForm && <ActionForm prefill={{ sourceModule, sourceEntityId, ...prefill }} onClose={() => setShowForm(false)} onCreated={linksQ.reload} />}
+      {links.length
+        ? <div className="space-y-1.5">{links.map((l) => (
+            <div key={l.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+              <span className="text-xs" style={{ color: C.text }}>{l.action.code} — {l.action.title}</span>
+              <StatusChip statut={l.action.status} />
+            </div>
+          ))}</div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucune CAPA associée</p>}
+    </div>
+  );
+}
+
 function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
   const C = useTheme();
   const detailQ = useCollection(`/business/non-conformities/${nc.id}`);
@@ -7566,6 +7618,8 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
           <p className="text-sm font-bold mt-1.5" style={{ color: d.dueDate && new Date(d.dueDate) < new Date() && d.status !== 'CLOSED' ? C.red : C.text }}>{d.dueDate ? new Date(d.dueDate).toLocaleDateString('fr-FR') : '—'}</p>
         </div>
       </div>
+
+      <CapaLinksPanel sourceModule="NON_CONFORMITY" sourceEntityId={d.id} prefill={{ title: `Traiter — ${d.title}`, source: 'Non-conformité', nonConformityId: d.id, criticite: d.criticiteNiveau }} />
 
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold" style={{ color: C.text }}>Confinement / actions immédiates ({(d.containmentActions || []).length})</p>
@@ -7963,6 +8017,18 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
           <div className="flex items-center justify-between mb-1"><p className="text-xs" style={{ color: C.textMuted }}>Avancement</p><p className="text-xs font-semibold" style={{ color: C.text }}>{d.avancement || 0}%</p></div>
           <div className="w-full h-2 rounded-full" style={{ backgroundColor: C.cardAlt }}><div className="h-2 rounded-full" style={{ width: `${d.avancement || 0}%`, backgroundColor: C.blue }} /></div>
         </div>
+
+        {(d.links || []).length > 0 && (
+          <div className="mb-5">
+            <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Sources liées ({d.links.length})</p>
+            <div className="space-y-1.5">{d.links.map((l) => (
+              <div key={l.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                <span className="text-xs" style={{ color: C.text }}>{l.sourceModule} · {l.sourceEntityId.slice(0, 8)}…</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{l.relationType}</span>
+              </div>
+            ))}</div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm font-semibold" style={{ color: C.text }}>Plan d'action — sous-actions ({(d.subActions || []).length})</p>
