@@ -7888,17 +7888,47 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
   const [showAddCause, setShowAddCause] = useState(false);
   const [causeForm, setCauseForm] = useState({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false });
   const [showSubActionForm, setShowSubActionForm] = useState(false);
+  const [effForm, setEffForm] = useState({ result: '', notes: '' });
+  const [showExtension, setShowExtension] = useState(false);
+  const [extensionForm, setExtensionForm] = useState({ nouvelleEcheance: '', motif: '' });
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   if (detailQ.loading) return <Modal title={action.title} onClose={onClose}><LoadingPanel /></Modal>;
   const d = detailQ.data || action;
   const typeLabel = { CURATIVE: 'Curative / immédiate', CORRECTIVE: 'Corrective', PREVENTIVE: 'Préventive', AMELIORATION: 'Amélioration', MAITRISE: 'Maîtrise', REDUCTION_RISQUE: 'Réduction du risque', REGLEMENTAIRE: 'Réglementaire', AUDIT: "Issue d'audit", AUTRE: 'Autre' };
   const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MINEURE: '#B45309', NON_CRITIQUE: C.green };
+  const effLabel = { EFFICACE: 'Efficace', PARTIELLEMENT_EFFICACE: 'Partiellement efficace', INEFFICACE: 'Inefficace' };
 
   async function addCause(e) {
     e.preventDefault();
     try {
       await api.post('/business/action-causes', { ...causeForm, actionId: action.id });
       setCauseForm({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false }); setShowAddCause(false); detailQ.reload();
+    } catch (err) { setError(err.message); }
+  }
+  async function saveEffectiveness() {
+    setBusy(true); setError(null);
+    try { await api.post(`/business/actions/${action.id}/effectiveness`, effForm); detailQ.reload(); onChanged(); }
+    catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+  async function close() {
+    setBusy(true); setError(null);
+    try { await api.post(`/business/actions/${action.id}/close`, {}); detailQ.reload(); onChanged(); }
+    catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+  async function reopen() {
+    setBusy(true);
+    try { await api.post(`/business/actions/${action.id}/reopen`, {}); detailQ.reload(); onChanged(); }
+    catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+  async function requestExtension(e) {
+    e.preventDefault();
+    try {
+      await api.post(`/business/actions/${action.id}/extensions`, { ...extensionForm, nouvelleEcheance: new Date(extensionForm.nouvelleEcheance).toISOString() });
+      setExtensionForm({ nouvelleEcheance: '', motif: '' }); setShowExtension(false); detailQ.reload(); onChanged();
     } catch (err) { setError(err.message); }
   }
 
@@ -7908,7 +7938,12 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
       <Modal title={d.title} onClose={onClose} wide>
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs" style={{ color: C.textMuted }}>{d.code} · {d.actionType ? typeLabel[d.actionType] || d.actionType : 'Type non défini'} · {d.source || 'Origine non renseignée'}</p>
-          <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+          <div className="flex gap-2">
+            {d.status === 'CLOSED'
+              ? <button onClick={reopen} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Réouvrir</button>
+              : <button onClick={close} disabled={busy || d.effectivenessResult !== 'EFFICACE'} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: d.effectivenessResult === 'EFFICACE' ? C.green : C.cardAlt, color: d.effectivenessResult === 'EFFICACE' ? '#052e1f' : C.textMuted, border: d.effectivenessResult === 'EFFICACE' ? 'none' : `1px solid ${C.border}` }} title={d.effectivenessResult !== 'EFFICACE' ? "Vérification d'efficacité 'Efficace' requise" : ''}>Clôturer</button>}
+            <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-3 mb-3">
           <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
@@ -7980,6 +8015,39 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
               </div>
             ))}</div>
           : <p className="text-xs" style={{ color: C.textMuted }}>Aucune cause enregistrée</p>}
+
+        <p className="text-sm font-semibold mb-2 mt-5" style={{ color: C.text }}>Vérification d'efficacité</p>
+        {d.effectivenessResult && <p className="text-xs mb-2" style={{ color: d.effectivenessResult === 'EFFICACE' ? C.green : d.effectivenessResult === 'INEFFICACE' ? C.red : C.amber }}>Dernier résultat : {effLabel[d.effectivenessResult]}{d.effectivenessCheckedAt ? ` (${new Date(d.effectivenessCheckedAt).toLocaleDateString('fr-FR')})` : ''}</p>}
+        <div className="flex gap-2 mb-2">
+          <select value={effForm.result} onChange={(e) => setEffForm({ ...effForm, result: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Sélectionner un résultat</option><option value="EFFICACE">Efficace</option><option value="PARTIELLEMENT_EFFICACE">Partiellement efficace</option><option value="INEFFICACE">Inefficace</option>
+          </select>
+          <input value={effForm.notes} onChange={(e) => setEffForm({ ...effForm, notes: e.target.value })} placeholder="Notes (optionnel)" className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        </div>
+        <button onClick={saveEffectiveness} disabled={busy || !effForm.result} className="px-4 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy || !effForm.result ? 0.6 : 1 }}>Enregistrer la vérification</button>
+        {d.effectivenessResult === 'INEFFICACE' && <p className="text-xs mb-3" style={{ color: C.red }}>Action inefficace : une nouvelle analyse ou une nouvelle action liée à cette CAPA est recommandée avant toute clôture.</p>}
+
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold" style={{ color: C.text }}>Prolongations d'échéance ({(d.extensions || []).length})</p>
+          <button onClick={() => setShowExtension((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Demander une prolongation</button>
+        </div>
+        {showExtension && (
+          <form onSubmit={requestExtension} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+            <FormField label="Nouvelle échéance"><input required type="date" value={extensionForm.nouvelleEcheance} onChange={(e) => setExtensionForm({ ...extensionForm, nouvelleEcheance: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Motif"><input required value={extensionForm.motif} onChange={(e) => setExtensionForm({ ...extensionForm, motif: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <button type="submit" className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Confirmer la prolongation</button>
+          </form>
+        )}
+        {(d.extensions || []).length
+          ? <div className="space-y-1.5">{d.extensions.map((ex) => (
+              <div key={ex.id} className="p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                <p className="text-xs" style={{ color: C.text }}>{ex.ancienneEcheance ? new Date(ex.ancienneEcheance).toLocaleDateString('fr-FR') : '—'} → {new Date(ex.nouvelleEcheance).toLocaleDateString('fr-FR')}</p>
+                <p className="text-[10px]" style={{ color: C.textMuted }}>{ex.motif}</p>
+              </div>
+            ))}</div>
+          : <p className="text-xs" style={{ color: C.textMuted }}>Aucune prolongation demandée</p>}
+
+        {error && <p className="text-xs mt-3" style={{ color: C.red }}>{error}</p>}
       </Modal>
     </>
   );
@@ -7989,54 +8057,127 @@ function CapaPage() {
   const C = useTheme();
   const actions = useCollection('/business/actions');
   const dashboardQ = useCollection('/business/action-dashboard');
+  const alertesQ = useCollection('/business/action-alertes');
+  const scoreQ = useCollection('/business/action-performance-score');
+  const trendsQ = useCollection('/business/action-trends');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [tab, setTab] = useState('apercu');
   if (actions.loading || dashboardQ.loading) return <LoadingPanel />;
   if (actions.error) return <ErrorPanel message={actions.error} onRetry={actions.reload} />;
   const list = (actions.data || []).filter((a) => !a.parentActionId);
   const dash = dashboardQ.data || {};
+  const alertes = alertesQ.data || [];
+  const score = scoreQ.data || {};
+  const trends = trendsQ.data || [];
   const sorted = [...list].sort((a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity));
   const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
-  const reloadAll = () => { actions.reload(); dashboardQ.reload(); };
+  const reloadAll = () => { actions.reload(); dashboardQ.reload(); alertesQ.reload(); scoreQ.reload(); };
   const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MINEURE: '#B45309', NON_CRITIQUE: C.green };
+  const alerteColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber, INFORMATION: C.blue };
+  const niveauColor = { EXCELLENT: C.green, BON: C.green, A_SURVEILLER: C.amber, INSUFFISANT: C.red, CRITIQUE: C.red };
+  const niveauLabel = { EXCELLENT: 'Excellent', BON: 'Bon', A_SURVEILLER: 'À surveiller', INSUFFISANT: 'Insuffisant', CRITIQUE: 'Critique' };
 
   return (
     <div className="space-y-6">
       {(showForm || editing) && <ActionForm record={editing} onClose={() => { setShowForm(false); setEditing(null); }} onCreated={reloadAll} />}
       {viewing && <CapaDetailModal action={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
-      <div className="flex items-center justify-between">
-        <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action CAPA</button>
+
+      <div className="flex flex-wrap gap-2">
+        {[['apercu', "Vue d'ensemble"], ['plan', "Plan d'action"], ['analyses', 'Analyses & tendances']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <KpiCard label="Actions totales" value={dv(dash.total)} color={C.blue} icon={Wrench} />
-        <KpiCard label="Ouvertes" value={dv(dash.ouvertes)} color={C.amber} icon={Activity} />
-        <KpiCard label="Terminées" value={dv(dash.terminees)} color={C.green} icon={ShieldCheck} />
-        <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-        <KpiCard label="Échéance proche (7j)" value={dv(dash.echeanceProche)} color={C.amber} icon={AlertTriangle} />
-        <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
-        <KpiCard label="En attente de validation" value={dv(dash.enAttenteValidation)} color={C.blue} icon={ClipboardCheck} />
-        <KpiCard label="Taux de clôture" value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
-        <KpiCard label="Taux en retard" value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
-        <KpiCard label="Délai moyen de réalisation (j)" value={dv(dash.delaiMoyenRealisation)} color={C.blue} icon={Activity} />
-      </div>
-      <div className="grid grid-cols-3 gap-4">
-        <Panel title="Statut des actions" className="col-span-1"><DonutChart data={[{ name: 'Terminées', value: dash.terminees || 0 }, { name: 'Ouvertes', value: dash.ouvertes || 0 }, { name: 'En retard', value: dash.enRetard || 0 }]} colors={[C.green, C.blue, C.red]} /></Panel>
-        <Panel title="Plan d'actions CAPA (curatives, correctives, préventives, amélioration)" className="col-span-2">
-          {sorted.length
-            ? <DataTable columns={['Action', 'Type', 'Criticité', 'Priorité', 'Avancement', 'Échéance', 'Statut']}
-                rows={sorted.map((a) => [
-                  a.title, a.actionType || '—',
-                  a.criticite ? <span style={{ color: criticiteColor[a.criticite], fontWeight: 600 }}>{a.criticite}</span> : '—',
-                  a.priority, `${a.avancement || 0}%`,
-                  a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—',
-                  <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : a.status} />,
-                ])}
-                onRowClick={(i) => setViewing(sorted[i])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
-        </Panel>
-      </div>
+
+      {tab === 'apercu' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action CAPA</button>
+          </div>
+          <div className="flex flex-wrap gap-4 items-stretch">
+            <div className="p-4 rounded-xl flex flex-col justify-center items-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, minWidth: 160 }}>
+              <p className="text-[10px]" style={{ color: C.textMuted }}>Score de performance CAPA</p>
+              <p className="text-3xl font-bold" style={{ color: niveauColor[score.niveau] || C.text }}>{score.score ?? '—'}</p>
+              <p className="text-xs font-medium" style={{ color: niveauColor[score.niveau] || C.textMuted }}>{niveauLabel[score.niveau] || '—'}</p>
+            </div>
+            <div className="flex flex-wrap gap-3 flex-1">
+              <KpiCard label="Actions totales" value={dv(dash.total)} color={C.blue} icon={Wrench} />
+              <KpiCard label="Ouvertes" value={dv(dash.ouvertes)} color={C.amber} icon={Activity} />
+              <KpiCard label="Terminées" value={dv(dash.terminees)} color={C.green} icon={ShieldCheck} />
+              <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label="Échéance proche (7j)" value={dv(dash.echeanceProche)} color={C.amber} icon={AlertTriangle} />
+              <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="En attente de validation" value={dv(dash.enAttenteValidation)} color={C.blue} icon={ClipboardCheck} />
+            <KpiCard label="Taux de clôture" value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label="Taux en retard" value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
+            <KpiCard label="Taux d'efficacité" value={dv(score.tauxEfficacite, '%')} color={C.green} icon={ShieldCheck} />
+            <KpiCard label="Délai moyen de réalisation (j)" value={dv(dash.delaiMoyenRealisation)} color={C.blue} icon={Activity} />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <Panel title="Statut des actions" className="col-span-1"><DonutChart data={[{ name: 'Terminées', value: dash.terminees || 0 }, { name: 'Ouvertes', value: dash.ouvertes || 0 }, { name: 'En retard', value: dash.enRetard || 0 }]} colors={[C.green, C.blue, C.red]} /></Panel>
+            <Panel title="Alertes (avec escalade)" className="col-span-2" subtitle={`${alertes.length} point(s) nécessitant attention`}>
+              {alertes.length
+                ? <div className="space-y-2 max-h-64 overflow-y-auto">{alertes.map((a, i) => (
+                    <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                      <span className="text-sm" style={{ color: C.text }}>{a.label}</span>
+                      <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${alerteColor[a.niveau]}22`, color: alerteColor[a.niveau] }}>{a.niveau}</span>
+                    </div>
+                  ))}</div>
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {tab === 'plan' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action CAPA</button>
+          </div>
+          <Panel title="Plan d'actions CAPA (curatives, correctives, préventives, amélioration)">
+            {sorted.length
+              ? <DataTable columns={['Action', 'Type', 'Criticité', 'Priorité', 'Avancement', 'Échéance', 'Statut']}
+                  rows={sorted.map((a) => [
+                    a.title, a.actionType || '—',
+                    a.criticite ? <span style={{ color: criticiteColor[a.criticite], fontWeight: 600 }}>{a.criticite}</span> : '—',
+                    a.priority, `${a.avancement || 0}%`,
+                    a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—',
+                    <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : a.status} />,
+                  ])}
+                  onRowClick={(i) => setViewing(sorted[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'analyses' && (
+        <div className="space-y-6">
+          <LiveBadge />
+          <Panel title="Évolution sur 12 mois — créées vs réalisées">
+            {trends.length
+              ? <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={trends}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.textMuted }} />
+                    <YAxis tick={{ fontSize: 11, fill: C.textMuted }} />
+                    <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
+                    <Line type="monotone" dataKey="creees" name="Créées" stroke={C.blue} strokeWidth={2} />
+                    <Line type="monotone" dataKey="realisees" name="Réalisées" stroke={C.green} strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas encore assez de données</p>}
+          </Panel>
+          <Panel title="Actions par origine">
+            {(dash.parOrigine || []).length ? <HorizontalBars data={dash.parOrigine} labelKey="source" valueKey="nombre" color={C.blue} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune donnée</p>}
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }
