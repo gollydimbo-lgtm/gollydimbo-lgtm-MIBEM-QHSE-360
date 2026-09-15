@@ -826,6 +826,8 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
         </div>
       )}
 
+      <CapaLinksPanel sourceModule="AUDIT" sourceEntityId={audit.id} prefill={{ title: `Traiter les écarts — ${audit.title}`, source: 'Audit', processusId: audit.processusId }} />
+
       {showReport && detailQ.data && (
         <div className="p-4 rounded-lg mb-5" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
           <div className="flex justify-end mb-2"><button onClick={() => window.print()} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button></div>
@@ -5100,6 +5102,8 @@ function FournisseurDetailModal({ fournisseurId, onClose, onEdit }) {
         <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg ml-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
       </div>
 
+      <CapaLinksPanel sourceModule="FOURNISSEUR" sourceEntityId={f.id} prefill={{ title: `Traiter l'écart — ${f.nom}`, source: 'Fournisseur', fournisseurId: f.id }} />
+
       <div className="flex items-center gap-6 mb-4">
         <div>
           <p className="text-4xl font-bold" style={{ color: scoreLevel?.color || C.text }}>{score.score != null ? score.score : '—'}<span className="text-base" style={{ color: C.textMuted }}>/100</span></p>
@@ -5503,6 +5507,8 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
             : <p className="text-xs" style={{ color: C.textMuted }}>Aucun risque relié dans le registre</p>}
           {!ev.risk && <button onClick={generateRisk} disabled={generatingRisk} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>{generatingRisk ? '…' : 'Créer un risque à partir de cet accident'}</button>}
         </div>
+
+        <CapaLinksPanel sourceModule="SAFETY_EVENT" sourceEntityId={ev.id} prefill={{ title: `Action — ${ev.title}`, source: 'Accident / incident', safetyEventId: ev.id }} />
 
         <FormField label="Statut">
           <select value={form.statut} onChange={(e) => setForm({ ...form, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
