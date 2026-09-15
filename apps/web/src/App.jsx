@@ -1068,14 +1068,29 @@ function NonConformityForm({ record, prefill, onClose, onCreated }) {
 function ActionForm({ record, prefill, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
-  const [form, setForm] = useState({ title: record?.title || prefill?.title || '', description: record?.description || prefill?.description || '', priority: record?.priority || 2, dueDate: record?.dueDate ? new Date(record.dueDate).toISOString().slice(0, 10) : '', status: record?.status || 'OPEN' });
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({
+    title: record?.title || prefill?.title || '', description: record?.description || prefill?.description || '',
+    priority: record?.priority || 2, dueDate: record?.dueDate ? new Date(record.dueDate).toISOString().slice(0, 10) : '',
+    status: record?.status || 'OPEN', actionType: record?.actionType || prefill?.actionType || '', criticite: record?.criticite || '',
+    source: record?.source || prefill?.source || '', workUnitId: record?.workUnitId || '', responsibleId: record?.responsibleId || '',
+    avancement: record?.avancement ?? 0, dateDebutPrevue: record?.dateDebutPrevue ? new Date(record.dateDebutPrevue).toISOString().slice(0, 10) : '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   async function submit(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { ...form, priority: Number(form.priority), dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null, reclamationId: prefill?.reclamationId || record?.reclamationId || undefined, safetyEventId: prefill?.safetyEventId || record?.safetyEventId || undefined };
+      const payload = {
+        ...form, priority: Number(form.priority), avancement: Number(form.avancement),
+        dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
+        dateDebutPrevue: form.dateDebutPrevue ? new Date(form.dateDebutPrevue).toISOString() : null,
+        workUnitId: form.workUnitId || null, responsibleId: form.responsibleId || null,
+        parentActionId: prefill?.parentActionId || record?.parentActionId || undefined,
+        reclamationId: prefill?.reclamationId || record?.reclamationId || undefined, safetyEventId: prefill?.safetyEventId || record?.safetyEventId || undefined,
+      };
       if (editing) await api.patch(`/business/actions/${record.id}`, payload);
       else await api.post('/business/actions', { code: genCode('ACT'), ...payload });
       onCreated(); onClose();
@@ -1089,15 +1104,56 @@ function ActionForm({ record, prefill, onClose, onCreated }) {
     setSaving(false);
   }
   return (
-    <Modal title={editing ? "Modifier l'action" : 'Nouvelle action corrective'} onClose={onClose}>
+    <Modal title={prefill?.parentActionId ? 'Nouvelle sous-action' : editing ? "Modifier l'action" : 'Nouvelle action CAPA'} onClose={onClose} wide>
       <form onSubmit={submit}>
         <FormField label="Action"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Priorité (1=haute, 3=basse)"><select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}</select></FormField>
+          <FormField label="Type d'action">
+            <select value={form.actionType} onChange={(e) => setForm({ ...form, actionType: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>
+              <option value="CURATIVE">Curative / immédiate</option><option value="CORRECTIVE">Corrective</option>
+              <option value="PREVENTIVE">Préventive</option><option value="AMELIORATION">Amélioration</option>
+              <option value="MAITRISE">Maîtrise</option><option value="REDUCTION_RISQUE">Réduction du risque</option>
+              <option value="REGLEMENTAIRE">Réglementaire</option><option value="AUDIT">Issue d'audit</option><option value="AUTRE">Autre</option>
+            </select>
+          </FormField>
+          <FormField label="Source / origine"><input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Non-conformité, audit, réclamation..." /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Priorité"><select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value={1}>Urgente</option><option value={2}>Haute</option><option value={3}>Moyenne</option><option value={4}>Faible</option></select></FormField>
+          <FormField label="Criticité">
+            <select value={form.criticite} onChange={(e) => setForm({ ...form, criticite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option><option value="NON_CRITIQUE">Non critique</option><option value="MINEURE">Mineure</option><option value="MAJEURE">Majeure</option><option value="CRITIQUE">Critique</option>
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable">
+            <select value={form.responsibleId} onChange={(e) => setForm({ ...form, responsibleId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Unité de travail / service">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Début prévu"><input type="date" value={form.dateDebutPrevue} onChange={(e) => setForm({ ...form, dateDebutPrevue: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
           <FormField label="Échéance"><input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         </div>
-        {editing && <FormField label="Statut"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="OPEN">OPEN</option><option value="CLOSED">CLOSED</option></select></FormField>}
+        <FormField label={`Avancement : ${form.avancement}%`}>
+          <input type="range" min="0" max="100" step="25" value={form.avancement} onChange={(e) => setForm({ ...form, avancement: e.target.value })} className="w-full" />
+        </FormField>
+        {editing && (
+          <FormField label="Statut">
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              {[['DRAFT', 'Brouillon'], ['TO_ANALYZE', 'À analyser'], ['PLANNED', 'Planifiée'], ['ASSIGNED', 'Assignée'], ['OPEN', 'En cours'], ['VALIDATION_PENDING', 'Soumise à validation'], ['COMPLETED', 'Action réalisée'], ['EFFECTIVENESS_CHECK', "Évaluation de l'efficacité"], ['VALIDATED', 'Validée'], ['CLOSED', 'Clôturée'], ['SUSPENDED', 'Suspendue'], ['BLOCKED', 'Bloquée'], ['REJECTED', 'Rejetée'], ['TO_REDO', 'À reprendre'], ['CANCELLED', 'Annulée']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </FormField>
+        )}
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
         <div className="flex gap-2">
           {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
@@ -7826,37 +7882,158 @@ function NonConformitesPage() {
   );
 }
 
+function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/actions/${action.id}`);
+  const [showAddCause, setShowAddCause] = useState(false);
+  const [causeForm, setCauseForm] = useState({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false });
+  const [showSubActionForm, setShowSubActionForm] = useState(false);
+  const [error, setError] = useState(null);
+  if (detailQ.loading) return <Modal title={action.title} onClose={onClose}><LoadingPanel /></Modal>;
+  const d = detailQ.data || action;
+  const typeLabel = { CURATIVE: 'Curative / immédiate', CORRECTIVE: 'Corrective', PREVENTIVE: 'Préventive', AMELIORATION: 'Amélioration', MAITRISE: 'Maîtrise', REDUCTION_RISQUE: 'Réduction du risque', REGLEMENTAIRE: 'Réglementaire', AUDIT: "Issue d'audit", AUTRE: 'Autre' };
+  const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MINEURE: '#B45309', NON_CRITIQUE: C.green };
+
+  async function addCause(e) {
+    e.preventDefault();
+    try {
+      await api.post('/business/action-causes', { ...causeForm, actionId: action.id });
+      setCauseForm({ methode: '5_POURQUOI', niveau: 'POURQUOI_1', categorie: '', description: '', type: 'CONTRIBUTIVE', estRacine: false }); setShowAddCause(false); detailQ.reload();
+    } catch (err) { setError(err.message); }
+  }
+
+  return (
+    <>
+      {showSubActionForm && <ActionForm prefill={{ parentActionId: action.id, title: '', actionType: d.actionType }} onClose={() => setShowSubActionForm(false)} onCreated={() => { detailQ.reload(); onChanged(); }} />}
+      <Modal title={d.title} onClose={onClose} wide>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs" style={{ color: C.textMuted }}>{d.code} · {d.actionType ? typeLabel[d.actionType] || d.actionType : 'Type non défini'} · {d.source || 'Origine non renseignée'}</p>
+          <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+        </div>
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+            <p className="text-[10px]" style={{ color: C.textMuted }}>Criticité</p>
+            <p className="text-sm font-bold mt-1.5" style={{ color: criticiteColor[d.criticite] || C.text }}>{d.criticite || '—'}</p>
+          </div>
+          <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+            <p className="text-[10px]" style={{ color: C.textMuted }}>Responsable</p>
+            <p className="text-sm font-bold mt-1.5" style={{ color: C.text }}>{d.responsible ? `${d.responsible.firstName} ${d.responsible.lastName}` : '—'}</p>
+          </div>
+          <div className="p-2.5 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
+            <p className="text-[10px]" style={{ color: C.textMuted }}>Échéance</p>
+            <p className="text-sm font-bold mt-1.5" style={{ color: d.dueDate && new Date(d.dueDate) < new Date() && d.status !== 'CLOSED' ? C.red : C.text }}>{d.dueDate ? new Date(d.dueDate).toLocaleDateString('fr-FR') : '—'}</p>
+          </div>
+        </div>
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-1"><p className="text-xs" style={{ color: C.textMuted }}>Avancement</p><p className="text-xs font-semibold" style={{ color: C.text }}>{d.avancement || 0}%</p></div>
+          <div className="w-full h-2 rounded-full" style={{ backgroundColor: C.cardAlt }}><div className="h-2 rounded-full" style={{ width: `${d.avancement || 0}%`, backgroundColor: C.blue }} /></div>
+        </div>
+
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold" style={{ color: C.text }}>Plan d'action — sous-actions ({(d.subActions || []).length})</p>
+          <button onClick={() => setShowSubActionForm(true)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Sous-action</button>
+        </div>
+        {(d.subActions || []).length
+          ? <div className="space-y-1.5 mb-5">{d.subActions.map((sa) => (
+              <div key={sa.id} className="p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm" style={{ color: C.text }}>{sa.title}</span>
+                  <StatusChip statut={sa.status} />
+                </div>
+                <p className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{sa.responsible ? `${sa.responsible.firstName} ${sa.responsible.lastName} · ` : ''}Avancement {sa.avancement || 0}%</p>
+              </div>
+            ))}</div>
+          : <p className="text-xs mb-5" style={{ color: C.textMuted }}>Aucune sous-action — cette CAPA est une action simple</p>}
+
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold" style={{ color: C.text }}>Analyse des causes ({(d.causes || []).length})</p>
+          <button onClick={() => setShowAddCause((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Cause</button>
+        </div>
+        {showAddCause && (
+          <form onSubmit={addCause} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Méthode">
+                <select value={causeForm.methode} onChange={(e) => setCauseForm({ ...causeForm, methode: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                  <option value="5_POURQUOI">5 Pourquoi</option><option value="ISHIKAWA">Ishikawa (5M)</option><option value="PARETO">Pareto</option><option value="ARBRE_CAUSES">Arbre des causes</option><option value="AMDEC">AMDEC/FMEA</option><option value="AUTRE">Autre</option>
+                </select>
+              </FormField>
+              {causeForm.methode === '5_POURQUOI'
+                ? <FormField label="Niveau"><select value={causeForm.niveau} onChange={(e) => setCauseForm({ ...causeForm, niveau: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{['POURQUOI_1', 'POURQUOI_2', 'POURQUOI_3', 'POURQUOI_4', 'POURQUOI_5'].map((n, i) => <option key={n} value={n}>Pourquoi {i + 1}</option>)}</select></FormField>
+                : <FormField label="Catégorie (5M)"><select value={causeForm.categorie} onChange={(e) => setCauseForm({ ...causeForm, categorie: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{NC_CAUSE_CATEGORIES.map((cc) => <option key={cc} value={cc}>{cc}</option>)}</select></FormField>}
+            </div>
+            <FormField label="Description"><textarea required value={causeForm.description} onChange={(e) => setCauseForm({ ...causeForm, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+            <div className="flex items-center gap-3 mb-2">
+              <select value={causeForm.type} onChange={(e) => setCauseForm({ ...causeForm, type: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="IMMEDIATE">Cause immédiate</option><option value="CONTRIBUTIVE">Cause contributive</option><option value="PROFONDE">Cause profonde</option><option value="RACINE">Cause racine</option>
+              </select>
+              <label className="flex items-center gap-1.5 text-xs" style={{ color: C.textMuted }}><input type="checkbox" checked={causeForm.estRacine} onChange={(e) => setCauseForm({ ...causeForm, estRacine: e.target.checked })} />Cause racine</label>
+            </div>
+            {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+            <button type="submit" className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Ajouter</button>
+          </form>
+        )}
+        {(d.causes || []).length
+          ? <div className="space-y-1.5">{d.causes.map((cs) => (
+              <div key={cs.id} className="p-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: cs.estRacine ? `1px solid ${C.green}` : 'none' }}>
+                <p className="text-sm" style={{ color: C.text }}>{cs.description}</p>
+                <p className="text-[10px]" style={{ color: C.textMuted }}>{cs.methode}{cs.niveau ? ` · ${cs.niveau}` : ''}{cs.categorie ? ` · ${cs.categorie}` : ''} · {cs.type}{cs.estRacine ? ' · Racine' : ''}</p>
+              </div>
+            ))}</div>
+          : <p className="text-xs" style={{ color: C.textMuted }}>Aucune cause enregistrée</p>}
+      </Modal>
+    </>
+  );
+}
+
 function CapaPage() {
   const C = useTheme();
   const actions = useCollection('/business/actions');
+  const dashboardQ = useCollection('/business/action-dashboard');
   const [showForm, setShowForm] = useState(false);
-  const [selected, setSelected] = useState(null);
-  if (actions.loading) return <LoadingPanel />;
+  const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  if (actions.loading || dashboardQ.loading) return <LoadingPanel />;
   if (actions.error) return <ErrorPanel message={actions.error} onRetry={actions.reload} />;
-  const list = actions.data || [];
-  const stats = computeCapaStatsReal(list);
+  const list = (actions.data || []).filter((a) => !a.parentActionId);
+  const dash = dashboardQ.data || {};
   const sorted = [...list].sort((a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity));
+  const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
+  const reloadAll = () => { actions.reload(); dashboardQ.reload(); };
+  const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MINEURE: '#B45309', NON_CRITIQUE: C.green };
 
   return (
     <div className="space-y-6">
-      {(showForm || selected) && <ActionForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={actions.reload} />}
+      {(showForm || editing) && <ActionForm record={editing} onClose={() => { setShowForm(false); setEditing(null); }} onCreated={reloadAll} />}
+      {viewing && <CapaDetailModal action={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action CAPA</button>
       </div>
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="Actions totales" value={stats.total} color={C.blue} icon={Wrench} />
-        <KpiCard label="Terminées" value={stats.terminees} color={C.green} icon={ShieldCheck} />
-        <KpiCard label="En cours" value={stats.enCours} color={C.blue} icon={Activity} />
-        <KpiCard label="En retard" value={stats.enRetard} color={C.red} icon={AlertTriangle} />
+        <KpiCard label="Actions totales" value={dv(dash.total)} color={C.blue} icon={Wrench} />
+        <KpiCard label="Ouvertes" value={dv(dash.ouvertes)} color={C.amber} icon={Activity} />
+        <KpiCard label="Terminées" value={dv(dash.terminees)} color={C.green} icon={ShieldCheck} />
+        <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+        <KpiCard label="Échéance proche (7j)" value={dv(dash.echeanceProche)} color={C.amber} icon={AlertTriangle} />
+        <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
+        <KpiCard label="En attente de validation" value={dv(dash.enAttenteValidation)} color={C.blue} icon={ClipboardCheck} />
+        <KpiCard label="Taux de clôture" value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
+        <KpiCard label="Taux en retard" value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
+        <KpiCard label="Délai moyen de réalisation (j)" value={dv(dash.delaiMoyenRealisation)} color={C.blue} icon={Activity} />
       </div>
       <div className="grid grid-cols-3 gap-4">
-        <Panel title="Statut des actions" className="col-span-1"><DonutChart data={[{ name: 'Terminées', value: stats.terminees }, { name: 'En cours', value: stats.enCours }, { name: 'En retard', value: stats.enRetard }]} colors={[C.green, C.blue, C.red]} /></Panel>
-        <Panel title="Plan d'actions correctives et préventives" className="col-span-2">
+        <Panel title="Statut des actions" className="col-span-1"><DonutChart data={[{ name: 'Terminées', value: dash.terminees || 0 }, { name: 'Ouvertes', value: dash.ouvertes || 0 }, { name: 'En retard', value: dash.enRetard || 0 }]} colors={[C.green, C.blue, C.red]} /></Panel>
+        <Panel title="Plan d'actions CAPA (curatives, correctives, préventives, amélioration)" className="col-span-2">
           {sorted.length
-            ? <DataTable columns={['Action', 'Priorité', 'Échéance', 'Non-conformité liée', 'Statut']}
-                rows={sorted.map((a) => [a.title, a.priority, a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—', a.nonConformity?.title || '—', <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : a.status} />])}
-                onRowClick={(i) => setSelected(sorted[i])} />
+            ? <DataTable columns={['Action', 'Type', 'Criticité', 'Priorité', 'Avancement', 'Échéance', 'Statut']}
+                rows={sorted.map((a) => [
+                  a.title, a.actionType || '—',
+                  a.criticite ? <span style={{ color: criticiteColor[a.criticite], fontWeight: 600 }}>{a.criticite}</span> : '—',
+                  a.priority, `${a.avancement || 0}%`,
+                  a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—',
+                  <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : a.status} />,
+                ])}
+                onRowClick={(i) => setViewing(sorted[i])} />
             : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
         </Panel>
       </div>
