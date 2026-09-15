@@ -135,6 +135,8 @@ model User {
   nonConformitiesDeclarees NonConformity[] @relation("NcDeclarant")
   nonConformitiesResponsable NonConformity[] @relation("NcResponsible")
   ncContainmentActionsResponsable NcContainmentAction[]
+  actionExtensionsDemandees ActionExtension[] @relation("ActionExtensionDemandeur")
+  actionExtensionsValidees ActionExtension[] @relation("ActionExtensionValidateur")
   refreshTokens RefreshToken[]
   epcResponsible Epc[]
   epcInspections EpcInspection[]
@@ -756,6 +758,11 @@ model Action {
   dateDebutReelle DateTime?
   dateValidation DateTime?
   dateCloture DateTime?
+  // --- Phase 3 : vérification d'efficacité, prolongation, réouverture ---
+  effectivenessResult String?
+  effectivenessCheckedAt DateTime?
+  effectivenessNotes String?
+  reopenedCount Int @default(0)
   responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
@@ -771,9 +778,26 @@ model Action {
   parentAction Action? @relation("ActionParent", fields:[parentActionId], references:[id], onDelete:SetNull)
   subActions Action[] @relation("ActionParent")
   causes ActionCause[]
+  extensions ActionExtension[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
+}
+
+// Prolongation d'échéance (point 26) — l'ancienne échéance n'est jamais
+// écrasée, seulement remplacée sur l'action avec un historique conservé ici.
+model ActionExtension {
+  id String @id @default(cuid())
+  actionId String
+  ancienneEcheance DateTime?
+  nouvelleEcheance DateTime
+  motif String
+  demandeurId String?
+  validateurId String?
+  createdAt DateTime @default(now())
+  action Action @relation(fields:[actionId], references:[id], onDelete:Cascade)
+  demandeur User? @relation("ActionExtensionDemandeur", fields:[demandeurId], references:[id], onDelete:SetNull)
+  validateur User? @relation("ActionExtensionValidateur", fields:[validateurId], references:[id], onDelete:SetNull)
 }
 
 // Analyse des causes d'une action CAPA (point 6) — même structure que pour

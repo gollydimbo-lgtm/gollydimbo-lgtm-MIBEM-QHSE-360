@@ -274,11 +274,12 @@ import { writeAudit } from '../common/audit-log.helper';
   return risk;
  }
  actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true,responsible:true,workUnit:true,parentAction:true,subActions:true},orderBy:{dueDate:'asc'}})}
- actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}}}})}
+ actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}},extensions:{include:{demandeur:true,validateur:true},orderBy:{createdAt:'desc'}}}})}
  actionCreate(b:any){return this.db.action.create({data:b})}
  async actionUpdate(id:string,b:any){
   const current=await this.db.action.findUnique({where:{id}});
   if(!current) throw new Error('Action introuvable');
+  if(b.status==='CLOSED'&&current.status!=='CLOSED') throw new Error('Utilisez la clôture dédiée (vérification d\'efficacité requise) plutôt qu\'une modification directe du statut.');
   const action=await this.db.action.update({where:{id},data:b});
   // La progression d'une CAPA peut se déduire de ses sous-actions plutôt
   // que d'être ressaisie manuellement au niveau parent (point 11).
@@ -291,6 +292,95 @@ import { writeAudit } from '../common/audit-log.helper';
   if(!subs.length) return;
   const moyenne=Math.round(subs.reduce((s,a)=>s+a.avancement,0)/subs.length);
   await this.db.action.update({where:{id:parentId},data:{avancement:moyenne}});
+ }
+
+ // === ACTIONS CAPA — Phase 3 : efficacité, clôture, prolongation, réouverture
+
+ async actionEffectivenessCheck(id:string,b:any){
+  return this.db.action.update({where:{id},data:{effectivenessResult:b.result,effectivenessCheckedAt:new Date(),effectivenessNotes:b.notes||null}});
+ }
+ // Règle métier fondamentale (point 35) : « réalisée » n'est jamais
+ // synonyme d'« efficace ». La clôture est refusée tant que la vérification
+ // d'efficacité n'a pas conclu à une action efficace.
+ async actionClose(id:string,b:any){
+  const action=await this.db.action.findUnique({where:{id}});
+  if(!action) throw new Error('Action introuvable');
+  if(action.effectivenessResult!=='EFFICACE'){
+   throw new Error("Clôture impossible : la vérification d'efficacité doit d'abord conclure à une action efficace.");
+  }
+  const closed=await this.db.action.update({where:{id},data:{status:'CLOSED',dateCloture:new Date(),completedAt:action.completedAt||new Date()}});
+  if(action.parentActionId) await this.actionRecalcAvancement(action.parentActionId);
+  return closed;
+ }
+ async actionReopen(id:string){
+  const action=await this.db.action.findUnique({where:{id}});
+  if(!action) throw new Error('Action introuvable');
+  return this.db.action.update({where:{id},data:{status:'OPEN',dateCloture:null,reopenedCount:{increment:1}}});
+ }
+ // Une prolongation ne remplace jamais silencieusement l'échéance : l'ancienne
+ // reste tracée dans ActionExtension (point 26).
+ async actionExtensionCreate(id:string,b:any){
+  const action=await this.db.action.findUnique({where:{id}});
+  if(!action) throw new Error('Action introuvable');
+  const extension=await this.db.actionExtension.create({data:{
+   actionId:id, ancienneEcheance:action.dueDate, nouvelleEcheance:new Date(b.nouvelleEcheance),
+   motif:b.motif, demandeurId:b.demandeurId||null, validateurId:b.validateurId||null,
+  }});
+  await this.db.action.update({where:{id},data:{dueDate:new Date(b.nouvelleEcheance)}});
+  return extension;
+ }
+ actionExtensionList(actionId:string){return this.db.actionExtension.findMany({where:{actionId},include:{demandeur:true,validateur:true},orderBy:{createdAt:'desc'}})}
+
+ // Centre d'alertes avec escalade (points 19-20) — le niveau grimpe avec le
+ // retard plutôt que de rester fixe, pour refléter une vraie escalade.
+ async actionAlertes(){
+  const now=new Date();
+  const dans7Jours=new Date(now.getTime()+7*86400000);
+  const actions=await this.db.action.findMany({where:{status:{notIn:['CLOSED','CANCELLED']}},select:{id:true,title:true,criticite:true,dueDate:true,status:true,effectivenessResult:true}});
+  const alertes:any[]=[];
+  for(const a of actions){
+   if(a.criticite==='CRITIQUE') alertes.push({id:a.id,label:`Action critique non traitée : ${a.title}`,niveau:'CRITIQUE'});
+   if(a.status==='VALIDATION_PENDING') alertes.push({id:a.id,label:`En attente de validation : ${a.title}`,niveau:'ATTENTION'});
+   if(a.effectivenessResult==='INEFFICACE') alertes.push({id:a.id,label:`CAPA déclarée inefficace : ${a.title}`,niveau:'URGENT'});
+   if(a.dueDate){
+    const joursRetard=Math.floor((now.getTime()-new Date(a.dueDate).getTime())/86400000);
+    if(joursRetard>14) alertes.push({id:a.id,label:`Retard important (${joursRetard}j) — escalade Direction : ${a.title}`,niveau:'CRITIQUE'});
+    else if(joursRetard>7) alertes.push({id:a.id,label:`Retard (${joursRetard}j) — escalade Responsable QHSE : ${a.title}`,niveau:'URGENT'});
+    else if(joursRetard>0) alertes.push({id:a.id,label:`En retard (${joursRetard}j) : ${a.title}`,niveau:'ATTENTION'});
+    else if(new Date(a.dueDate)<=dans7Jours) alertes.push({id:a.id,label:`Échéance proche : ${a.title}`,niveau:'INFORMATION'});
+   }
+  }
+  const poids:any={CRITIQUE:0,URGENT:1,ATTENTION:2,INFORMATION:3};
+  return alertes.sort((x,y)=>poids[x.niveau]-poids[y.niveau]);
+ }
+
+ // === ACTIONS CAPA — Phase 4 : score de performance, tendances ===========
+
+ async actionPerformanceScore(){
+  const dash=await this.actionDashboard();
+  const actionsEvaluees=await this.db.action.count({where:{effectivenessResult:{not:null},parentActionId:null}});
+  const actionsEfficaces=await this.db.action.count({where:{effectivenessResult:'EFFICACE',parentActionId:null}});
+  const tauxEfficacite=actionsEvaluees?Math.round((actionsEfficaces/actionsEvaluees)*1000)/10:null;
+  // Indice composite configurable en poids fixes pour l'instant — clôture,
+  // respect des délais et efficacité pèsent chacun un tiers.
+  const composantes=[dash.tauxCloture,dash.tauxEnRetard!=null?100-dash.tauxEnRetard:null,tauxEfficacite].filter((v):v is number=>v!=null);
+  const score=composantes.length?Math.round(composantes.reduce((s,v)=>s+v,0)/composantes.length):null;
+  const niveau=score==null?null:score>=85?'EXCELLENT':score>=70?'BON':score>=50?'A_SURVEILLER':score>=30?'INSUFFISANT':'CRITIQUE';
+  return {score,niveau,tauxEfficacite,...dash};
+ }
+
+ async actionTrends(){
+  const depuis=new Date(); depuis.setMonth(depuis.getMonth()-11); depuis.setDate(1); depuis.setHours(0,0,0,0);
+  const actions=await this.db.action.findMany({where:{createdAt:{gte:depuis},parentActionId:null},select:{createdAt:true,completedAt:true,status:true}});
+  const mois:{cle:string,label:string,creees:number,realisees:number}[]=[];
+  for(let i=11;i>=0;i--){
+   const d=new Date(); d.setMonth(d.getMonth()-i); d.setDate(1);
+   const label=d.toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
+   const creees=actions.filter(a=>{const ad=new Date(a.createdAt);return ad.getFullYear()===d.getFullYear()&&ad.getMonth()===d.getMonth();}).length;
+   const realisees=actions.filter(a=>{if(!a.completedAt) return false;const ad=new Date(a.completedAt);return ad.getFullYear()===d.getFullYear()&&ad.getMonth()===d.getMonth();}).length;
+   mois.push({cle:`${d.getFullYear()}-${d.getMonth()}`,label,creees,realisees});
+  }
+  return mois;
  }
 
  actionCauseList(actionId:string){return this.db.actionCause.findMany({where:{actionId},orderBy:{createdAt:'asc'}})}
