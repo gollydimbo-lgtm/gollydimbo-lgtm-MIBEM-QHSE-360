@@ -273,7 +273,61 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.db.safetyEvent.update({where:{id},data:{riskId:risk.id}});
   return risk;
  }
- actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true},orderBy:{dueDate:'asc'}})} actionCreate(b:any){return this.db.action.create({data:b})} actionUpdate(id:string,b:any){return this.db.action.update({where:{id},data:b})} actionDelete(id:string){return this.db.action.delete({where:{id}})}
+ actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true,responsible:true,workUnit:true,parentAction:true,subActions:true},orderBy:{dueDate:'asc'}})}
+ actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}}}})}
+ actionCreate(b:any){return this.db.action.create({data:b})}
+ async actionUpdate(id:string,b:any){
+  const current=await this.db.action.findUnique({where:{id}});
+  if(!current) throw new Error('Action introuvable');
+  const action=await this.db.action.update({where:{id},data:b});
+  // La progression d'une CAPA peut se déduire de ses sous-actions plutôt
+  // que d'être ressaisie manuellement au niveau parent (point 11).
+  if(current.parentActionId) await this.actionRecalcAvancement(current.parentActionId);
+  return action;
+ }
+ actionDelete(id:string){return this.db.action.delete({where:{id}})}
+ private async actionRecalcAvancement(parentId:string){
+  const subs=await this.db.action.findMany({where:{parentActionId:parentId},select:{avancement:true}});
+  if(!subs.length) return;
+  const moyenne=Math.round(subs.reduce((s,a)=>s+a.avancement,0)/subs.length);
+  await this.db.action.update({where:{id:parentId},data:{avancement:moyenne}});
+ }
+
+ actionCauseList(actionId:string){return this.db.actionCause.findMany({where:{actionId},orderBy:{createdAt:'asc'}})}
+ // La présence d'une ActionCause avec estRacine=true répond à elle seule à
+ // « cause racine identifiée ? » — pas besoin d'un champ dupliqué sur Action.
+ actionCauseCreate(b:any){return this.db.actionCause.create({data:b})}
+ actionCauseUpdate(id:string,b:any){return this.db.actionCause.update({where:{id},data:b})}
+ actionCauseDelete(id:string){return this.db.actionCause.delete({where:{id}})}
+
+ // Tableau de bord réel (point 1) — chaque KPI reste `null` si non calculable.
+ async actionDashboard(){
+  const now=new Date();
+  const dans7Jours=new Date(now.getTime()+7*86400000);
+  const actions=await this.db.action.findMany({select:{status:true,priority:true,criticite:true,dueDate:true,completedAt:true,createdAt:true,responsibleId:true,source:true,parentActionId:true}});
+  const principales=actions.filter(a=>!a.parentActionId); // les sous-actions ne comptent pas deux fois dans les totaux
+  const total=principales.length;
+  const cloturees=principales.filter(a=>a.status==='CLOSED').length;
+  const terminees=principales.filter(a=>a.status==='COMPLETED'||a.status==='CLOSED').length;
+  const ouvertes=principales.filter(a=>!['COMPLETED','CLOSED','CANCELLED','REJECTED'].includes(a.status)).length;
+  const enRetard=principales.filter(a=>a.dueDate&&new Date(a.dueDate)<now&&!['COMPLETED','CLOSED','CANCELLED'].includes(a.status)).length;
+  const echeanceProche=principales.filter(a=>a.dueDate&&new Date(a.dueDate)>=now&&new Date(a.dueDate)<=dans7Jours&&!['COMPLETED','CLOSED','CANCELLED'].includes(a.status)).length;
+  const critiques=principales.filter(a=>a.criticite==='CRITIQUE').length;
+  const enAttenteValidation=principales.filter(a=>a.status==='VALIDATION_PENDING').length;
+  const refusees=principales.filter(a=>a.status==='REJECTED').length;
+  const tauxCloture=total?Math.round((cloturees/total)*1000)/10:null;
+  const tauxEnRetard=ouvertes?Math.round((enRetard/ouvertes)*1000)/10:null;
+  const clotureesAvecDelai=principales.filter(a=>a.completedAt);
+  const delaiMoyenRealisation=clotureesAvecDelai.length
+   ?Math.round(clotureesAvecDelai.reduce((s,a)=>s+(new Date(a.completedAt!).getTime()-new Date(a.createdAt).getTime()),0)/clotureesAvecDelai.length/86400000*10)/10
+   :null;
+  const parOrigine=Object.entries(principales.reduce((acc:Record<string,number>,a)=>{const k=a.source||'Non renseignée';acc[k]=(acc[k]||0)+1;return acc;},{})).map(([source,nombre])=>({source,nombre}));
+  const parPriorite=[1,2,3,4].map(p=>({priorite:p,nombre:principales.filter(a=>a.priority===p).length}));
+  return {
+   total,ouvertes,terminees,enRetard,echeanceProche,critiques,enAttenteValidation,cloturees,refusees,
+   tauxCloture,tauxEnRetard,delaiMoyenRealisation,parOrigine,parPriorite,
+  };
+ }
  // === REGISTRE DES RISQUES ===================================================
 
  // Paramétrage — une seule ligne, créée à la demande avec les valeurs par

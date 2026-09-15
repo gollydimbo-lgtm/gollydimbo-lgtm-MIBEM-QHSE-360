@@ -742,6 +742,20 @@ model Action {
   environnementAspectId String?
   riskId String?
   auditFindingId String?
+  // --- Module Actions CAPA (Phases 1+2), additif ---
+  // Distinction volontaire curative/corrective/préventive/amélioration —
+  // jamais réduite au seul couple corrective/préventive, pour éviter la
+  // confusion classique des systèmes QHSE (cf. point 2 du cahier des charges).
+  actionType String?
+  criticite String?
+  source String?
+  workUnitId String?
+  parentActionId String?
+  avancement Int @default(0)
+  dateDebutPrevue DateTime?
+  dateDebutReelle DateTime?
+  dateValidation DateTime?
+  dateCloture DateTime?
   responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
@@ -753,9 +767,29 @@ model Action {
   environnementAspect EnvironnementAspect? @relation(fields:[environnementAspectId], references:[id], onDelete:SetNull)
   risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
   auditFinding AuditFinding? @relation(fields:[auditFindingId], references:[id], onDelete:SetNull)
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  parentAction Action? @relation("ActionParent", fields:[parentActionId], references:[id], onDelete:SetNull)
+  subActions Action[] @relation("ActionParent")
+  causes ActionCause[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
+}
+
+// Analyse des causes d'une action CAPA (point 6) — même structure que pour
+// les non-conformités (5 Pourquoi, Ishikawa/5M...), réutilisée à l'identique
+// plutôt que dupliquée sous un autre nom.
+model ActionCause {
+  id String @id @default(cuid())
+  actionId String
+  methode String
+  niveau String?
+  categorie String?
+  description String
+  type String?
+  estRacine Boolean @default(false)
+  createdAt DateTime @default(now())
+  action Action @relation(fields:[actionId], references:[id], onDelete:Cascade)
 }
 
 model Site {
@@ -1106,6 +1140,7 @@ model WorkUnit {
   audits QhseAudit[]
   auditPrograms AuditProgram[]
   nonConformities NonConformity[]
+  actions Action[]
 }
 
 // Bibliothèque de catégories de risques configurable par l'administrateur —

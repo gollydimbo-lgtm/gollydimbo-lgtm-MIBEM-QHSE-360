@@ -19,7 +19,7 @@ const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessServic
 
 const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, id: string, payload: any) => Promise<any>> = {
   nonConformity: (db, business, id, p) => business.ncUpdate(id, p),
-  action: (db, business, id, p) => db.action.update({ where: { id }, data: p }),
+  action: (db, business, id, p) => business.actionUpdate(id, p),
   risk: (db, business, id, p) => business.riskUpdate(id, p),
   // Entité distincte plutôt qu'un simple "risk" mis à jour : une
   // réévaluation doit passer par le moteur dédié (historique conservé),
