@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
@@ -15,10 +16,15 @@ const _capaTypeLabels = {
   'MAITRISE': 'Maîtrise', 'REDUCTION_RISQUE': 'Réduction du risque', 'REGLEMENTAIRE': 'Réglementaire', 'AUDIT': "Issue d'audit", 'AUTRE': 'Autre',
 };
 const _capaEffLabels = {'EFFICACE': 'Efficace', 'PARTIELLEMENT_EFFICACE': 'Partiellement efficace', 'INEFFICACE': 'Inefficace'};
+const _capaNiveauLabels = {'EXCELLENT': 'Excellent', 'BON': 'Bon', 'A_SURVEILLER': 'À surveiller', 'INSUFFISANT': 'Insuffisant', 'CRITIQUE': 'Critique'};
 
 Color _capaCriticiteColor(String? n) => {
       'CRITIQUE': QhseColors.red, 'MAJEURE': QhseColors.amber,
       'MINEURE': const Color(0xFFB45309), 'NON_CRITIQUE': QhseColors.green,
+    }[n] ?? QhseColors.textSecondary;
+Color _capaNiveauColor(String? n) => {
+      'EXCELLENT': QhseColors.green, 'BON': QhseColors.green, 'A_SURVEILLER': QhseColors.amber,
+      'INSUFFISANT': QhseColors.red, 'CRITIQUE': QhseColors.red,
     }[n] ?? QhseColors.textSecondary;
 
 // --- Écran principal : tableau de bord + plan d'action CAPA ---
@@ -31,7 +37,8 @@ class ActionsPage extends StatefulWidget {
 class _ActionsPageState extends State<ActionsPage> {
   final api = Api();
   List items = [];
-  Map dashboard = {};
+  Map dashboard = {}, score = {};
+  List trends = [];
   bool loading = true;
 
   @override
@@ -43,71 +50,138 @@ class _ActionsPageState extends State<ActionsPage> {
       final all = List.from(await api.get('/business/actions'));
       items = all.where((a) => a['parentActionId'] == null).toList();
       dashboard = Map.from(await api.get('/business/action-dashboard'));
+      score = Map.from(await api.get('/business/action-performance-score'));
+      trends = List.from(await api.get('/business/action-trends'));
     } catch (_) {}
     setState(() => loading = false);
+  }
+
+  bool _isCritical(Map a, DateTime now) {
+    final due = a['dueDate'] != null ? DateTime.tryParse(a['dueDate']) : null;
+    final overdue = due != null && a['status'] != 'CLOSED' && due.isBefore(now);
+    return a['criticite'] == 'CRITIQUE' || overdue || a['effectivenessResult'] == 'INEFFICACE' || a['status'] == 'BLOCKED';
   }
 
   @override
   Widget build(BuildContext c) {
     final now = DateTime.now();
-    return Scaffold(
-      appBar: AppBar(title: const Text('Actions CAPA')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const CapaFormPage())).then((_) => load()),
-        icon: const Icon(Icons.add),
-        label: const Text('Nouvelle action'),
-      ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: load,
-              child: Column(children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: KpiBar([
-                    KpiStat('Total', '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.build_outlined),
-                    KpiStat('Ouvertes', '${dashboard['ouvertes'] ?? 0}', color: QhseColors.amber, icon: Icons.pending_actions),
-                    KpiStat('Terminées', '${dashboard['terminees'] ?? 0}', color: QhseColors.green, icon: Icons.check_circle_outline),
-                    KpiStat('En retard', '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
-                    KpiStat('Critiques', '${dashboard['critiques'] ?? 0}', color: (dashboard['critiques'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
-                  ]),
-                ),
-                Expanded(
-                  child: items.isEmpty
-                      ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune action')))])
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: items.length,
-                          itemBuilder: (_, i) {
-                            final a = items[i];
-                            final due = a['dueDate'] != null ? DateTime.tryParse(a['dueDate']) : null;
-                            final overdue = due != null && a['status'] != 'CLOSED' && due.isBefore(now);
-                            return Card(
-                              child: ListTile(
-                                leading: Icon(
-                                  a['status'] == 'CLOSED' ? Icons.check_circle : (overdue ? Icons.error : Icons.pending_actions),
-                                  color: a['status'] == 'CLOSED' ? Colors.green : (overdue ? Colors.red : Colors.orange),
-                                ),
-                                title: Text('${a['code']} — ${a['title']}'),
-                                subtitle: Text('${_capaStatusLabels[a['status']] ?? a['status']}${a['actionType'] != null ? ' · ${_capaTypeLabels[a['actionType']] ?? a['actionType']}' : ''}${due != null ? ' · échéance ${due.toIso8601String().substring(0, 10)}' : ''}${overdue ? ' ⚠️ en retard' : ''}'),
-                                trailing: a['avancement'] != null ? Text('${a['avancement']}%', style: const TextStyle(fontWeight: FontWeight.bold)) : null,
-                                onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => CapaDetailPage(actionId: a['id']))).then((_) => load()),
-                              ),
-                            );
-                          },
-                        ),
-                ),
+    final critiques = items.where((a) => _isCritical(a, now)).toList();
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Actions CAPA'), bottom: const TabBar(tabs: [Tab(text: "Plan d'action"), Tab(text: 'Critiques'), Tab(text: 'Analyses')])),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const CapaFormPage())).then((_) => load()),
+          icon: const Icon(Icons.add),
+          label: const Text('Nouvelle action'),
+        ),
+        body: loading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(children: [
+                _buildList(c, items, now, empty: 'Aucune action'),
+                _buildList(c, critiques, now, empty: 'Aucune action critique — tout est sous contrôle'),
+                _buildAnalyses(c),
               ]),
-            ),
+      ),
     );
   }
+
+  Widget _buildList(BuildContext c, List list, DateTime now, {required String empty}) => RefreshIndicator(
+    onRefresh: load,
+    child: Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: KpiBar([
+          KpiStat('Total', '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.build_outlined),
+          KpiStat('Ouvertes', '${dashboard['ouvertes'] ?? 0}', color: QhseColors.amber, icon: Icons.pending_actions),
+          KpiStat('Terminées', '${dashboard['terminees'] ?? 0}', color: QhseColors.green, icon: Icons.check_circle_outline),
+          KpiStat('En retard', '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+          KpiStat('Critiques', '${dashboard['critiques'] ?? 0}', color: (dashboard['critiques'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
+        ]),
+      ),
+      Expanded(
+        child: list.isEmpty
+            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(empty)))])
+            : ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: list.length,
+                itemBuilder: (_, i) {
+                  final a = list[i];
+                  final due = a['dueDate'] != null ? DateTime.tryParse(a['dueDate']) : null;
+                  final overdue = due != null && a['status'] != 'CLOSED' && due.isBefore(now);
+                  return Card(
+                    child: ListTile(
+                      leading: Icon(
+                        a['status'] == 'CLOSED' ? Icons.check_circle : (overdue ? Icons.error : Icons.pending_actions),
+                        color: a['status'] == 'CLOSED' ? Colors.green : (overdue ? Colors.red : Colors.orange),
+                      ),
+                      title: Text('${a['code']} — ${a['title']}'),
+                      subtitle: Text('${_capaStatusLabels[a['status']] ?? a['status']}${a['actionType'] != null ? ' · ${_capaTypeLabels[a['actionType']] ?? a['actionType']}' : ''}${due != null ? ' · échéance ${due.toIso8601String().substring(0, 10)}' : ''}${overdue ? ' ⚠️ en retard' : ''}'),
+                      trailing: a['avancement'] != null ? Text('${a['avancement']}%', style: const TextStyle(fontWeight: FontWeight.bold)) : null,
+                      onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => CapaDetailPage(actionId: a['id']))).then((_) => load()),
+                    ),
+                  );
+                },
+              ),
+      ),
+    ]),
+  );
+
+  Widget _buildAnalyses(BuildContext c) => RefreshIndicator(
+    onRefresh: load,
+    child: ListView(padding: const EdgeInsets.all(16), children: [
+      Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        Text('Score de performance CAPA', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        const SizedBox(height: 4),
+        Text('${score['score'] ?? '—'}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: _capaNiveauColor(score['niveau']))),
+        Text(_capaNiveauLabels[score['niveau']] ?? '—', style: TextStyle(color: _capaNiveauColor(score['niveau']), fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Text("Taux d'efficacité : ${score['tauxEfficacite'] ?? '—'}%", style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+      ]))),
+      const SizedBox(height: 16),
+      Text('Évolution sur 12 mois — créées vs réalisées', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+      const SizedBox(height: 8),
+      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary))) : _CapaTrendChart(trends: trends)),
+    ]),
+  );
+}
+
+/// Évolution mensuelle créées/réalisées (fl_chart LineChart, même style que
+/// le graphique déjà utilisé sur le tableau de bord principal).
+class _CapaTrendChart extends StatelessWidget {
+  final List trends;
+  const _CapaTrendChart({required this.trends});
+
+  List<FlSpot> _toSpots(String key) => [for (int i = 0; i < trends.length; i++) FlSpot(i.toDouble(), ((trends[i][key] ?? 0) as num).toDouble())];
+
+  @override
+  Widget build(BuildContext context) => LineChart(LineChartData(
+        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: QhseColors.border, strokeWidth: 1)),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 26, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)))),
+          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, interval: 1, getTitlesWidget: (v, m) {
+            final i = v.toInt();
+            return Padding(padding: const EdgeInsets.only(top: 4), child: Text(i >= 0 && i < trends.length ? '${trends[i]['label'] ?? ''}' : '', style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)));
+          })),
+        ),
+        lineBarsData: [
+          LineChartBarData(spots: _toSpots('creees'), isCurved: true, color: QhseColors.blue, barWidth: 2, dotData: const FlDotData(show: true), belowBarData: BarAreaData(show: true, color: QhseColors.blue.withOpacity(0.08))),
+          LineChartBarData(spots: _toSpots('realisees'), isCurved: true, color: QhseColors.green, barWidth: 2, dotData: const FlDotData(show: true), belowBarData: BarAreaData(show: true, color: QhseColors.green.withOpacity(0.08))),
+        ],
+      ));
 }
 
 // --- Formulaire de création / modification ---
 class CapaFormPage extends StatefulWidget {
   final Map? record;
   final String? parentActionId;
-  const CapaFormPage({super.key, this.record, this.parentActionId});
+  final String? sourceModule;
+  final String? sourceEntityId;
+  final Map<String, dynamic> prefillData;
+  const CapaFormPage({super.key, this.record, this.parentActionId, this.sourceModule, this.sourceEntityId, this.prefillData = const {}});
   @override
   State<CapaFormPage> createState() => _CapaFormPageState();
 }
@@ -136,6 +210,10 @@ class _CapaFormPageState extends State<CapaFormPage> {
       dueDate = a['dueDate'] != null ? DateTime.tryParse(a['dueDate']) : null;
       actionType = a['actionType']; criticite = a['criticite']; workUnitId = a['workUnitId']; responsibleId = a['responsibleId'];
       priority = a['priority'] ?? 2; avancement = a['avancement'] ?? 0;
+    } else if (widget.prefillData.isNotEmpty) {
+      title.text = widget.prefillData['title'] ?? '';
+      source.text = widget.prefillData['source'] ?? '';
+      criticite = widget.prefillData['criticite'];
     }
     loadLists();
   }
@@ -169,6 +247,10 @@ class _CapaFormPageState extends State<CapaFormPage> {
     try {
       if (editing) {
         await api.patch('/business/actions/${widget.record!['id']}', payload);
+      } else if (widget.sourceModule != null && widget.sourceEntityId != null) {
+        // Matrice de liaison générique — le point de création commun à
+        // tous les modules plutôt qu'une implémentation par module.
+        await api.post('/business/capa-links/create-from-source', {'code': genCode('ACT'), ...payload, 'sourceModule': widget.sourceModule, 'sourceEntityId': widget.sourceEntityId});
       } else {
         await api.post('/business/actions', {'code': genCode('ACT'), ...payload});
       }
