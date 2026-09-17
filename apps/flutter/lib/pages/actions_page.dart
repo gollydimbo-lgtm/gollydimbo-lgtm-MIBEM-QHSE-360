@@ -4,6 +4,7 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
 import '../theme.dart';
+import 'attachment_helpers.dart';
 
 const _capaStatusLabels = {
   'DRAFT': 'Brouillon', 'TO_ANALYZE': 'À analyser', 'PLANNED': 'Planifiée', 'ASSIGNED': 'Assignée',
