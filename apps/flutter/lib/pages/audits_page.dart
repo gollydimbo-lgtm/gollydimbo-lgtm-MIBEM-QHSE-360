@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
+import 'capa_link_widget.dart';
 
 const _auditStatusLabels = {
   'DRAFT': 'Brouillon', 'PLANNED': 'Planifié', 'TO_PREPARE': 'À préparer', 'PREPARING': 'Préparation en cours',
@@ -35,6 +37,9 @@ class _AuditsPageState extends State<AuditsPage> {
   final api = Api();
   List items = [];
   Map dashboard = {};
+  List trends = [];
+  List ncRecurrentes = [];
+  Map? synthese;
   bool loading = true;
 
   @override
@@ -45,21 +50,34 @@ class _AuditsPageState extends State<AuditsPage> {
     try {
       items = List.from(await api.get('/business/audits'));
       dashboard = Map.from(await api.get('/business/audit-dashboard'));
+      trends = List.from(await api.get('/business/audit-trends'));
+      ncRecurrentes = List.from(await api.get('/business/audit-nc-recurrentes'));
     } catch (_) {}
     setState(() => loading = false);
   }
 
+  Future<void> loadSynthese() async {
+    try { synthese = Map.from(await api.get('/business/audit-synthese-direction')); setState(() {}); } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext c) => DefaultTabController(
-    length: 2,
+    length: 3,
     child: Scaffold(
-      appBar: AppBar(title: const Text('Audits QHSE'), bottom: const TabBar(tabs: [Tab(text: "Vue d'ensemble"), Tab(text: 'Registre')])),
+      appBar: AppBar(
+        title: const Text('Audits QHSE'),
+        actions: [
+          IconButton(icon: const Icon(Icons.people_outline), tooltip: 'Auditeurs', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditeursPage()))),
+          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Paramétrage', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditParametragePage())).then((_) => load())),
+        ],
+        bottom: const TabBar(tabs: [Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Analyses')]),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditFormPage())).then((_) => load()),
         icon: const Icon(Icons.add),
         label: const Text('Planifier'),
       ),
-      body: loading ? const Center(child: CircularProgressIndicator()) : TabBarView(children: [_buildApercu(c), _buildRegistre(c)]),
+      body: loading ? const Center(child: CircularProgressIndicator()) : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildAnalyses(c)]),
     ),
   );
 
@@ -103,6 +121,135 @@ class _AuditsPageState extends State<AuditsPage> {
   );
 
   String _date(dynamic v) => v == null ? '' : v.toString().substring(0, 10);
+
+  Widget _buildAnalyses(BuildContext c) => RefreshIndicator(
+    onRefresh: load,
+    child: ListView(padding: const EdgeInsets.all(12), children: [
+      Text('Tendance (12 derniers mois)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      const SizedBox(height: 8),
+      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary))) : _AuditTrendChart(trends: trends)),
+      const SizedBox(height: 20),
+      Text('Non-conformités récurrentes détectées (${ncRecurrentes.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      const SizedBox(height: 8),
+      if (ncRecurrentes.isEmpty)
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune récurrence détectée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+      else
+        ...ncRecurrentes.map((r) => Card(child: ListTile(
+              dense: true,
+              title: Text('${r['description'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text('${r['processus']} · ${r['occurrences']} occurrences'),
+              trailing: Icon(Icons.repeat, color: QhseColors.amber),
+            ))),
+      const SizedBox(height: 20),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text('Synthèse Direction', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        TextButton.icon(onPressed: loadSynthese, icon: const Icon(Icons.summarize_outlined, size: 16), label: const Text('Générer')),
+      ]),
+      if (synthese != null) ...[
+        const SizedBox(height: 8),
+        Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Généré le ${_date(synthese!['genereLe'])}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+          const SizedBox(height: 10),
+          Text('Processus les plus performants', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ...List.from(synthese!['processusLesPlusPerformants'] ?? []).map((p) => Text('• ${p['processus']} — ${p['tauxConformiteMoyen'] ?? '—'}%', style: const TextStyle(fontSize: 12))),
+          const SizedBox(height: 10),
+          Text('Processus les plus problématiques', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ...List.from(synthese!['processusLesPlusProblematiques'] ?? []).map((p) => Text('• ${p['processus']} — ${p['tauxConformiteMoyen'] ?? '—'}%', style: const TextStyle(fontSize: 12))),
+        ]))),
+      ],
+      const SizedBox(height: 20),
+      Text('Comparaison de périodes', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      const SizedBox(height: 8),
+      const _AuditComparaisonPanel(),
+    ]),
+  );
+}
+
+/// Évolution mensuelle du nombre d'audits réalisés et du taux de conformité
+/// moyen (même style fl_chart que les autres modules de l'application).
+class _AuditTrendChart extends StatelessWidget {
+  final List trends;
+  const _AuditTrendChart({required this.trends});
+
+  @override
+  Widget build(BuildContext context) {
+    final spots = [for (int i = 0; i < trends.length; i++) FlSpot(i.toDouble(), ((trends[i]['realises'] ?? 0) as num).toDouble())];
+    return LineChart(LineChartData(
+      gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: QhseColors.border, strokeWidth: 1)),
+      borderData: FlBorderData(show: false),
+      titlesData: FlTitlesData(
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 26, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)))),
+        bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, interval: 1, getTitlesWidget: (v, m) {
+          final i = v.toInt();
+          return Padding(padding: const EdgeInsets.only(top: 4), child: Text(i >= 0 && i < trends.length ? '${trends[i]['label'] ?? ''}' : '', style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)));
+        })),
+      ),
+      lineBarsData: [LineChartBarData(spots: spots, isCurved: true, color: QhseColors.blue, barWidth: 2, dotData: const FlDotData(show: true), belowBarData: BarAreaData(show: true, color: QhseColors.blue.withOpacity(0.08)))],
+    ));
+  }
+}
+
+/// Formulaire de comparaison de deux périodes (point 34 du cahier des
+/// charges) — recompose les mêmes KPI que le tableau de bord.
+class _AuditComparaisonPanel extends StatefulWidget {
+  const _AuditComparaisonPanel();
+  @override
+  State<_AuditComparaisonPanel> createState() => _AuditComparaisonPanelState();
+}
+
+class _AuditComparaisonPanelState extends State<_AuditComparaisonPanel> {
+  final api = Api();
+  DateTime? debut1, fin1, debut2, fin2;
+  Map? result;
+  bool busy = false;
+
+  Future<void> pick(void Function(DateTime) set) async {
+    final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)));
+    if (d != null) setState(() => set(d));
+  }
+
+  String _f(DateTime? d) => d == null ? '—' : d.toIso8601String().substring(0, 10);
+
+  Future<void> compare() async {
+    if (debut1 == null || fin1 == null || debut2 == null || fin2 == null) return;
+    setState(() => busy = true);
+    try {
+      result = Map.from(await api.get('/business/audit-comparaison?debut1=${debut1!.toIso8601String()}&fin1=${fin1!.toIso8601String()}&debut2=${debut2!.toIso8601String()}&fin2=${fin2!.toIso8601String()}'));
+    } catch (_) {}
+    setState(() => busy = false);
+  }
+
+  @override
+  Widget build(BuildContext c) => Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Période 1', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Row(children: [
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => debut1 = d), child: Text('Début : ${_f(debut1)}'))),
+          const SizedBox(width: 8),
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => fin1 = d), child: Text('Fin : ${_f(fin1)}'))),
+        ]),
+        const SizedBox(height: 10),
+        Text('Période 2', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Row(children: [
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => debut2 = d), child: Text('Début : ${_f(debut2)}'))),
+          const SizedBox(width: 8),
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => fin2 = d), child: Text('Fin : ${_f(fin2)}'))),
+        ]),
+        const SizedBox(height: 10),
+        SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : compare, child: Text(busy ? '…' : 'Comparer'))),
+        if (result != null) ...[
+          const SizedBox(height: 12),
+          Table(children: [
+            TableRow(children: [const Text(''), const Text('Période 1', style: TextStyle(fontWeight: FontWeight.bold)), const Text('Période 2', style: TextStyle(fontWeight: FontWeight.bold))]),
+            TableRow(children: [const Text('Audits'), Text('${result!['periode1']['nombreAudits']}'), Text('${result!['periode2']['nombreAudits']}')]),
+            TableRow(children: [const Text('Taux conformité'), Text('${result!['periode1']['tauxConformiteMoyen'] ?? '—'}%'), Text('${result!['periode2']['tauxConformiteMoyen'] ?? '—'}%')]),
+            TableRow(children: [const Text('Score moyen'), Text('${result!['periode1']['scoreMoyen'] ?? '—'}'), Text('${result!['periode2']['scoreMoyen'] ?? '—'}')]),
+            TableRow(children: [const Text('NC majeures'), Text('${result!['periode1']['ncMajeures']}'), Text('${result!['periode2']['ncMajeures']}')]),
+            TableRow(children: [const Text('NC mineures'), Text('${result!['periode1']['ncMineures']}'), Text('${result!['periode2']['ncMineures']}')]),
+          ]),
+        ],
+      ])));
 }
 
 // --- Détail d'un audit : check-list, constats, signatures, actions ---
@@ -217,6 +364,9 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
                       ? Text('Signé le ${s['signedAt'].toString().substring(0, 10)}', style: TextStyle(color: QhseColors.green, fontSize: 11))
                       : Text('En attente', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
                 ))),
+
+          const SizedBox(height: 20),
+          CapaLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id'], prefill: {'title': 'Suite audit — ${a['title']}', 'source': 'AUDIT'}),
         ]),
       ),
     );
@@ -433,5 +583,424 @@ class _AuditFormPageState extends State<AuditFormPage> {
             const SizedBox(height: 20),
             SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : editing ? 'Enregistrer' : 'Planifier'))),
           ]),
+  );
+}
+
+// --- Auditeurs : profils, compétences, charge et indépendance ---
+class AuditeursPage extends StatefulWidget {
+  const AuditeursPage({super.key});
+  @override
+  State<AuditeursPage> createState() => _AuditeursPageState();
+}
+
+class _AuditeursPageState extends State<AuditeursPage> {
+  final api = Api();
+  List items = [];
+  bool loading = true;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    setState(() => loading = true);
+    try { items = List.from(await api.get('/business/auditeurs')); } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  Future<void> editProfile(Map u) async {
+    final profile = Map.from(u['profile'] ?? {});
+    final competence = TextEditingController(text: profile['competence'] ?? '');
+    final formation = TextEditingController(text: profile['formation'] ?? '');
+    final experience = TextEditingController(text: '${profile['experienceAnnees'] ?? ''}');
+    final habilitation = TextEditingController(text: profile['habilitation'] ?? '');
+    bool disponible = profile['disponible'] ?? true;
+    await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+      title: Text('${u['firstName']} ${u['lastName']}'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: competence, decoration: const InputDecoration(labelText: 'Compétence / domaines')),
+        TextField(controller: formation, decoration: const InputDecoration(labelText: 'Formation')),
+        TextField(controller: experience, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Années d'expérience")),
+        TextField(controller: habilitation, decoration: const InputDecoration(labelText: 'Habilitation')),
+        CheckboxListTile(contentPadding: EdgeInsets.zero, value: disponible, title: const Text('Disponible', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => disponible = v ?? true)),
+      ])),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        FilledButton(onPressed: () async {
+          try {
+            await api.patch('/business/auditeurs/${u['id']}/profile', {
+              'competence': competence.text.trim().isEmpty ? null : competence.text.trim(),
+              'formation': formation.text.trim().isEmpty ? null : formation.text.trim(),
+              'experienceAnnees': int.tryParse(experience.text.trim()),
+              'habilitation': habilitation.text.trim().isEmpty ? null : habilitation.text.trim(),
+              'disponible': disponible,
+            });
+            if (c.mounted) Navigator.pop(c);
+            load();
+          } catch (e) { if (c.mounted) ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text('$e'))); }
+        }, child: const Text('Enregistrer')),
+      ],
+    )));
+  }
+
+  @override
+  Widget build(BuildContext c) => Scaffold(
+    appBar: AppBar(title: const Text('Auditeurs')),
+    body: loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: load,
+            child: items.isEmpty
+                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun auditeur identifié')))])
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: items.length,
+                    itemBuilder: (_, i) {
+                      final u = items[i];
+                      final profile = u['profile'];
+                      return Card(child: ListTile(
+                        leading: CircleAvatar(child: Text('${u['firstName']?[0] ?? '?'}')),
+                        title: Text('${u['firstName']} ${u['lastName']}'),
+                        subtitle: Text('${u['nombreAuditsRealises']} réalisés · ${u['nombreAuditsEnCours']} en cours${u['performanceMoyenne'] != null ? ' · score moyen ${u['performanceMoyenne']}' : ''}${profile != null && profile['disponible'] == false ? ' · indisponible' : ''}'),
+                        trailing: IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => editProfile(u)),
+                      ));
+                    },
+                  ),
+          ),
+  );
+}
+
+// --- Paramétrage : types, référentiels, check-lists, programme d'audit ---
+class AuditParametragePage extends StatefulWidget {
+  const AuditParametragePage({super.key});
+  @override
+  State<AuditParametragePage> createState() => _AuditParametragePageState();
+}
+
+class _AuditParametragePageState extends State<AuditParametragePage> {
+  @override
+  Widget build(BuildContext c) => DefaultTabController(
+    length: 4,
+    child: Scaffold(
+      appBar: AppBar(title: const Text('Paramétrage audits'), bottom: const TabBar(isScrollable: true, tabs: [Tab(text: 'Types'), Tab(text: 'Référentiels'), Tab(text: 'Check-lists'), Tab(text: 'Programme')])),
+      body: const TabBarView(children: [_AuditTypesTab(), _AuditReferentialsTab(), _AuditChecklistsTab(), _AuditProgramTab()]),
+    ),
+  );
+}
+
+class _AuditTypesTab extends StatefulWidget {
+  const _AuditTypesTab();
+  @override
+  State<_AuditTypesTab> createState() => _AuditTypesTabState();
+}
+
+class _AuditTypesTabState extends State<_AuditTypesTab> {
+  final api = Api();
+  List items = [];
+  bool loading = true;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    setState(() => loading = true);
+    try { items = List.from(await api.get('/business/audit-types')); } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  Future<void> addDialog() async {
+    final label = TextEditingController();
+    await showDialog(context: context, builder: (c) => AlertDialog(
+      title: const Text("Nouveau type d'audit"),
+      content: TextField(controller: label, decoration: const InputDecoration(labelText: 'Libellé')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        FilledButton(onPressed: () async {
+          if (label.text.trim().isEmpty) return;
+          await api.post('/business/audit-types', {'code': genCode('ATY'), 'label': label.text.trim()});
+          if (c.mounted) Navigator.pop(c);
+          load();
+        }, child: const Text('Ajouter')),
+      ],
+    ));
+  }
+
+  @override
+  Widget build(BuildContext c) => Scaffold(
+    floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
+    body: loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final t = items[i];
+                return Card(child: ListTile(
+                  title: Text(t['label'] ?? ''),
+                  subtitle: Text(t['code'] ?? ''),
+                  trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-types/${t['id']}'); load(); }),
+                ));
+              },
+            ),
+          ),
+  );
+}
+
+class _AuditReferentialsTab extends StatefulWidget {
+  const _AuditReferentialsTab();
+  @override
+  State<_AuditReferentialsTab> createState() => _AuditReferentialsTabState();
+}
+
+class _AuditReferentialsTabState extends State<_AuditReferentialsTab> {
+  final api = Api();
+  List items = [];
+  bool loading = true;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    setState(() => loading = true);
+    try { items = List.from(await api.get('/business/audit-referentials')); } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  Future<void> addDialog() async {
+    final label = TextEditingController();
+    final description = TextEditingController();
+    await showDialog(context: context, builder: (c) => AlertDialog(
+      title: const Text('Nouveau référentiel'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: label, decoration: const InputDecoration(labelText: 'Libellé')),
+        TextField(controller: description, decoration: const InputDecoration(labelText: 'Description')),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        FilledButton(onPressed: () async {
+          if (label.text.trim().isEmpty) return;
+          await api.post('/business/audit-referentials', {'code': genCode('ARF'), 'label': label.text.trim(), 'description': description.text.trim().isEmpty ? null : description.text.trim()});
+          if (c.mounted) Navigator.pop(c);
+          load();
+        }, child: const Text('Ajouter')),
+      ],
+    ));
+  }
+
+  @override
+  Widget build(BuildContext c) => Scaffold(
+    floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
+    body: loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final r = items[i];
+                return Card(child: ListTile(
+                  title: Text(r['label'] ?? ''),
+                  subtitle: Text(r['description'] ?? r['code'] ?? ''),
+                  trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-referentials/${r['id']}'); load(); }),
+                ));
+              },
+            ),
+          ),
+  );
+}
+
+class _AuditChecklistsTab extends StatefulWidget {
+  const _AuditChecklistsTab();
+  @override
+  State<_AuditChecklistsTab> createState() => _AuditChecklistsTabState();
+}
+
+class _AuditChecklistsTabState extends State<_AuditChecklistsTab> {
+  final api = Api();
+  List items = [];
+  bool loading = true;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    setState(() => loading = true);
+    try { items = List.from(await api.get('/business/audit-checklists')); } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  Future<void> addDialog() async {
+    final title = TextEditingController();
+    await showDialog(context: context, builder: (c) => AlertDialog(
+      title: const Text('Nouvelle check-list'),
+      content: TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        FilledButton(onPressed: () async {
+          if (title.text.trim().isEmpty) return;
+          await api.post('/business/audit-checklists', {'code': genCode('CKL'), 'title': title.text.trim()});
+          if (c.mounted) Navigator.pop(c);
+          load();
+        }, child: const Text('Ajouter')),
+      ],
+    ));
+  }
+
+  Future<void> addItemDialog(Map checklist) async {
+    final question = TextEditingController();
+    final critere = TextEditingController();
+    String criticite = 'FAIBLE';
+    await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+      title: Text('Question — ${checklist['title']}'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: question, decoration: const InputDecoration(labelText: 'Question')),
+        TextField(controller: critere, decoration: const InputDecoration(labelText: 'Critère attendu')),
+        DropdownButtonFormField<String>(
+          value: criticite, isExpanded: true, decoration: const InputDecoration(labelText: 'Criticité'),
+          items: const [DropdownMenuItem(value: 'FAIBLE', child: Text('Faible')), DropdownMenuItem(value: 'MOYENNE', child: Text('Moyenne')), DropdownMenuItem(value: 'ELEVEE', child: Text('Élevée')), DropdownMenuItem(value: 'CRITIQUE', child: Text('Critique'))],
+          onChanged: (v) => setD(() => criticite = v ?? 'FAIBLE'),
+        ),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        FilledButton(onPressed: () async {
+          if (question.text.trim().isEmpty) return;
+          await api.post('/business/audit-checklist-items', {'checklistId': checklist['id'], 'question': question.text.trim(), 'critereAttendu': critere.text.trim().isEmpty ? null : critere.text.trim(), 'criticite': criticite});
+          if (c.mounted) Navigator.pop(c);
+          load();
+        }, child: const Text('Ajouter')),
+      ],
+    )));
+  }
+
+  @override
+  Widget build(BuildContext c) => Scaffold(
+    floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
+    body: loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final cl = items[i];
+                final itemsList = List.from(cl['items'] ?? []);
+                return Card(child: ExpansionTile(
+                  title: Text(cl['title'] ?? ''),
+                  subtitle: Text('${itemsList.length} questions'),
+                  children: [
+                    ...itemsList.map((it) => ListTile(dense: true, title: Text(it['question'] ?? ''), subtitle: it['critereAttendu'] != null ? Text(it['critereAttendu']) : null)),
+                    Padding(padding: const EdgeInsets.only(bottom: 8), child: TextButton.icon(onPressed: () => addItemDialog(cl), icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter une question'))),
+                  ],
+                ));
+              },
+            ),
+          ),
+  );
+}
+
+class _AuditProgramTab extends StatefulWidget {
+  const _AuditProgramTab();
+  @override
+  State<_AuditProgramTab> createState() => _AuditProgramTabState();
+}
+
+class _AuditProgramTabState extends State<_AuditProgramTab> {
+  final api = Api();
+  List items = [], types = [], workUnits = [], users = [];
+  bool loading = true;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    setState(() => loading = true);
+    try {
+      items = List.from(await api.get('/business/audit-programs'));
+      types = List.from(await api.get('/business/audit-types'));
+      workUnits = List.from(await api.get('/business/work-units'));
+      users = List.from(await api.get('/users'));
+    } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  Future<void> addDialog() async {
+    final title = TextEditingController();
+    final year = TextEditingController(text: '${DateTime.now().year}');
+    String? typeId, workUnitId, auditeurId;
+    DateTime? datePrevue;
+    await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+      title: const Text("Nouvelle ligne de programme"),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
+        TextField(controller: year, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Année')),
+        DropdownButtonFormField<String>(
+          value: typeId, isExpanded: true, decoration: const InputDecoration(labelText: 'Type'),
+          items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...types.map<DropdownMenuItem<String>>((t) => DropdownMenuItem<String>(value: t['id'] as String, child: Text(t['label'] ?? '')))],
+          onChanged: (v) => setD(() => typeId = v),
+        ),
+        DropdownButtonFormField<String>(
+          value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail'),
+          items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
+          onChanged: (v) => setD(() => workUnitId = v),
+        ),
+        DropdownButtonFormField<String>(
+          value: auditeurId, isExpanded: true, decoration: const InputDecoration(labelText: 'Auditeur principal'),
+          items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
+          onChanged: (v) => setD(() => auditeurId = v),
+        ),
+        OutlinedButton.icon(onPressed: () async {
+          final d = await showDatePicker(context: c, initialDate: DateTime.now(), firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 730)));
+          if (d != null) setD(() => datePrevue = d);
+        }, icon: const Icon(Icons.event), label: Text(datePrevue == null ? 'Date prévue' : datePrevue!.toIso8601String().substring(0, 10))),
+      ])),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        FilledButton(onPressed: () async {
+          if (title.text.trim().isEmpty) return;
+          await api.post('/business/audit-programs', {
+            'code': genCode('PRG'), 'title': title.text.trim(), 'year': int.tryParse(year.text.trim()) ?? DateTime.now().year,
+            'typeId': typeId, 'workUnitId': workUnitId, 'auditeurPrincipalId': auditeurId,
+            'datePrevue': datePrevue?.toIso8601String(),
+          });
+          if (c.mounted) Navigator.pop(c);
+          load();
+        }, child: const Text('Ajouter')),
+      ],
+    )));
+  }
+
+  Future<void> generateAudit(Map program) async {
+    try { await api.post('/business/audit-programs/${program['id']}/generate-audit', {}); load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+  }
+
+  @override
+  Widget build(BuildContext c) => Scaffold(
+    floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
+    body: loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: load,
+            child: items.isEmpty
+                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune ligne de programme')))])
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: items.length,
+                    itemBuilder: (_, i) {
+                      final p = items[i];
+                      return Card(child: ListTile(
+                        title: Text('${p['title']} (${p['year']})'),
+                        subtitle: Text('${p['statut']}${p['datePrevue'] != null ? ' · ${p['datePrevue'].toString().substring(0, 10)}' : ''}'),
+                        trailing: p['auditId'] == null
+                            ? TextButton(onPressed: () => generateAudit(p), child: const Text('Générer'))
+                            : const Icon(Icons.check_circle, color: QhseColors.green),
+                      ));
+                    },
+                  ),
+          ),
   );
 }
