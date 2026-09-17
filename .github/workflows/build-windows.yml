@@ -56,6 +56,21 @@ jobs:
           path: qhse-mobile-windows.zip
           retention-days: 30
 
+  # softprops/action-gh-release échoue systématiquement sur les runners Windows
+  # ("Erreur de création d'un fichier temporaire d'assets" — bug connu de l'action
+  # sur windows-latest). On publie donc depuis un job Linux séparé, qui télécharge
+  # simplement l'artefact déjà construit ci-dessus.
+  publish-windows:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Télécharger l'artefact Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: qhse-mobile-windows
+
       - name: Publier / mettre à jour la release
         uses: softprops/action-gh-release@v2
         with:
