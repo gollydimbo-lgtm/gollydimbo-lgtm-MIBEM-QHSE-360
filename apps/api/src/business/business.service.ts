@@ -442,6 +442,172 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.db.capaLink.create({data:{actionId:action.id,sourceModule,sourceEntityId,relationType:b.relationType||'GENEREE_PAR',createdById:b.createdById||null}});
   return action;
  }
+
+ // Échéance suggérée par criticité — règle unique de l'entreprise plutôt
+ // qu'une valeur ressaisie à chaque module (7j critique, 15j
+ // majeure/élevée, 30j modérée, 60j mineure/faible, 30j par défaut).
+ private capaEcheanceProposee(niveau?:string|null):Date{
+  const j:Record<string,number>={CRITIQUE:7,MAJEURE:15,ELEVEE:15,ELEVE:15,MODEREE:30,MODERE:30,MINEURE:60,FAIBLE:60};
+  const d=new Date(); d.setDate(d.getDate()+(niveau&&j[niveau.toUpperCase()]?j[niveau.toUpperCase()]:30)); return d;
+ }
+ private capaPrioriteProposee(niveau?:string|null):number{
+  const n=(niveau||'').toUpperCase();
+  if(n==='CRITIQUE') return 1;
+  if(['MAJEURE','ELEVEE','ELEVE'].includes(n)) return 2;
+  if(['MODEREE','MODERE'].includes(n)) return 3;
+  return 4;
+ }
+ // Pièces jointes déjà rattachées à la source, via la liaison générique
+ // AttachmentLink — ne duplique jamais physiquement un fichier, la CAPA
+ // ne fait que référencer les mêmes pièces (point 4 du cahier des charges).
+ private async capaAttachmentsDisponibles(ownerType:string,ownerId:string){
+  try{
+   const liens=await this.db.attachmentLink.findMany({where:{ownerType:ownerType as any,ownerId},include:{attachment:true}});
+   return liens.map(l=>({id:l.attachment.id,nom:l.attachment.originalName,type:l.attachment.mimeType}));
+  }catch{return [];}
+ }
+
+ // Mapping intelligent centralisé (point 3 du cahier des charges) — un seul
+ // point d'entrée qui lit l'enregistrement source et calcule tout le
+ // préremplissage d'une CAPA, module par module. Le principe directeur :
+ // une information déjà saisie dans le module d'origine ne doit jamais
+ // être ressaisie manuellement dans le formulaire CAPA. Les règles
+ // (type d'action, priorité, échéance) restent volontairement lisibles et
+ // modifiables ici plutôt que dispersées dans chaque écran.
+ async capaPrefillFromSource(sourceModule:string,sourceEntityId:string){
+  switch(sourceModule){
+   case 'NON_CONFORMITY':{
+    const nc=await this.db.nonConformity.findUnique({where:{id:sourceEntityId},include:{workUnit:true,processus:true}});
+    if(!nc) throw new Error('Non-conformité introuvable');
+    return {
+     title:`Traiter — ${nc.title}`, description:nc.description||nc.title, date:nc.occurredAt,
+     processusId:nc.processusId, workUnitId:nc.workUnitId, departement:nc.workUnit?.department||null, service:nc.workUnit?.service||null,
+     gravite:nc.gravite, probabilite:nc.probabilite, criticite:nc.criticiteNiveau,
+     priority:this.capaPrioriteProposee(nc.criticiteNiveau), actionType:'CORRECTIVE',
+     responsibleId:nc.responsibleId, dueDate:nc.dueDate||this.capaEcheanceProposee(nc.criticiteNiveau),
+     attachments:await this.capaAttachmentsDisponibles('NON_CONFORMITY',nc.id),
+    };
+   }
+   case 'RISK':{
+    const r=await this.db.risk.findUnique({where:{id:sourceEntityId},include:{workUnit:true,processus:true}});
+    if(!r) throw new Error('Risque introuvable');
+    return {
+     title:`Maîtriser le risque — ${r.hazard}`, description:r.hazardousEvent||r.potentialDamage||r.hazard, date:new Date(),
+     processusId:r.processusId, workUnitId:r.workUnitId, departement:r.workUnit?.department||null, service:r.workUnit?.service||null,
+     gravite:r.severity, probabilite:r.probability, criticite:r.grossLevel,
+     priority:this.capaPrioriteProposee(r.grossLevel), actionType:'PREVENTIVE',
+     dueDate:r.nextReviewDate||this.capaEcheanceProposee(r.grossLevel),
+     attachments:await this.capaAttachmentsDisponibles('RISK',r.id),
+    };
+   }
+   case 'AUDIT': case 'AUDIT_FINDING':{
+    const f=await this.db.auditFinding.findUnique({where:{id:sourceEntityId},include:{audit:{include:{workUnit:true}},responsable:true}});
+    if(!f) throw new Error('Constat introuvable');
+    return {
+     title:`Traiter le constat — ${f.audit.title}`, description:f.description, date:f.audit.auditDate,
+     processusId:f.audit.processusId, workUnitId:f.audit.workUnitId, departement:f.audit.workUnit?.department||null, service:f.audit.workUnit?.service||null,
+     zone:f.zone, criticite:f.criticite, priority:this.capaPrioriteProposee(f.criticite), actionType:'CORRECTIVE',
+     responsibleId:f.responsableId, dueDate:f.delai||this.capaEcheanceProposee(f.criticite),
+     attachments:await this.capaAttachmentsDisponibles('AUDIT',f.auditId),
+    };
+   }
+   case 'SAFETY_EVENT':{
+    const ev=await this.db.safetyEvent.findUnique({where:{id:sourceEntityId}});
+    if(!ev) throw new Error('Événement introuvable');
+    const niveau=ev.severity>=4?'CRITIQUE':ev.severity===3?'MAJEURE':ev.severity===2?'MODEREE':'MINEURE';
+    const preventif=/PRESQUE|SITUATION/i.test(`${ev.categorie||''} ${ev.type||''}`);
+    return {
+     title:`Action — ${ev.title}`, description:ev.description||ev.title, date:ev.occurredAt,
+     zone:ev.zone, siteId:ev.siteId, criticite:niveau, priority:this.capaPrioriteProposee(niveau),
+     actionType:preventif?'PREVENTIVE':'CORRECTIVE', dueDate:this.capaEcheanceProposee(niveau),
+     attachments:await this.capaAttachmentsDisponibles('SAFETY_EVENT',ev.id),
+    };
+   }
+   case 'FOURNISSEUR':{
+    const f=await this.db.fournisseur.findUnique({where:{id:sourceEntityId}});
+    if(!f) throw new Error('Fournisseur introuvable');
+    const niveau=f.criticite?'ELEVEE':f.niveauRisque;
+    return {
+     title:`Plan de progrès — ${f.nom}`, description:`Écart constaté chez le fournisseur ${f.nom}`, date:new Date(),
+     criticite:niveau, priority:this.capaPrioriteProposee(niveau), actionType:'CORRECTIVE',
+     dueDate:this.capaEcheanceProposee(niveau), attachments:[],
+    };
+   }
+   case 'RECLAMATION':{
+    const r=await this.db.reclamation.findUnique({where:{id:sourceEntityId}});
+    if(!r) throw new Error('Réclamation introuvable');
+    return {
+     title:`Traiter la réclamation — ${r.client}`, description:r.description||r.motif, date:r.date,
+     processusId:r.processusId, criticite:r.gravite, priority:this.capaPrioriteProposee(r.gravite),
+     actionType:'CORRECTIVE', dueDate:this.capaEcheanceProposee(r.gravite), attachments:[],
+    };
+   }
+   case 'CONTROLE':{
+    const c=await this.db.qualityControl.findUnique({where:{id:sourceEntityId}});
+    if(!c) throw new Error('Contrôle introuvable');
+    const niveau=c.result==='NON_COMPLIANT'?'MAJEURE':'MODEREE';
+    return {
+     title:`Traiter le contrôle non conforme — ${c.code}`, description:`${c.finalDecision||c.result||'Non conforme'}${c.line?` — ${c.line}`:''}${c.product?` — ${c.product}`:''}`.trim(),
+     date:c.controlDate, processusId:c.processusId, criticite:niveau, priority:this.capaPrioriteProposee(niveau),
+     actionType:c.domain==='HYGIENE'?'CORRECTIVE':'CORRECTIVE', dueDate:this.capaEcheanceProposee(niveau),
+     attachments:await this.capaAttachmentsDisponibles('QUALITY_CONTROL',c.id),
+    };
+   }
+   case 'ENVIRONNEMENT_ASPECT':{
+    const a=await this.db.environnementAspect.findUnique({where:{id:sourceEntityId}});
+    if(!a) throw new Error('Aspect environnemental introuvable');
+    const niveau=a.criticite>=15?'CRITIQUE':a.criticite>=8?'MAJEURE':'MODEREE';
+    return {
+     title:`Maîtriser l'aspect — ${a.aspect}`, description:a.impact||a.aspect, date:new Date(),
+     processusId:a.processusId, criticite:niveau, priority:this.capaPrioriteProposee(niveau),
+     actionType:a.significatif?'CORRECTIVE':'PREVENTIVE', responsibleId:a.responsableId,
+     dueDate:a.echeance||this.capaEcheanceProposee(niveau), attachments:[],
+    };
+   }
+   case 'HACCP':{
+    const h=await this.db.haccpRecord.findUnique({where:{id:sourceEntityId}});
+    if(!h) throw new Error('Enregistrement HACCP introuvable');
+    const niveau=h.ccp?'CRITIQUE':'MAJEURE';
+    return {
+     title:`Traiter l'écart CCP — ${h.step}`, description:`${h.hazard}${h.criticalLimit?` — limite critique : ${h.criticalLimit}`:''}`,
+     date:h.recordDate, criticite:niveau, priority:this.capaPrioriteProposee(niveau),
+     actionType:'CORRECTIVE', dueDate:this.capaEcheanceProposee(niveau), attachments:[],
+    };
+   }
+   case 'INDICATEUR':{
+    const i=await this.db.indicateurQualite.findUnique({where:{id:sourceEntityId}});
+    if(!i) throw new Error('Indicateur introuvable');
+    const ecart=i.sensInverse?i.actuel-i.cible:i.cible-i.actuel;
+    return {
+     title:`Redresser l'indicateur — ${i.indicateur}`, description:`Valeur actuelle ${i.actuel}${i.unite||''} vs cible ${i.cible}${i.unite||''} (écart ${ecart})`,
+     date:new Date(), processusId:i.processusId, criticite:'MODEREE', priority:this.capaPrioriteProposee('MODEREE'),
+     actionType:'AMELIORATION', dueDate:this.capaEcheanceProposee('MODEREE'), attachments:[],
+    };
+   }
+   case 'PROCESSUS':{
+    const p=await this.db.processus.findUnique({where:{id:sourceEntityId}});
+    if(!p) throw new Error('Processus introuvable');
+    return {
+     title:`Améliorer le processus — ${p.nom}`, description:p.objectifPrincipal||p.finalite||p.nom, date:new Date(),
+     processusId:p.id, criticite:p.criticite, priority:this.capaPrioriteProposee(p.criticite),
+     actionType:'AMELIORATION', responsibleId:p.piloteId, dueDate:this.capaEcheanceProposee(p.criticite||'MODEREE'),
+     attachments:[],
+    };
+   }
+   case 'EPI':{
+    const e=await this.db.epi.findUnique({where:{id:sourceEntityId}});
+    if(!e) throw new Error('EPI introuvable');
+    return {
+     title:`Traiter l'anomalie EPI — ${e.name}`, description:`Statut : ${e.status}`, date:new Date(),
+     criticite:'MODEREE', priority:this.capaPrioriteProposee('MODEREE'), actionType:'CORRECTIVE',
+     dueDate:this.capaEcheanceProposee('MODEREE'), attachments:await this.capaAttachmentsDisponibles('EPI',e.id),
+    };
+   }
+   default:
+    throw new Error(`Module source non pris en charge pour le préremplissage : ${sourceModule}`);
+  }
+ }
+
  // La présence d'une ActionCause avec estRacine=true répond à elle seule à
  // « cause racine identifiée ? » — pas besoin d'un champ dupliqué sur Action.
  actionCauseCreate(b:any){return this.db.actionCause.create({data:b})}
