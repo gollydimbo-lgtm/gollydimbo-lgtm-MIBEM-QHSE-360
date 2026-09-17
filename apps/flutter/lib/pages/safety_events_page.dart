@@ -3,6 +3,7 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
+import 'capa_link_widget.dart';
 
 const _types = {
   'ACCIDENT': ('Accident', Icons.local_hospital, Colors.red),
@@ -400,6 +401,9 @@ class _SafetyEventDetailPageState extends State<SafetyEventDetailPage> {
         else ...List.from(ev!['actions'] ?? []).map((a) => Card(child: ListTile(dense: true, title: Text(a['title'] ?? ''), trailing: Text(a['status'] ?? '', style: const TextStyle(fontSize: 11))))),
 
         const SizedBox(height: 20),
+        CapaLinksSection(sourceModule: 'SAFETY_EVENT', sourceEntityId: widget.eventId, prefill: {'title': 'Action — ${ev!['title'] ?? ''}', 'source': 'SAFETY_EVENT'}),
+
+        const SizedBox(height: 12),
         FilledButton(onPressed: saving ? null : save, child: Text(saving ? 'Enregistrement…' : 'Enregistrer')),
       ]),
     );
