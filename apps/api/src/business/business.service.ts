@@ -536,6 +536,17 @@ import { writeAudit } from '../common/audit-log.helper';
      attachments:await this.capaAttachmentsDisponibles('SAFETY_EVENT',ev.id),
     };
    }
+   case 'SAFETY_TALK':{
+    const st=await this.db.safetyTalk.findUnique({where:{id:sourceEntityId}});
+    if(!st) throw new Error('Quart d\'heure sécurité introuvable');
+    const niveau=st.priorite||(st.status==='DELIVERED'?'MODEREE':'MODEREE');
+    return {
+     title:`Action — ${st.theme||st.title}`, description:st.messagePrincipal||st.summary||st.title, date:st.realisedAt||st.scheduledAt||st.weekStart,
+     zone:st.zone, siteId:st.siteId, workUnitId:st.workUnitId, criticite:niveau, priority:this.capaPrioriteProposee(niveau),
+     actionType:'PREVENTIVE', dueDate:this.capaEcheanceProposee(niveau),
+     attachments:await this.capaAttachmentsDisponibles('SAFETY_TALK',st.id),
+    };
+   }
    case 'FOURNISSEUR':{
     const f=await this.db.fournisseur.findUnique({where:{id:sourceEntityId}});
     if(!f) throw new Error('Fournisseur introuvable');
