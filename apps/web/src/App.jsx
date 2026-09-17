@@ -9492,54 +9492,688 @@ function EquipmentPage() {
   );
 }
 
+// ============================================================================
+// QUART D'HEURE SÉCURITÉ — étiquettes/couleurs partagées entre les onglets.
+// ============================================================================
+const ST_STATUS_LABEL = { DRAFT: 'Brouillon', APPROVED: 'Approuvé', DELIVERED: 'Réalisé', ANNULE: 'Annulé', REPORTE: 'Reporté' };
+function stStatusColor(C, s) { return { DRAFT: C.textMuted, APPROVED: C.blue, DELIVERED: C.green, ANNULE: C.red, REPORTE: C.amber }[s] || C.textMuted; }
+const ST_PRIORITE_LABEL = { CRITIQUE: 'Critique', ELEVEE: 'Élevée', MOYENNE: 'Moyenne', FAIBLE: 'Faible' };
+function stPrioriteColor(C, p) { return { CRITIQUE: C.red, ELEVEE: C.amber, MOYENNE: C.blue, FAIBLE: C.textMuted }[p] || C.textMuted; }
+const ST_FEEDBACK_TYPES = [
+  ['DANGER', 'Danger observé'], ['SITUATION_DANGEREUSE', 'Situation dangereuse'], ['COMPORTEMENT_RISQUE', 'Comportement à risque'],
+  ['EQUIPEMENT_DEFECTUEUX', 'Équipement défectueux'], ['EPI_MANQUANT', 'EPI manquant'], ['EPC_DEFAILLANT', 'EPC défaillant'],
+  ['ORGANISATION', 'Organisation'], ['ANOMALIE', 'Anomalie'], ['PRESQUE_ACCIDENT', 'Presqu\'accident'], ['NC', 'Non-conformité'], ['AMELIORATION', 'Amélioration'],
+];
+function stFeedbackTypeLabel(t) { return (ST_FEEDBACK_TYPES.find(([v]) => v === t) || [])[1] || t; }
+const ST_TRANSFORM_TARGETS = [
+  ['ACTION', 'Créer une action CAPA'], ['NON_CONFORMITY', 'Créer une non-conformité'], ['SAFETY_EVENT', 'Créer une situation dangereuse'],
+];
+function stTransformTargetLabel(t) { return { ACTION: 'Action CAPA', NON_CONFORMITY: 'Non-conformité', SAFETY_EVENT: 'Situation dangereuse' }[t] || t; }
+
+// Zone la plus visible de la page : les thèmes proposés par le moteur
+// d'analyse, avec les 3 décisions humaines possibles ligne par ligne.
+function RecommendationRow({ reco, onAccept, onDecide }) {
+  const C = useTheme();
+  const [busy, setBusy] = useState(false);
+  async function run(fn) { setBusy(true); try { await fn(); } catch (err) { alert(err.message); } setBusy(false); }
+  return (
+    <div className="p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${stPrioriteColor(C, reco.priorite)}40` }}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold" style={{ color: C.text }}>{reco.theme}</p>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${stPrioriteColor(C, reco.priorite)}22`, color: stPrioriteColor(C, reco.priorite) }}>{ST_PRIORITE_LABEL[reco.priorite] || reco.priorite}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: C.card, color: C.textMuted }}>{reco.sourceModules}</span>
+            <span className="text-[10px]" style={{ color: C.textMuted }}>score {reco.score}</span>
+          </div>
+          <p className="text-xs mt-1" style={{ color: C.textMuted }}>{reco.motif}</p>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <button disabled={busy} onClick={() => run(onAccept)} className="text-xs px-2 py-1 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f', opacity: busy ? 0.7 : 1 }}>Accepter et générer la fiche</button>
+          <button disabled={busy} onClick={() => run(() => onDecide('REPORTER'))} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text, opacity: busy ? 0.7 : 1 }}>Reporter</button>
+          <button disabled={busy} onClick={() => run(() => onDecide('IGNORER'))} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: `${C.red}22`, color: C.red, opacity: busy ? 0.7 : 1 }}>Ignorer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Formulaire de création/édition manuelle — champs riches de la fiche
+// complète (theme, objectif, contexte, points essentiels...), préremplissable
+// depuis la bibliothèque de thèmes ("Utiliser ce thème").
+function SafetyTalkFormModal({ record, prefillTheme, onClose, onSaved }) {
+  const C = useTheme();
+  const editing = !!record;
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({
+    title: record?.title || prefillTheme?.titre || '',
+    summary: record?.summary || prefillTheme?.objectif || '',
+    theme: record?.theme || prefillTheme?.titre || '',
+    objectif: record?.objectif || prefillTheme?.objectif || '',
+    contexte: record?.contexte || '',
+    risquesConcernes: record?.risquesConcernes || '',
+    personnesExposees: record?.personnesExposees || '',
+    messagePrincipal: record?.messagePrincipal || '',
+    pointsEssentiels: record?.pointsEssentiels || prefillTheme?.pointsEssentiels || '',
+    bonnesPratiques: record?.bonnesPratiques || prefillTheme?.bonnesPratiques || '',
+    mauvaisesPratiques: record?.mauvaisesPratiques || prefillTheme?.mauvaisesPratiques || '',
+    questions: record?.questions || prefillTheme?.questions || '',
+    exemplesTerrain: record?.exemplesTerrain || '',
+    mesuresPrevention: record?.mesuresPrevention || '',
+    conduiteATenir: record?.conduiteATenir || '',
+    conclusion: record?.conclusion || '',
+    engagementAttendu: record?.engagementAttendu || '',
+    priorite: record?.priorite || 'MOYENNE',
+    service: record?.service || '', zone: record?.zone || '', equipe: record?.equipe || '',
+    workUnitId: record?.workUnitId || '', responsableAnimationId: record?.responsableAnimationId || '',
+    scheduledAt: record?.scheduledAt ? record.scheduledAt.slice(0, 16) : '', duree: record?.duree ?? '', frequence: record?.frequence || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.title.trim()) { setError('Le titre est obligatoire.'); return; }
+    setSaving(true); setError(null);
+    try {
+      const payload = {
+        ...form,
+        duree: form.duree === '' ? null : Number(form.duree),
+        workUnitId: form.workUnitId || null,
+        responsableAnimationId: form.responsableAnimationId || null,
+        scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
+        summary: form.summary || form.title,
+      };
+      const result = editing ? await api.patch(`/safety-talks/${record.id}`, payload) : await api.post('/safety-talks', payload);
+      onSaved(result.id); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+
+  const ta = (key, label) => (
+    <FormField label={label}><textarea value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+  );
+
+  return (
+    <Modal title={editing ? 'Modifier la fiche' : "Nouveau quart d'heure sécurité"} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-x-4">
+          <FormField label="Titre *"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Thème"><input value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {ta('summary', 'Résumé')}
+        {ta('objectif', 'Objectif')}
+        <div className="grid grid-cols-2 gap-x-4">{ta('contexte', 'Contexte')}{ta('risquesConcernes', 'Risques concernés')}</div>
+        <FormField label="Personnes exposées"><input value={form.personnesExposees} onChange={(e) => setForm({ ...form, personnesExposees: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {ta('messagePrincipal', 'Message principal')}
+        {ta('pointsEssentiels', 'Points essentiels')}
+        <div className="grid grid-cols-2 gap-x-4">{ta('bonnesPratiques', 'Bonnes pratiques')}{ta('mauvaisesPratiques', 'Mauvaises pratiques')}</div>
+        {ta('questions', 'Questions à poser')}
+        {ta('exemplesTerrain', 'Exemples terrain')}
+        {ta('mesuresPrevention', 'Mesures de prévention')}
+        {ta('conduiteATenir', 'Conduite à tenir')}
+        <div className="grid grid-cols-2 gap-x-4">{ta('conclusion', 'Conclusion')}{ta('engagementAttendu', 'Engagement attendu')}</div>
+        <div className="grid grid-cols-3 gap-x-4">
+          <FormField label="Priorité">
+            <select value={form.priorite} onChange={(e) => setForm({ ...form, priorite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              {Object.entries(ST_PRIORITE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Service"><input value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Zone"><input value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-x-4">
+          <FormField label="Équipe"><input value={form.equipe} onChange={(e) => setForm({ ...form, equipe: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Unité de travail">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Responsable animation">
+            <select value={form.responsableAnimationId} onChange={(e) => setForm({ ...form, responsableAnimationId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-x-4">
+          <FormField label="Date et heure planifiées"><input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Durée (minutes)"><input type="number" value={form.duree} onChange={(e) => setForm({ ...form, duree: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Fréquence"><input value={form.frequence} onChange={(e) => setForm({ ...form, frequence: e.target.value })} placeholder="ex : Hebdomadaire" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2 mt-3">
+          <button type="button" onClick={onClose} className="flex-1 py-2 rounded-lg text-xs" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Annuler</button>
+          <button type="submit" disabled={saving} className="flex-1 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? '…' : editing ? 'Enregistrer' : 'Créer la fiche'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// Section "Émargement" — présence réelle par collaborateur (pas un simple
+// compteur), avec ajout individuel ou en masse et suppression.
+function SafetyTalkParticipantsSection({ talkId, locked }) {
+  const C = useTheme();
+  const participantsQ = useCollection(`/safety-talks/${talkId}/participants`);
+  const employeesQ = useCollection('/epi/employees');
+  const [showAdd, setShowAdd] = useState(false);
+  const [single, setSingle] = useState({ employeeId: '', present: true, signature: '' });
+  const [bulkIds, setBulkIds] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const list = participantsQ.data || [];
+  const already = new Set(list.map((p) => p.employeeId).filter(Boolean));
+  const candidates = (employeesQ.data || []).filter((e) => !already.has(e.id));
+
+  async function addSingle() {
+    if (!single.employeeId) return;
+    setBusy(true);
+    try { await api.post(`/safety-talks/${talkId}/participants`, single); setSingle({ employeeId: '', present: true, signature: '' }); participantsQ.reload(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  async function addBulk() {
+    if (!bulkIds.length) return;
+    setBusy(true);
+    try { await api.post(`/safety-talks/${talkId}/participants/bulk`, { employeeIds: bulkIds }); setBulkIds([]); participantsQ.reload(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  async function removeOne(id) {
+    if (!window.confirm('Retirer ce participant ?')) return;
+    try { await api.del(`/safety-talks/participants/${id}`); participantsQ.reload(); }
+    catch (err) { alert(err.message); }
+  }
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Émargement ({list.length})</p>
+        {!locked && <button onClick={() => setShowAdd((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter des participants</button>}
+      </div>
+      {showAdd && !locked && (
+        <div className="p-3 rounded-lg mb-3 space-y-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <div>
+            <p className="text-xs mb-1" style={{ color: C.textMuted }}>Ajout individuel (avec signature)</p>
+            <div className="flex gap-2 flex-wrap items-center">
+              <select value={single.employeeId} onChange={(e) => setSingle({ ...single, employeeId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">Sélectionner un collaborateur…</option>{candidates.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+              </select>
+              <label className="flex items-center gap-1 text-xs" style={{ color: C.text }}><input type="checkbox" checked={single.present} onChange={(e) => setSingle({ ...single, present: e.target.checked })} />Présent</label>
+              <input placeholder="Signature (texte/initiales)" value={single.signature} onChange={(e) => setSingle({ ...single, signature: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <button disabled={busy || !single.employeeId} onClick={addSingle} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>Ajouter</button>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs mb-1" style={{ color: C.textMuted }}>Ajout en masse</p>
+            <div className="max-h-32 overflow-y-auto p-2 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              {candidates.map((e) => (
+                <label key={e.id} className="flex items-center gap-2 text-xs py-0.5" style={{ color: C.text }}>
+                  <input type="checkbox" checked={bulkIds.includes(e.id)} onChange={(ev) => setBulkIds(ev.target.checked ? [...bulkIds, e.id] : bulkIds.filter((id) => id !== e.id))} />
+                  {e.firstName} {e.lastName}
+                </label>
+              ))}
+              {candidates.length === 0 && <p className="text-xs" style={{ color: C.textMuted }}>Tous les collaborateurs sont déjà émargés</p>}
+            </div>
+            <button disabled={busy || !bulkIds.length} onClick={addBulk} className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>Ajouter {bulkIds.length || ''} sélectionné(s)</button>
+          </div>
+        </div>
+      )}
+      {list.length
+        ? <div className="space-y-1.5">{list.map((p) => (
+            <div key={p.id} className="flex items-center justify-between p-2 rounded-lg gap-2" style={{ backgroundColor: C.cardAlt }}>
+              <span className="text-xs" style={{ color: C.text }}>{p.employee ? `${p.employee.firstName} ${p.employee.lastName}` : p.user ? `${p.user.firstName} ${p.user.lastName}` : '—'}{p.signature ? ` · signé : ${p.signature}` : ''}</span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <StatusChip statut={p.present ? 'Conforme' : 'Non conforme'} />
+                {!locked && <button onClick={() => removeOne(p.id)} className="text-[11px]" style={{ color: C.red }}>Retirer</button>}
+              </div>
+            </div>
+          ))}</div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucun participant émargé</p>}
+    </div>
+  );
+}
+
+// Section "Remontées terrain" — LE point le plus important après les
+// recommandations : chaque remontée non traitée propose 3 transformations
+// claires vers CAPA / NC / situation dangereuse, jamais automatique.
+function SafetyTalkFeedbackSection({ talkId }) {
+  const C = useTheme();
+  const feedbacksQ = useCollection(`/safety-talks/${talkId}/feedbacks`);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ type: 'DANGER', description: '', localisation: '', criticite: 'MOYENNE', commentaire: '', mesureImmediate: '' });
+  const [transformingId, setTransformingId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const list = feedbacksQ.data || [];
+
+  async function addFeedback(e) {
+    e.preventDefault();
+    if (!form.description.trim()) return;
+    setBusy(true);
+    try { await api.post(`/safety-talks/${talkId}/feedbacks`, form); setForm({ type: 'DANGER', description: '', localisation: '', criticite: 'MOYENNE', commentaire: '', mesureImmediate: '' }); setShowAdd(false); feedbacksQ.reload(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  async function transform(feedbackId, targetModule) {
+    setBusy(true);
+    try { await api.post(`/safety-talks/feedbacks/${feedbackId}/transform`, { targetModule }); setTransformingId(null); feedbacksQ.reload(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Remontées terrain ({list.length})</p>
+        <button onClick={() => setShowAdd((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter une remontée</button>
+      </div>
+      {showAdd && (
+        <form onSubmit={addFeedback} className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <div className="grid grid-cols-2 gap-x-3">
+            <FormField label="Type">
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                {ST_FEEDBACK_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Criticité">
+              <select value={form.criticite} onChange={(e) => setForm({ ...form, criticite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                {Object.entries(ST_PRIORITE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Description *"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <div className="grid grid-cols-2 gap-x-3">
+            <FormField label="Localisation"><input value={form.localisation} onChange={(e) => setForm({ ...form, localisation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Mesure immédiate prise"><input value={form.mesureImmediate} onChange={(e) => setForm({ ...form, mesureImmediate: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          </div>
+          <FormField label="Commentaire"><textarea value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setShowAdd(false)} className="flex-1 py-2 rounded-lg text-xs" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>Annuler</button>
+            <button type="submit" disabled={busy} className="flex-1 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>{busy ? '…' : 'Enregistrer'}</button>
+          </div>
+        </form>
+      )}
+      {list.length
+        ? <div className="space-y-2">{list.map((f) => (
+            <div key={f.id} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold" style={{ color: C.text }}>{stFeedbackTypeLabel(f.type)}</span>
+                    {f.criticite && <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${stPrioriteColor(C, f.criticite)}22`, color: stPrioriteColor(C, f.criticite) }}>{ST_PRIORITE_LABEL[f.criticite] || f.criticite}</span>}
+                    {f.localisation && <span className="text-[10px]" style={{ color: C.textMuted }}>· {f.localisation}</span>}
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: C.text }}>{f.description}</p>
+                  {f.mesureImmediate && <p className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>Mesure immédiate : {f.mesureImmediate}</p>}
+                </div>
+                {f.status === 'TRANSFORME'
+                  ? <span className="text-[11px] px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: `${C.green}22`, color: C.green }}>Transformé en {stTransformTargetLabel(f.transformedIntoModule)}</span>
+                  : <button onClick={() => setTransformingId(transformingId === f.id ? null : f.id)} className="text-[11px] px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: C.blue, color: '#fff' }}>Transformer</button>}
+              </div>
+              {transformingId === f.id && (
+                <div className="flex gap-2 flex-wrap mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                  {ST_TRANSFORM_TARGETS.map(([v, l]) => (
+                    <button key={v} disabled={busy} onClick={() => transform(f.id, v)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text, opacity: busy ? 0.7 : 1 }}>{l}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}</div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucune remontée terrain enregistrée</p>}
+    </div>
+  );
+}
+
+// Section "Quiz" — soumission de résultats et statistiques agrégées.
+function SafetyTalkQuizSection({ talkId, participants }) {
+  const C = useTheme();
+  const statsQ = useCollection(`/safety-talks/${talkId}/quiz-stats`);
+  const [form, setForm] = useState({ participantId: '', score: '', total: '' });
+  const [busy, setBusy] = useState(false);
+  const stats = statsQ.data || {};
+
+  async function submit(e) {
+    e.preventDefault();
+    if (form.score === '' || form.total === '') return;
+    setBusy(true);
+    try {
+      await api.post(`/safety-talks/${talkId}/quiz`, { participantId: form.participantId || undefined, score: Number(form.score), total: Number(form.total) });
+      setForm({ participantId: '', score: '', total: '' }); statsQ.reload();
+    } catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="mb-5">
+      <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Quiz de compréhension</p>
+      <div className="flex flex-wrap gap-3 mb-3">
+        <KpiCard label="Participants au quiz" value={stats.participants ?? '—'} color={C.blue} icon={Users} />
+        <KpiCard label="Score moyen" value={stats.scoreMoyen != null ? `${stats.scoreMoyen}%` : '—'} color={C.green} icon={Activity} />
+        <KpiCard label="Taux de réussite" value={stats.tauxReussite != null ? `${stats.tauxReussite}%` : '—'} color={stats.tauxReussite >= 50 ? C.green : C.amber} icon={CheckCircle2} />
+      </div>
+      <form onSubmit={submit} className="flex gap-2 flex-wrap items-end">
+        <FormField label="Participant (optionnel)">
+          <select value={form.participantId} onChange={(e) => setForm({ ...form, participantId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Anonyme</option>{(participants || []).map((p) => <option key={p.id} value={p.id}>{p.employee ? `${p.employee.firstName} ${p.employee.lastName}` : p.id}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Score"><input type="number" value={form.score} onChange={(e) => setForm({ ...form, score: e.target.value })} className="w-24 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Total"><input type="number" value={form.total} onChange={(e) => setForm({ ...form, total: e.target.value })} className="w-24 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <button type="submit" disabled={busy} className="px-3 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>Enregistrer le résultat</button>
+      </form>
+    </div>
+  );
+}
+
+// Fiche détail — vue complète du quart d'heure sécurité : champs riches,
+// workflow (approuver/planifier/reporter/annuler/diffuser selon statut),
+// émargement, remontées terrain, quiz, et CAPA associées.
+function SafetyTalkDetailModal({ talk, onClose, onChanged }) {
+  const C = useTheme();
+  const [editing, setEditing] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({ scheduledAt: talk.scheduledAt ? talk.scheduledAt.slice(0, 16) : '', frequence: talk.frequence || '', duree: talk.duree ?? '' });
+  const [busy, setBusy] = useState(false);
+  const participantsQ = useCollection(`/safety-talks/${talk.id}/participants`);
+  const locked = talk.status === 'DELIVERED' || talk.status === 'ANNULE';
+
+  async function run(action) { setBusy(true); try { await action(); onChanged(); } catch (err) { alert(err.message); } setBusy(false); }
+  const approve = () => run(() => api.post(`/safety-talks/${talk.id}/approve`, {}));
+  const deliver = () => run(() => api.post(`/safety-talks/${talk.id}/deliver`, {}));
+  const cancel = () => { if (window.confirm("Annuler ce quart d'heure sécurité ?")) run(() => api.post(`/safety-talks/${talk.id}/cancel`, {})); };
+  const del = () => run(async () => { if (window.confirm(`Supprimer définitivement « ${talk.title} » ? Cette action est irréversible.`)) { await api.del(`/safety-talks/${talk.id}`); onClose(); } });
+  async function submitSchedule(e) {
+    e.preventDefault();
+    if (!scheduleForm.scheduledAt) return;
+    const payload = { scheduledAt: new Date(scheduleForm.scheduledAt).toISOString(), frequence: scheduleForm.frequence || undefined, duree: scheduleForm.duree === '' ? undefined : Number(scheduleForm.duree) };
+    const endpoint = talk.scheduledAt ? 'postpone' : 'schedule';
+    await run(() => api.post(`/safety-talks/${talk.id}/${endpoint}`, endpoint === 'postpone' ? { scheduledAt: payload.scheduledAt } : payload));
+    setShowSchedule(false);
+  }
+
+  if (editing) return <SafetyTalkFormModal record={talk} onClose={() => setEditing(false)} onSaved={() => { onChanged(); setEditing(false); }} />;
+
+  return (
+    <Modal title={talk.title} onClose={onClose} wide>
+      <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <p className="text-xs" style={{ color: C.textMuted }}>Semaine du {new Date(talk.weekStart).toLocaleDateString('fr-FR')}{talk.scheduledAt ? ` · Planifié le ${new Date(talk.scheduledAt).toLocaleString('fr-FR')}` : ' · Non planifié'}{talk.origineType === 'AUTO_RECOMMANDE' ? ' · Auto-recommandé' : ' · Créé manuellement'}</p>
+          {talk.origineRaison && <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>Origine : {talk.origineRaison}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          {talk.priorite && <span className="text-xs font-medium" style={{ color: stPrioriteColor(C, talk.priorite) }}>{ST_PRIORITE_LABEL[talk.priorite] || talk.priorite}</span>}
+          <StatusChip statut={ST_STATUS_LABEL[talk.status] || talk.status} />
+        </div>
+      </div>
+
+      <div className="flex gap-2 flex-wrap mb-4">
+        {!locked && <button onClick={() => setEditing(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>}
+        {talk.status === 'DRAFT' && <button disabled={busy} onClick={approve} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Approuver</button>}
+        {talk.status === 'APPROVED' && <button disabled={busy} onClick={deliver} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Marquer réalisé</button>}
+        {!locked && <button disabled={busy} onClick={() => setShowSchedule((s) => !s)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{talk.scheduledAt ? 'Reporter' : 'Planifier'}</button>}
+        {!locked && <button disabled={busy} onClick={cancel} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Annuler la séance</button>}
+        {talk.status !== 'DELIVERED' && <button disabled={busy} onClick={del} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.textMuted }}>Supprimer</button>}
+      </div>
+      {showSchedule && (
+        <form onSubmit={submitSchedule} className="p-3 rounded-lg mb-4 flex gap-2 flex-wrap items-end" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <FormField label="Date et heure"><input type="datetime-local" required value={scheduleForm.scheduledAt} onChange={(e) => setScheduleForm({ ...scheduleForm, scheduledAt: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Durée (min)"><input type="number" value={scheduleForm.duree} onChange={(e) => setScheduleForm({ ...scheduleForm, duree: e.target.value })} className="w-24 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Fréquence"><input value={scheduleForm.frequence} onChange={(e) => setScheduleForm({ ...scheduleForm, frequence: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <button type="submit" disabled={busy} className="px-3 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>Confirmer</button>
+        </form>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 mb-5">
+        {talk.objectif && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Objectif</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.objectif}</p></div>}
+        {talk.contexte && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Contexte</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.contexte}</p></div>}
+        {talk.risquesConcernes && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Risques concernés</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.risquesConcernes}</p></div>}
+        {talk.personnesExposees && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Personnes exposées</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.personnesExposees}</p></div>}
+        {talk.messagePrincipal && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Message principal</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.messagePrincipal}</p></div>}
+        {talk.pointsEssentiels && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Points essentiels</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.pointsEssentiels}</p></div>}
+        {talk.bonnesPratiques && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Bonnes pratiques</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.bonnesPratiques}</p></div>}
+        {talk.mauvaisesPratiques && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Mauvaises pratiques</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.mauvaisesPratiques}</p></div>}
+        {talk.questions && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Questions à poser</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.questions}</p></div>}
+        {talk.exemplesTerrain && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Exemples terrain</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.exemplesTerrain}</p></div>}
+        {talk.mesuresPrevention && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Mesures de prévention</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.mesuresPrevention}</p></div>}
+        {talk.conduiteATenir && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Conduite à tenir</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.conduiteATenir}</p></div>}
+        {talk.conclusion && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Conclusion</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.conclusion}</p></div>}
+        {talk.engagementAttendu && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Engagement attendu</p><p className="text-sm whitespace-pre-line" style={{ color: C.text }}>{talk.engagementAttendu}</p></div>}
+      </div>
+      <p className="text-xs mb-5" style={{ color: C.textMuted }}>{[talk.service, talk.zone, talk.equipe].filter(Boolean).join(' · ') || null}</p>
+
+      <SafetyTalkParticipantsSection talkId={talk.id} locked={locked} />
+      <SafetyTalkFeedbackSection talkId={talk.id} />
+      <SafetyTalkQuizSection talkId={talk.id} participants={participantsQ.data || []} />
+      <CapaLinksPanel sourceModule="SAFETY_TALK" sourceEntityId={talk.id} />
+    </Modal>
+  );
+}
+
+// Onglet "Paramètres" — CRUD des règles configurables du moteur de
+// recommandation (seuils, périodes d'analyse).
+function SafetyTalkRulesPanel({ rulesQ }) {
+  const C = useTheme();
+  const [form, setForm] = useState({ code: '', label: '', seuil: '', periodeJours: '', active: true });
+  const [busy, setBusy] = useState(false);
+  const list = rulesQ.data || [];
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.code.trim() || !form.label.trim()) return;
+    setBusy(true);
+    try {
+      await api.post('/safety-talks/rules', { ...form, seuil: form.seuil === '' ? undefined : Number(form.seuil), periodeJours: form.periodeJours === '' ? undefined : Number(form.periodeJours) });
+      setForm({ code: '', label: '', seuil: '', periodeJours: '', active: true }); rulesQ.reload();
+    } catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  async function del(r) { await confirmAndDelete(r.label, `/safety-talks/rules/${r.id}`, () => rulesQ.reload()); }
+  async function toggle(r) {
+    try { await api.post('/safety-talks/rules', { code: r.code, label: r.label, seuil: r.seuil, periodeJours: r.periodeJours, active: !r.active }); rulesQ.reload(); }
+    catch (err) { alert(err.message); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Nouvelle règle de déclenchement">
+        <form onSubmit={submit} className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+          <FormField label="Code *"><input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="ex : FENETRE_ANALYSE_JOURS" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Libellé *"><input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Seuil"><input type="number" value={form.seuil} onChange={(e) => setForm({ ...form, seuil: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Période (jours)"><input type="number" value={form.periodeJours} onChange={(e) => setForm({ ...form, periodeJours: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <button type="submit" disabled={busy} className="px-3 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>Enregistrer</button>
+        </form>
+      </Panel>
+      <Panel title="Règles configurées" subtitle={`${list.length} règle(s)`}>
+        {list.length
+          ? <div className="space-y-1.5">{list.map((r) => (
+              <div key={r.id} className="flex items-center justify-between p-2 rounded-lg gap-2 flex-wrap" style={{ backgroundColor: C.cardAlt }}>
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: C.text }}>{r.label}</p>
+                  <p className="text-[11px]" style={{ color: C.textMuted }}>{r.code}{r.seuil != null ? ` · seuil ${r.seuil}` : ''}{r.periodeJours != null ? ` · période ${r.periodeJours} j` : ''}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => toggle(r)} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: r.active ? `${C.green}22` : `${C.textMuted}22`, color: r.active ? C.green : C.textMuted }}>{r.active ? 'Active' : 'Inactive'}</button>
+                  <button onClick={() => del(r)} className="text-[11px]" style={{ color: C.red }}>Supprimer</button>
+                </div>
+              </div>
+            ))}</div>
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune règle configurée — les valeurs par défaut du moteur s'appliquent</p>}
+      </Panel>
+    </div>
+  );
+}
+
 function SafetyTalkPage() {
   const C = useTheme();
-  const talks = useCollection('/safety-talks');
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState(null);
-  if (talks.loading) return <LoadingPanel />;
-  if (talks.error) return <ErrorPanel message={talks.error} onRetry={talks.reload} />;
-  const list = talks.data || [];
-  const statutLabel = { DRAFT: 'Brouillon', APPROVED: 'Approuvé', DELIVERED: 'Diffusé' };
+  const [tab, setTab] = useState('apercu');
+  const dashboardQ = useCollection('/safety-talks/dashboard');
+  const recommendationsQ = useCollection('/safety-talks/recommendations');
+  const talksQ = useCollection('/safety-talks');
+  const libraryQ = useCollection('/safety-talks/library');
+  const matriceQ = useCollection('/safety-talks/matrice');
+  const rulesQ = useCollection('/safety-talks/rules');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [formPrefill, setFormPrefill] = useState(null);
+  const [detailId, setDetailId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [recoError, setRecoError] = useState(null);
 
-  async function generate() {
-    setGenerating(true); setError(null);
-    try { await api.post('/safety-talks/generate', {}); talks.reload(); }
-    catch (err) { setError(err.message); }
-    setGenerating(false);
+  function reloadAll() { dashboardQ.reload(); recommendationsQ.reload(); talksQ.reload(); matriceQ.reload(); }
+
+  async function refreshRecommendations() {
+    setRefreshing(true); setRecoError(null);
+    try { await api.post('/safety-talks/recommendations/refresh', {}); recommendationsQ.reload(); dashboardQ.reload(); }
+    catch (err) { setRecoError(err.message); }
+    setRefreshing(false);
   }
-  async function approve(id) { await api.post(`/safety-talks/${id}/approve`, {}); talks.reload(); }
-  async function deliver(id) { await api.post(`/safety-talks/${id}/deliver`, {}); talks.reload(); }
-  async function del(t) { await confirmAndDelete(t.title, `/safety-talks/${t.id}`, () => talks.reload()); }
+  async function decide(id, decision) { await api.post(`/safety-talks/recommendations/${id}/decision`, { decision }); recommendationsQ.reload(); }
+  async function acceptAndGenerate(reco) {
+    const created = await api.post(`/safety-talks/recommendations/${reco.id}/generate`, {});
+    recommendationsQ.reload(); dashboardQ.reload(); matriceQ.reload();
+    await talksQ.reload();
+    setDetailId(created.id); setTab('seances');
+  }
+
+  const talks = talksQ.data || [];
+  const filteredTalks = statusFilter ? talks.filter((t) => t.status === statusFilter) : talks;
+  const upcoming = talks.filter((t) => t.scheduledAt && new Date(t.scheduledAt) >= new Date() && !['DELIVERED', 'ANNULE'].includes(t.status))
+    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 6);
+  const recos = recommendationsQ.data || [];
+  const dash = dashboardQ.data || {};
+  const selectedTalk = detailId ? talks.find((t) => t.id === detailId) : null;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <LiveBadge />
-        <button onClick={generate} disabled={generating} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f', opacity: generating ? 0.7 : 1 }}>{generating ? 'Génération…' : "+ Générer cette semaine"}</button>
-      </div>
-      {error && <p className="text-xs" style={{ color: C.red }}>{error}</p>}
-      <p className="text-xs" style={{ color: C.textMuted }}>Le thème est généré automatiquement à partir des accidents, incidents et non-conformités critiques des 7 derniers jours.</p>
-      <div className="space-y-3">
-        {list.length === 0 && <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun quart d'heure sécurité généré pour le moment</p>}
-        {list.map((t) => (
-          <Panel key={t.id}>
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <p className="text-sm font-semibold" style={{ color: C.text }}>{t.title}</p>
-                <p className="text-xs" style={{ color: C.textMuted }}>Semaine du {new Date(t.weekStart).toLocaleDateString('fr-FR')}</p>
-              </div>
-              <StatusChip statut={statutLabel[t.status] || t.status} />
-            </div>
-            <p className="text-xs whitespace-pre-line mb-3" style={{ color: C.text }}>{t.summary}</p>
-            <div className="flex gap-2">
-              {t.status === 'DRAFT' && <button onClick={() => approve(t.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Approuver</button>}
-              {t.status === 'APPROVED' && <button onClick={() => deliver(t.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Marquer diffusé</button>}
-              <button onClick={() => del(t)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>
-            </div>
-          </Panel>
+      {showForm && <SafetyTalkFormModal prefillTheme={formPrefill} onClose={() => { setShowForm(false); setFormPrefill(null); }} onSaved={(id) => { reloadAll(); setDetailId(id); setTab('seances'); }} />}
+      {selectedTalk && <SafetyTalkDetailModal talk={selectedTalk} onClose={() => setDetailId(null)} onChanged={reloadAll} />}
+
+      <div className="flex flex-wrap gap-2">
+        {[['apercu', "Vue d'ensemble"], ['seances', 'Séances'], ['bibliotheque', 'Bibliothèque de thèmes'], ['matrice', 'Matrice'], ['parametres', 'Paramètres']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
+
+      {tab === 'apercu' && (
+        dashboardQ.loading ? <LoadingPanel /> : dashboardQ.error ? <ErrorPanel message={dashboardQ.error} onRetry={dashboardQ.reload} /> : (
+          <div className="space-y-6">
+            <LiveBadge />
+            <div className="flex flex-wrap gap-3">
+              <KpiCard label="Planifiés" value={dash.planifies ?? '—'} color={C.blue} icon={ClipboardList} />
+              <KpiCard label="Réalisés" value={dash.realises ?? '—'} color={C.green} icon={CheckCircle2} />
+              <KpiCard label="En retard" value={dash.enRetard ?? '—'} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label="Annulés" value={dash.annules ?? '—'} color={C.textMuted} icon={X} />
+              <KpiCard label="Taux de réalisation" value={dash.tauxRealisation != null ? `${dash.tauxRealisation}%` : '—'} color={C.green} icon={Activity} />
+              <KpiCard label="Participants" value={dash.participants ?? '—'} color={C.blue} icon={Users} />
+              <KpiCard label="Taux de participation" value={dash.tauxParticipation != null ? `${dash.tauxParticipation}%` : '—'} color={C.blue} icon={Users} />
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <KpiCard label="Thèmes traités" value={dash.themesTraites ?? '—'} color={C.blue} icon={BookOpen} />
+              <KpiCard label="Remontées terrain" value={dash.remonteesTerrain ?? '—'} color={C.amber} icon={FileWarning} />
+              <KpiCard label="Dangers détectés" value={dash.dangersDetectes ?? '—'} color={C.red} icon={AlertTriangle} />
+              <KpiCard label="Actions créées" value={dash.actionsCreees ?? '—'} color={C.blue} icon={ClipboardCheck} />
+              <KpiCard label="Actions clôturées" value={dash.actionsClotures ?? '—'} color={C.green} icon={CheckCircle2} />
+              <KpiCard label="Actions en retard" value={dash.actionsEnRetard ?? '—'} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <KpiCard label="Sujets auto-générés" value={dash.sujetsAutoGeneres ?? '—'} color={C.blue} icon={RefreshCw} />
+              <KpiCard label="Sensibilisations accidents" value={dash.sensibilisationsAccidents ?? '—'} color={C.red} icon={HardHat} />
+              <KpiCard label="Sensibilisations NC" value={dash.sensibilisationsNc ?? '—'} color={C.amber} icon={FileWarning} />
+              <KpiCard label="Sensibilisations risques" value={dash.sensibilisationsRisques ?? '—'} color={C.blue} icon={Shield} />
+            </div>
+
+            <Panel title="Thèmes recommandés" subtitle="Proposés par le moteur d'analyse à partir des accidents, non-conformités, risques et actions en retard des autres modules QHSE"
+              right={<button onClick={refreshRecommendations} disabled={refreshing} className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text, opacity: refreshing ? 0.7 : 1 }}><RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />{refreshing ? 'Analyse…' : "Actualiser l'analyse"}</button>}>
+              {recoError && <p className="text-xs mb-2" style={{ color: C.red }}>{recoError}</p>}
+              {recos.length === 0
+                ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune recommandation en attente — cliquez sur « Actualiser l'analyse » pour lancer le moteur.</p>
+                : <div className="space-y-2">{recos.map((r) => <RecommendationRow key={r.id} reco={r} onAccept={() => acceptAndGenerate(r)} onDecide={(d) => decide(r.id, d)} />)}</div>}
+            </Panel>
+
+            <Panel title="Prochaines séances planifiées">
+              {upcoming.length === 0
+                ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune séance planifiée à venir</p>
+                : <div className="space-y-1.5">{upcoming.map((t) => (
+                    <div key={t.id} onClick={() => setDetailId(t.id)} className="flex items-center justify-between p-2 rounded-lg cursor-pointer" style={{ backgroundColor: C.cardAlt }}>
+                      <div><span className="text-sm" style={{ color: C.text }}>{t.title}</span><span className="text-xs ml-2" style={{ color: C.textMuted }}>{new Date(t.scheduledAt).toLocaleString('fr-FR')}</span></div>
+                      <StatusChip statut={ST_STATUS_LABEL[t.status] || t.status} />
+                    </div>
+                  ))}</div>}
+            </Panel>
+          </div>
+        )
+      )}
+
+      {tab === 'seances' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <LiveBadge />
+            <div className="flex items-center gap-2">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+                <option value="">Statut — tous</option>{Object.entries(ST_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              <button onClick={() => { setFormPrefill(null); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle séance</button>
+            </div>
+          </div>
+          {talksQ.loading ? <LoadingPanel /> : talksQ.error ? <ErrorPanel message={talksQ.error} onRetry={talksQ.reload} /> : (
+            filteredTalks.length === 0
+              ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun quart d'heure sécurité pour ce filtre</p>
+              : <div className="space-y-2">{filteredTalks.map((t) => (
+                  <Panel key={t.id} className="cursor-pointer" onClick={() => setDetailId(t.id)}>
+                    <div className="flex items-start justify-between flex-wrap gap-2">
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: C.text }}>{t.title}</p>
+                        <p className="text-xs" style={{ color: C.textMuted }}>Semaine du {new Date(t.weekStart).toLocaleDateString('fr-FR')}{t.scheduledAt ? ` · Planifié le ${new Date(t.scheduledAt).toLocaleString('fr-FR')}` : ''}{t.origineType === 'AUTO_RECOMMANDE' ? ' · Auto-recommandé' : ''}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {t.priorite && <span className="text-xs font-medium" style={{ color: stPrioriteColor(C, t.priorite) }}>{ST_PRIORITE_LABEL[t.priorite] || t.priorite}</span>}
+                        <StatusChip statut={ST_STATUS_LABEL[t.status] || t.status} />
+                      </div>
+                    </div>
+                  </Panel>
+                ))}</div>
+          )}
+        </div>
+      )}
+
+      {tab === 'bibliotheque' && (
+        libraryQ.loading ? <LoadingPanel /> : libraryQ.error ? <ErrorPanel message={libraryQ.error} onRetry={libraryQ.reload} /> : (
+          <div className="space-y-4">
+            <LiveBadge />
+            {(libraryQ.data || []).map((cat) => (
+              <Panel key={cat.categorie} title={cat.categorie}>
+                <div className="space-y-3">
+                  {cat.themes.map((th, i) => (
+                    <div key={i} className="p-3 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold" style={{ color: C.text }}>{th.titre}</p>
+                          <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>{th.objectif}</p>
+                        </div>
+                        <button onClick={() => { setFormPrefill(th); setShowForm(true); }} className="text-xs px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: C.blue, color: '#fff' }}>Utiliser ce thème</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === 'matrice' && (
+        matriceQ.loading ? <LoadingPanel /> : matriceQ.error ? <ErrorPanel message={matriceQ.error} onRetry={matriceQ.reload} /> : (
+          <Panel title="Matrice de traçabilité" subtitle={`${(matriceQ.data || []).length} recommandation(s) transformée(s) en séance`}>
+            {(matriceQ.data || []).length
+              ? <DataTable columns={['Source', 'Événement(s)', 'Risque(s)', 'Thème', 'Priorité', 'Statut']}
+                  rows={(matriceQ.data || []).map((m) => [m.source, m.evenement || '—', m.risque || '—', m.theme, ST_PRIORITE_LABEL[m.priorite] || m.priorite || '—', ST_STATUS_LABEL[m.statut] || m.statut])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne dans la matrice</p>}
+          </Panel>
+        )
+      )}
+
+      {tab === 'parametres' && <SafetyTalkRulesPanel rulesQ={rulesQ} />}
     </div>
   );
 }

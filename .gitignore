@@ -2,3 +2,4 @@ node_modules/
 backups/ 
 import/ 
 apps/api/dist/ 
+apps/api/.env
