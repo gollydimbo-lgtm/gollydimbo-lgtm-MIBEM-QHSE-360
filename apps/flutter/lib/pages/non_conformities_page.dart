@@ -6,6 +6,7 @@ import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
+import 'document_link_widget.dart';
 
 const _ncStatusLabels = {'OPEN': 'Ouverte', 'IN_PROGRESS': 'En cours', 'CLOSED': 'Clôturée'};
 const _ncCriticiteLabels = {'MINEURE': 'Mineure', 'MODEREE': 'Modérée', 'MAJEURE': 'Majeure', 'CRITIQUE': 'Critique'};
@@ -570,6 +571,7 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
             ],
             const SizedBox(height: 20),
             CapaLinksSection(sourceModule: 'NON_CONFORMITY', sourceEntityId: n['id'], prefill: {'title': 'Traiter — ${n['title']}', 'source': 'Non-conformité', 'criticite': n['criticiteNiveau']}),
+            DocumentLinksSection(sourceModule: 'NON_CONFORMITY', sourceEntityId: n['id']),
 
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               const Text('Confinement / actions immédiates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
