@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
+import 'capa_link_widget.dart';
 
 Color _niveauColor(String? n) => {
       'CRITIQUE': QhseColors.red,
@@ -57,12 +59,12 @@ class _RisksPageState extends State<RisksPage> {
 
   @override
   Widget build(BuildContext c) => DefaultTabController(
-    length: 4,
+    length: 5,
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Registre des risques'),
         bottom: const TabBar(isScrollable: true, tabs: [
-          Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Hiérarchisation'), Tab(text: 'Paramétrage'),
+          Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Hiérarchisation'), Tab(text: 'Cartographie'), Tab(text: 'Paramétrage'),
         ]),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -72,7 +74,7 @@ class _RisksPageState extends State<RisksPage> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildHierarchisation(c), _buildParametrage(c)]),
+          : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildHierarchisation(c), _buildCartographie(c), _buildParametrage(c)]),
     ),
   );
 
@@ -165,6 +167,60 @@ class _RisksPageState extends State<RisksPage> {
           ]);
         }).toList(),
       ),
+    );
+  }
+
+  Widget _buildCartographie(BuildContext c) {
+    final niveaux = ['CRITIQUE', 'ELEVE', 'MODERE', 'FAIBLE'];
+    final parNiveau = {for (final n in niveaux) n: items.where((r) => (r['grossLevel'] ?? 'FAIBLE') == n).length};
+    final parCategorie = <String, int>{};
+    for (final r in items) {
+      final label = r['category']?['label'] ?? 'Sans catégorie';
+      parCategorie[label] = (parCategorie[label] ?? 0) + 1;
+    }
+    final categories = parCategorie.keys.toList()..sort((a, b) => parCategorie[b]!.compareTo(parCategorie[a]!));
+    return RefreshIndicator(
+      onRefresh: load,
+      child: ListView(padding: const EdgeInsets.all(12), children: [
+        Text('Répartition par niveau de criticité', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 200,
+          child: items.isEmpty
+              ? Center(child: Text('Aucun risque enregistré', style: TextStyle(color: QhseColors.textSecondary)))
+              : BarChart(BarChartData(
+                  gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: QhseColors.border, strokeWidth: 1)),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 26, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)))),
+                    bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 26, getTitlesWidget: (v, m) {
+                      final i = v.toInt();
+                      return Padding(padding: const EdgeInsets.only(top: 4), child: Text(i >= 0 && i < niveaux.length ? _niveauLabel(niveaux[i]) : '', style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)));
+                    })),
+                  ),
+                  barGroups: [for (int i = 0; i < niveaux.length; i++) BarChartGroupData(x: i, barRods: [BarChartRodData(toY: parNiveau[niveaux[i]]!.toDouble(), color: _niveauColor(niveaux[i]), width: 28, borderRadius: BorderRadius.circular(4))])],
+                )),
+        ),
+        const SizedBox(height: 20),
+        Text('Répartition par catégorie', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 8),
+        if (categories.isEmpty)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune donnée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+        else
+          ...categories.map((cat) => Card(child: ListTile(dense: true, title: Text(cat), trailing: Text('${parCategorie[cat]}', style: const TextStyle(fontWeight: FontWeight.bold))))),
+        const SizedBox(height: 20),
+        Text('Rapport de synthèse', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 8),
+        Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Total recensés : ${items.length}', style: const TextStyle(fontSize: 13)),
+          Text('Critiques : ${parNiveau['CRITIQUE']} · Élevés : ${parNiveau['ELEVE']} · Modérés : ${parNiveau['MODERE']} · Faibles : ${parNiveau['FAIBLE']}', style: const TextStyle(fontSize: 13)),
+          Text('Taux de maîtrise : ${dashboard['tauxMaitrise'] ?? '—'}% · Actions en retard : ${dashboard['actionsEnRetard'] ?? 0}', style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          Text('Ce rapport se recompose à partir du registre actuel — il ne s\'agit pas d\'un document figé.', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary, fontStyle: FontStyle.italic)),
+        ]))),
+      ]),
     );
   }
 
@@ -285,6 +341,9 @@ class _RiskDetailPageState extends State<RiskDetailPage> {
                   title: Text('${ev['evaluatedAt'].toString().substring(0, 10)} — Brut ${ev['grossScore']} (${ev['grossLevel']})'),
                   subtitle: Text(ev['residualScore'] != null ? 'Résiduel ${ev['residualScore']} (${ev['residualLevel']})${ev['note'] != null ? ' · ${ev['note']}' : ''}' : ev['note'] ?? ''),
                 ))),
+
+          const SizedBox(height: 20),
+          CapaLinksSection(sourceModule: 'RISK', sourceEntityId: r['id'], prefill: {'title': 'Maîtriser le risque — ${r['hazard'] ?? ''}', 'source': 'RISK'}),
         ]),
       ),
     );
