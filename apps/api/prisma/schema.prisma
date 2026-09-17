@@ -60,6 +60,8 @@ enum SafetyTalkStatus {
   DRAFT
   APPROVED
   DELIVERED
+  ANNULE
+  REPORTE
 }
 
 enum QualityControlStatus {
@@ -99,6 +101,7 @@ enum AttachmentOwnerType {
   AUDIT
   EPI
   DOCUMENT
+  SAFETY_TALK
 }
 
 enum QualityShift {
@@ -130,6 +133,9 @@ model User {
   documentLinksCreated DocumentLink[]
   epiMovements EpiMovement[]
   safetyTalks SafetyTalk[]
+  safetyTalksAnimation SafetyTalk[] @relation("SafetyTalkAnimateur")
+  safetyTalkParticipations SafetyTalkParticipant[]
+  safetyTalkFeedbacksReported SafetyTalkFeedback[]
   actionsResponsible Action[]
   qualityControls QualityControl[]
   qualitySignatures QualityControlSignature[]
@@ -485,6 +491,7 @@ model Employee {
   expositions ExpositionSurveillance[]
   tmsSignalements TmsSignalement[]
   penibiliteExpositions PenibiliteExposition[]
+  safetyTalkParticipations SafetyTalkParticipant[]
 }
 
 model EpiAssignment {
@@ -981,6 +988,7 @@ model Site {
   environnementAspects EnvironnementAspect[]
   workUnits WorkUnit[]
   documents Document[]
+  safetyTalks SafetyTalk[]
   createdAt DateTime @default(now())
 }
 
@@ -1315,6 +1323,7 @@ model WorkUnit {
   nonConformities NonConformity[]
   actions Action[]
   documents Document[]
+  safetyTalks SafetyTalk[]
 }
 
 // Bibliothèque de catégories de risques configurable par l'administrateur —
@@ -1739,7 +1748,126 @@ model SafetyTalk {
   approvedAt DateTime?
   createdById String?
   createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  // --- Fiche complète du quart d'heure sécurité (additif) ---
+  theme String?
+  objectif String?
+  contexte String?
+  risquesConcernes String?
+  personnesExposees String?
+  messagePrincipal String?
+  pointsEssentiels String?
+  bonnesPratiques String?
+  mauvaisesPratiques String?
+  questions String?
+  exemplesTerrain String?
+  mesuresPrevention String?
+  conduiteATenir String?
+  conclusion String?
+  engagementAttendu String?
+  quiz Json?
+  priorite String?
+  siteId String?
+  service String?
+  zone String?
+  equipe String?
+  workUnitId String?
+  responsableAnimationId String?
+  scheduledAt DateTime?
+  duree Int?
+  frequence String?
+  origineType String @default("MANUEL")
+  origineRaison String?
+  origineModules String?
+  realisedAt DateTime?
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  responsableAnimation User? @relation("SafetyTalkAnimateur", fields:[responsableAnimationId], references:[id], onDelete:SetNull)
+  recommendations SafetyTalkRecommendation[]
+  participants SafetyTalkParticipant[]
+  feedbacks SafetyTalkFeedback[]
+  quizResults SafetyTalkQuizResult[]
   @@unique([weekStart])
+}
+
+// Moteur de recommandation — une proposition de thème générée par l'analyse
+// automatique des autres modules, JAMAIS transformée en séance réelle sans
+// validation humaine explicite (accepter/modifier/reporter/ignorer).
+model SafetyTalkRecommendation {
+  id String @id @default(cuid())
+  theme String
+  motif String
+  priorite String
+  sourceModules String
+  score Int @default(0)
+  status String @default("PROPOSEE")
+  metadata Json?
+  createdAt DateTime @default(now())
+  safetyTalkId String?
+  safetyTalk SafetyTalk? @relation(fields:[safetyTalkId], references:[id], onDelete:SetNull)
+  @@index([status])
+}
+
+// Émargement — présence réelle par collaborateur, jamais un simple compteur.
+model SafetyTalkParticipant {
+  id String @id @default(cuid())
+  safetyTalkId String
+  employeeId String?
+  userId String?
+  present Boolean @default(true)
+  motifAbsence String?
+  signature String?
+  createdAt DateTime @default(now())
+  safetyTalk SafetyTalk @relation(fields:[safetyTalkId], references:[id], onDelete:Cascade)
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+  @@index([safetyTalkId])
+}
+
+// Remontée terrain recueillie pendant la séance — peut devenir une situation
+// dangereuse, une NC ou une action CAPA (jamais automatiquement, toujours sur
+// décision explicite via transformFeedback).
+model SafetyTalkFeedback {
+  id String @id @default(cuid())
+  safetyTalkId String
+  type String
+  description String
+  localisation String?
+  criticite String?
+  reportedById String?
+  photoUrl String?
+  commentaire String?
+  mesureImmediate String?
+  status String @default("NOUVEAU")
+  transformedIntoModule String?
+  transformedIntoId String?
+  createdAt DateTime @default(now())
+  safetyTalk SafetyTalk @relation(fields:[safetyTalkId], references:[id], onDelete:Cascade)
+  reportedBy User? @relation(fields:[reportedById], references:[id], onDelete:SetNull)
+  @@index([safetyTalkId])
+}
+
+model SafetyTalkQuizResult {
+  id String @id @default(cuid())
+  safetyTalkId String
+  participantId String?
+  score Int
+  total Int
+  createdAt DateTime @default(now())
+  safetyTalk SafetyTalk @relation(fields:[safetyTalkId], references:[id], onDelete:Cascade)
+}
+
+// Seuils de déclenchement configurables par l'administrateur (section "moteur
+// de déclenchement automatique" du cahier des charges) — le moteur applique
+// une valeur par défaut raisonnable en code si aucune ligne n'existe pour un
+// code donné, jamais une exception bloquante.
+model SafetyTalkRule {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  active Boolean @default(true)
+  seuil Int?
+  periodeJours Int?
+  createdAt DateTime @default(now())
 }
 
 // ============================================================================
