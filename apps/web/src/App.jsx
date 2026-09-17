@@ -8,7 +8,7 @@ import {
   ClipboardList, Activity, HeartPulse, Bell,
   FlaskConical, Users, Sun, Moon, Search, ClipboardCheck,
   FileWarning, Target, BookOpen, FolderOpen, Wrench, Menu, X, RefreshCw, LogOut, ChevronDown,
-  Shield, UtensilsCrossed, Cog,
+  Shield, UtensilsCrossed, Cog, Link2, Send, Copy, CheckCircle2, RotateCcw,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
@@ -827,6 +827,7 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
       )}
 
       <CapaLinksPanel sourceModule="AUDIT" sourceEntityId={audit.id} prefill={{ title: `Traiter les écarts — ${audit.title}`, source: 'Audit', processusId: audit.processusId }} />
+      <DocumentLinksPanel sourceModule="AUDIT" sourceEntityId={audit.id} />
 
       {showReport && detailQ.data && (
         <div className="p-4 rounded-lg mb-5" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
@@ -2806,17 +2807,67 @@ function latestVersion(doc) {
   return versions.length ? [...versions].sort((a, b) => b.version - a.version)[0] : null;
 }
 
+// Statut du cycle de vie GED — un document SUPERSEDED ou ARCHIVED ne doit
+// jamais pouvoir être présenté comme applicable : bandeau rouge/gris explicite.
+const DOCUMENT_STATUS_META = {
+  DRAFT: { label: 'Brouillon', color: 'blue' },
+  REVIEW: { label: 'En vérification', color: 'amber' },
+  APPROVED: { label: 'Approuvé — en attente de publication', color: 'amber' },
+  ACTIVE: { label: 'Publié — en vigueur', color: 'green' },
+  SUPERSEDED: { label: 'Obsolète — remplacé — NE PAS UTILISER', color: 'red' },
+  ARCHIVED: { label: 'Archivé', color: 'gray' },
+};
+function DocumentStatusChip({ status, big }) {
+  const C = useTheme();
+  const meta = DOCUMENT_STATUS_META[status] || { label: status || '—', color: 'gray' };
+  const colorMap = { blue: C.blue, amber: C.amber, green: C.green, red: C.red, gray: C.textMuted };
+  const color = colorMap[meta.color] || C.textMuted;
+  if (big) {
+    return <div className="px-3 py-2.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: `${color}22`, color, border: `1px solid ${color}55` }}>{meta.label}</div>;
+  }
+  return <span className="text-xs px-2 py-1 rounded-md font-medium" style={{ backgroundColor: `${color}22`, color }}>{meta.label}</span>;
+}
+const FREQUENCE_REVISION_LABELS = { MENSUELLE: 'Mensuelle', TRIMESTRIELLE: 'Trimestrielle', SEMESTRIELLE: 'Semestrielle', ANNUELLE: 'Annuelle', BIENNALE: 'Biennale', PERSONNALISEE: 'Personnalisée' };
+
 function DocumentUploadForm({ groups, onClose, onCreated }) {
   const C = useTheme();
   const processusQ = useCollection('/business/processus');
-  const [form, setForm] = useState({ title: '', category: '', documentGroup: '', processusId: '', nextReviewAt: '' });
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const veilleQ = useCollection('/business/veille-reglementaire');
+  const typesQ = useCollection('/documents/types');
+  const [form, setForm] = useState({
+    title: '', category: '', documentGroup: '', processusId: '', nextReviewAt: '',
+    description: '', documentType: '', domaine: '', service: '', activite: '', siteId: '',
+    workUnitId: '', responsibleId: '', verificateurId: '', approbateurId: '',
+    dateEntreeVigueur: '', frequenceRevision: '', criticite: '', motifCreation: '',
+    referencesReglementaires: '', referencesNormatives: '', motsCles: '',
+    external: false, sourceOrganisme: '', externalReference: '',
+    diffusionAccuseRequis: false, veilleReglementaireId: '',
+  });
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  function set(k, v) { setForm((f) => ({ ...f, [k]: v })); }
   async function submit(e) {
     e.preventDefault(); setSaving(true); setError(null);
     try {
-      const payload = { code: genCode('DOC'), title: form.title, category: form.category || 'Non classé', documentGroup: form.documentGroup || undefined, processusId: form.processusId || undefined, nextReviewAt: form.nextReviewAt ? new Date(form.nextReviewAt).toISOString() : undefined };
+      const payload = {
+        code: genCode('DOC'), title: form.title, category: form.category || 'Non classé',
+        documentGroup: form.documentGroup || undefined, processusId: form.processusId || undefined,
+        nextReviewAt: form.nextReviewAt ? new Date(form.nextReviewAt).toISOString() : undefined,
+        description: form.description || undefined, documentType: form.documentType || undefined,
+        domaine: form.domaine || undefined, service: form.service || undefined, activite: form.activite || undefined,
+        siteId: form.siteId || undefined, workUnitId: form.workUnitId || undefined,
+        responsibleId: form.responsibleId || undefined, verificateurId: form.verificateurId || undefined, approbateurId: form.approbateurId || undefined,
+        dateEntreeVigueur: form.dateEntreeVigueur ? new Date(form.dateEntreeVigueur).toISOString() : undefined,
+        frequenceRevision: form.frequenceRevision || undefined, criticite: form.criticite || undefined,
+        motifCreation: form.motifCreation || undefined, referencesReglementaires: form.referencesReglementaires || undefined,
+        referencesNormatives: form.referencesNormatives || undefined, motsCles: form.motsCles || undefined,
+        external: form.external || undefined, sourceOrganisme: form.external ? (form.sourceOrganisme || undefined) : undefined,
+        externalReference: form.external ? (form.externalReference || undefined) : undefined,
+        diffusionAccuseRequis: form.diffusionAccuseRequis || undefined, veilleReglementaireId: form.veilleReglementaireId || undefined,
+      };
       if (file) {
         payload.fileName = file.name;
         payload.mimeType = file.type;
@@ -2828,29 +2879,98 @@ function DocumentUploadForm({ groups, onClose, onCreated }) {
     setSaving(false);
   }
   return (
-    <Modal title="Ajouter un document" onClose={onClose}>
+    <Modal title="Ajouter un document" onClose={onClose} wide>
       <form onSubmit={submit}>
-        <FormField label="Titre"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Catégorie"><input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Groupe">
-          <select value={form.documentGroup} onChange={(e) => setForm({ ...form, documentGroup: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
-            <option value="">Non classé</option>
-            {groups.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-        </FormField>
+        <FormField label="Titre"><input required value={form.title} onChange={(e) => set('title', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Description (optionnel)"><textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
         <div className="grid grid-cols-2 gap-3">
+          <FormField label="Catégorie"><input value={form.category} onChange={(e) => set('category', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Groupe">
+            <select value={form.documentGroup} onChange={(e) => set('documentGroup', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">Non classé</option>
+              {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type de document (optionnel)">
+            <input value={form.documentType} onChange={(e) => set('documentType', e.target.value)} list="doc-types-list" placeholder="Ex. Procédure, Instruction, Formulaire..." className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+            <datalist id="doc-types-list">{(typesQ.data || []).map((t) => <option key={t.id} value={t.name} />)}</datalist>
+          </FormField>
           <FormField label="Processus concerné (optionnel)">
-            <select value={form.processusId} onChange={(e) => setForm({ ...form, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <select value={form.processusId} onChange={(e) => set('processusId', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
               <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
             </select>
           </FormField>
-          <FormField label="Prochaine révision (optionnel)"><input type="date" value={form.nextReviewAt} onChange={(e) => setForm({ ...form, nextReviewAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Domaine (optionnel)"><input value={form.domaine} onChange={(e) => set('domaine', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Service (optionnel)"><input value={form.service} onChange={(e) => set('service', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Activité (optionnel)"><input value={form.activite} onChange={(e) => set('activite', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Site (optionnel)"><input value={form.siteId} onChange={(e) => set('siteId', e.target.value)} placeholder="Identifiant ou nom du site" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Unité de travail (optionnel)">
+            <select value={form.workUnitId} onChange={(e) => set('workUnitId', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Responsable (optionnel)">
+            <select value={form.responsibleId} onChange={(e) => set('responsibleId', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Vérificateur (optionnel)">
+            <select value={form.verificateurId} onChange={(e) => set('verificateurId', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Approbateur (optionnel)">
+            <select value={form.approbateurId} onChange={(e) => set('approbateurId', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          <FormField label="Date d'entrée en vigueur (optionnel)"><input type="date" value={form.dateEntreeVigueur} onChange={(e) => set('dateEntreeVigueur', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Prochaine révision (optionnel)"><input type="date" value={form.nextReviewAt} onChange={(e) => set('nextReviewAt', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Fréquence de révision">
+            <select value={form.frequenceRevision} onChange={(e) => set('frequenceRevision', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{Object.entries(FREQUENCE_REVISION_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Criticité">
+            <select value={form.criticite} onChange={(e) => set('criticite', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option><option value="NON_CRITIQUE">Non critique</option><option value="CRITIQUE">Critique</option>
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Motif de création (optionnel)"><textarea value={form.motifCreation} onChange={(e) => set('motifCreation', e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Références réglementaires (optionnel)"><textarea value={form.referencesReglementaires} onChange={(e) => set('referencesReglementaires', e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Références normatives (optionnel)"><textarea value={form.referencesNormatives} onChange={(e) => set('referencesNormatives', e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Mots-clés (optionnel, séparés par des virgules)"><input value={form.motsCles} onChange={(e) => set('motsCles', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Veille réglementaire liée (optionnel)">
+          <select value={form.veilleReglementaireId} onChange={(e) => set('veilleReglementaireId', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(veilleQ.data || []).map((v) => <option key={v.id} value={v.id}>{`${v.texte}`.slice(0, 60)}</option>)}
+          </select>
+        </FormField>
+        <label className="flex items-center gap-2 text-xs mb-2" style={{ color: C.textMuted }}><input type="checkbox" checked={form.external} onChange={(e) => set('external', e.target.checked)} />Document d'origine externe</label>
+        {form.external && (
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Organisme source"><input value={form.sourceOrganisme} onChange={(e) => set('sourceOrganisme', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Référence externe"><input value={form.externalReference} onChange={(e) => set('externalReference', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          </div>
+        )}
+        <label className="flex items-center gap-2 text-xs mb-3" style={{ color: C.textMuted }}><input type="checkbox" checked={form.diffusionAccuseRequis} onChange={(e) => set('diffusionAccuseRequis', e.target.checked)} />Accusé de lecture requis à la diffusion</label>
         <FormField label="Fichier (PDF, Word, Excel...)">
           <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" onChange={(e) => setFile(e.target.files[0] || null)} className="w-full text-sm" style={{ color: C.text }} />
         </FormField>
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
-        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium mt-1" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Envoi…' : 'Ajouter le document'}</button>
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium mt-1" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Envoi…' : 'Ajouter le document (créé en Brouillon)'}</button>
       </form>
     </Modal>
   );
@@ -2859,6 +2979,7 @@ function DocumentUploadForm({ groups, onClose, onCreated }) {
 function DocumentVersionForm({ doc, onClose, onCreated }) {
   const C = useTheme();
   const [file, setFile] = useState(null);
+  const [motifModification, setMotifModification] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   async function submit(e) {
@@ -2867,7 +2988,7 @@ function DocumentVersionForm({ doc, onClose, onCreated }) {
     setSaving(true); setError(null);
     try {
       const base64 = await fileToBase64(file);
-      await api.post(`/documents/${doc.id}/versions`, { fileName: file.name, mimeType: file.type, base64 });
+      await api.post(`/documents/${doc.id}/versions`, { fileName: file.name, mimeType: file.type, base64, motifModification: motifModification || undefined });
       onCreated(); onClose();
     } catch (err) { setError(err.message); }
     setSaving(false);
@@ -2875,10 +2996,11 @@ function DocumentVersionForm({ doc, onClose, onCreated }) {
   return (
     <Modal title={`Nouvelle version — ${doc.title}`} onClose={onClose}>
       <form onSubmit={submit}>
-        <p className="text-xs mb-3" style={{ color: C.textMuted }}>Version actuelle : v{doc.currentVersion}. Le nouveau fichier deviendra la version suivante — l'ancienne reste consultable dans l'historique.</p>
+        <p className="text-xs mb-3" style={{ color: C.textMuted }}>Version actuelle : v{doc.currentVersion}. Le nouveau fichier deviendra la version suivante — l'ancienne reste consultable dans l'historique. Le document repasse automatiquement en Brouillon (aucune publication automatique).</p>
         <FormField label="Nouveau fichier">
           <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" onChange={(e) => setFile(e.target.files[0] || null)} className="w-full text-sm" style={{ color: C.text }} />
         </FormField>
+        <FormField label="Motif de la modification (optionnel)"><textarea value={motifModification} onChange={(e) => setMotifModification(e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
         <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium mt-1" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Envoi…' : 'Enregistrer la nouvelle version'}</button>
       </form>
@@ -2886,24 +3008,92 @@ function DocumentVersionForm({ doc, onClose, onCreated }) {
   );
 }
 
+function metaFromDoc(doc) {
+  return {
+    category: doc.category || '', documentGroup: doc.documentGroup || '', processusId: doc.processusId || '',
+    nextReviewAt: doc.nextReviewAt ? new Date(doc.nextReviewAt).toISOString().slice(0, 10) : '',
+    description: doc.description || '', documentType: doc.documentType || '', domaine: doc.domaine || '',
+    service: doc.service || '', activite: doc.activite || '', siteId: doc.siteId || '',
+    workUnitId: doc.workUnitId || '', responsibleId: doc.responsibleId || '', verificateurId: doc.verificateurId || '',
+    approbateurId: doc.approbateurId || '',
+    dateEntreeVigueur: doc.dateEntreeVigueur ? new Date(doc.dateEntreeVigueur).toISOString().slice(0, 10) : '',
+    frequenceRevision: doc.frequenceRevision || '', criticite: doc.criticite || '', motifCreation: doc.motifCreation || '',
+    referencesReglementaires: doc.referencesReglementaires || '', referencesNormatives: doc.referencesNormatives || '',
+    motsCles: doc.motsCles || '', external: !!doc.external, sourceOrganisme: doc.sourceOrganisme || '', externalReference: doc.externalReference || '',
+    diffusionAccuseRequis: doc.diffusionAccuseRequis ?? false, veilleReglementaireId: doc.veilleReglementaireId || '',
+  };
+}
+
 // Lecture en ligne : PDF affiché directement, Word/Excel convertis en
 // aperçu HTML lisible (mammoth / SheetJS). Le téléchargement du fichier
-// original reste toujours disponible, quel que soit le format.
-function DocumentViewerModal({ doc, onClose, onNewVersion, onDeleted, onChanged }) {
+// original reste toujours disponible, quel que soit le format. Circuit de
+// validation complet (soumission / vérification / approbation-publication /
+// archivage), diffusion avec accusés de lecture, historique des
+// approbations, QR/token copiable et CAPA associées.
+function DocumentViewerModal({ doc: initialDoc, onClose, onNewVersion, onDeleted, onChanged }) {
   const C = useTheme();
+  const [doc, setDoc] = useState(initialDoc);
   const [preview, setPreview] = useState({ loading: true, kind: null, content: null, error: null });
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState(null);
   const processusQ = useCollection('/business/processus');
-  const [meta, setMeta] = useState({ processusId: doc.processusId || '', nextReviewAt: doc.nextReviewAt ? new Date(doc.nextReviewAt).toISOString().slice(0, 10) : '' });
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const veilleQ = useCollection('/business/veille-reglementaire');
+  const typesQ = useCollection('/documents/types');
+  const [meta, setMeta] = useState(() => metaFromDoc(initialDoc));
   const [savingMeta, setSavingMeta] = useState(false);
+  const [showDiffuse, setShowDiffuse] = useState(false);
+  const [diffuseRecipients, setDiffuseRecipients] = useState([]);
+  const [diffuseAccuse, setDiffuseAccuse] = useState(initialDoc.diffusionAccuseRequis ?? true);
+  const [diffusing, setDiffusing] = useState(false);
+  const [diffuseError, setDiffuseError] = useState(null);
+  const [copied, setCopied] = useState(false);
   const version = latestVersion(doc);
+
+  async function refresh() {
+    try { const fresh = await api.get(`/documents/${doc.id}`); setDoc(fresh); return fresh; }
+    catch { return null; }
+  }
+  async function runAction(fn) {
+    setBusy(true); setActionError(null);
+    try { await fn(); await refresh(); onChanged && onChanged(); }
+    catch (err) { setActionError(err.message); }
+    setBusy(false);
+  }
+  const submit = () => runAction(() => api.post(`/documents/${doc.id}/submit`, {}));
+  const verify = (decision) => runAction(() => {
+    const comment = decision === 'DEMANDE_MODIFICATION' ? (window.prompt('Motif de la demande de modification (optionnel)') || undefined) : undefined;
+    return api.post(`/documents/${doc.id}/verify`, { decision, comment });
+  });
+  const approve = (decision) => runAction(() => {
+    const comment = window.prompt(decision === 'REFUSE' ? 'Motif du refus (optionnel)' : 'Commentaire (optionnel)') || undefined;
+    return api.post(`/documents/${doc.id}/approve`, { decision, comment });
+  });
+  const archive = () => runAction(() => api.post(`/documents/${doc.id}/archive`, {}));
+  const reopen = () => runAction(() => api.post(`/documents/${doc.id}/reopen`, {}));
+  const regenQr = () => runAction(() => api.post(`/documents/${doc.id}/regenerate-qr`, {}));
 
   async function saveMeta() {
     setSavingMeta(true);
     try {
-      await api.patch(`/documents/${doc.id}`, { processusId: meta.processusId || null, nextReviewAt: meta.nextReviewAt ? new Date(meta.nextReviewAt).toISOString() : null });
-      onChanged();
+      await api.patch(`/documents/${doc.id}`, {
+        category: meta.category || undefined, documentGroup: meta.documentGroup || null, processusId: meta.processusId || null,
+        nextReviewAt: meta.nextReviewAt ? new Date(meta.nextReviewAt).toISOString() : null,
+        description: meta.description || null, documentType: meta.documentType || null, domaine: meta.domaine || null,
+        service: meta.service || null, activite: meta.activite || null, siteId: meta.siteId || null,
+        workUnitId: meta.workUnitId || null, responsibleId: meta.responsibleId || null, verificateurId: meta.verificateurId || null,
+        approbateurId: meta.approbateurId || null,
+        dateEntreeVigueur: meta.dateEntreeVigueur ? new Date(meta.dateEntreeVigueur).toISOString() : null,
+        frequenceRevision: meta.frequenceRevision || null, criticite: meta.criticite || null, motifCreation: meta.motifCreation || null,
+        referencesReglementaires: meta.referencesReglementaires || null, referencesNormatives: meta.referencesNormatives || null,
+        motsCles: meta.motsCles || null, external: meta.external, sourceOrganisme: meta.external ? (meta.sourceOrganisme || null) : null,
+        externalReference: meta.external ? (meta.externalReference || null) : null,
+        diffusionAccuseRequis: meta.diffusionAccuseRequis, veilleReglementaireId: meta.veilleReglementaireId || null,
+      });
+      await refresh(); onChanged && onChanged();
     } catch (err) { alert(err.message); }
     setSavingMeta(false);
   }
@@ -2913,6 +3103,30 @@ function DocumentViewerModal({ doc, onClose, onNewVersion, onDeleted, onChanged 
     try { await confirmAndDelete(doc.title, `/documents/${doc.id}`, () => { onDeleted(); onClose(); }); }
     catch (err) { setDeleteError(err.message); }
     setDeleting(false);
+  }
+
+  function toggleRecipient(userId) {
+    setDiffuseRecipients((r) => (r.includes(userId) ? r.filter((x) => x !== userId) : [...r, userId]));
+  }
+  async function submitDiffuse() {
+    if (!diffuseRecipients.length) { setDiffuseError('Sélectionnez au moins un destinataire'); return; }
+    setDiffusing(true); setDiffuseError(null);
+    try {
+      await api.post(`/documents/${doc.id}/diffuse`, { recipients: diffuseRecipients.map((userId) => ({ userId, accuseRequis: diffuseAccuse })) });
+      setShowDiffuse(false); setDiffuseRecipients([]);
+      await refresh();
+    } catch (err) { setDiffuseError(err.message); }
+    setDiffusing(false);
+  }
+  async function accuseRecipient(recipientId) {
+    try { await api.post(`/documents/diffusion-recipients/${recipientId}/accuse`, {}); await refresh(); }
+    catch (err) { alert(err.message); }
+  }
+  function copyToken() {
+    if (!doc.qrToken) return;
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(doc.qrToken).then(done).catch(done);
+    else done();
   }
 
   useEffect(() => {
@@ -2940,11 +3154,15 @@ function DocumentViewerModal({ doc, onClose, onNewVersion, onDeleted, onChanged 
         setPreview({ loading: false, kind: null, content: null, error: "Aperçu impossible pour ce fichier — téléchargez-le pour l'ouvrir." });
       }
     })();
-  }, [doc.id]);
+  }, [doc.id, version?.id]);
+
+  const approvals = doc.approvals || [];
+  const diffusions = doc.diffusions || [];
+  const decisionLabel = { APPROUVE: 'Approuvé', DEMANDE_MODIFICATION: 'Demande de modification', REFUSE: 'Refusé' };
 
   return (
     <Modal title={doc.title} onClose={onClose} wide>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-3">
         <span className="text-xs" style={{ color: C.textMuted }}>{doc.code} · v{doc.currentVersion} · {version ? version.fileName : 'Aucun fichier'}</span>
         <div className="flex gap-2">
           {version && <a href={fileUrlFor(version.storagePath)} download={version.fileName} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Télécharger</a>}
@@ -2954,25 +3172,43 @@ function DocumentViewerModal({ doc, onClose, onNewVersion, onDeleted, onChanged 
       </div>
       {deleteError && <p className="text-xs mb-3" style={{ color: C.red }}>{deleteError}</p>}
 
-      <div className="flex items-end gap-2 mb-4 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
-        <FormField label="Processus concerné">
-          <select value={meta.processusId} onChange={(e) => setMeta({ ...meta, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
-            <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
-          </select>
-        </FormField>
-        <FormField label="Prochaine révision">
-          <input type="date" value={meta.nextReviewAt} onChange={(e) => setMeta({ ...meta, nextReviewAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
-        </FormField>
-        <button onClick={saveMeta} disabled={savingMeta} className="px-3 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff', opacity: savingMeta ? 0.7 : 1 }}>{savingMeta ? '…' : 'Enregistrer'}</button>
+      {/* Bandeau de statut + actions de circuit de validation, propres au statut courant */}
+      <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <DocumentStatusChip status={doc.status} big />
+          <div className="flex gap-2 flex-wrap">
+            {doc.status === 'DRAFT' && <button onClick={submit} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{busy ? '…' : 'Soumettre pour vérification'}</button>}
+            {doc.status === 'REVIEW' && <>
+              <button onClick={() => verify('APPROUVE')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{busy ? '…' : 'Valider la vérification'}</button>
+              <button onClick={() => verify('DEMANDE_MODIFICATION')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Demander une modification</button>
+            </>}
+            {doc.status === 'APPROVED' && <>
+              <button onClick={() => approve('APPROUVE')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{busy ? '…' : 'Publier (approuver)'}</button>
+              <button onClick={() => approve('REFUSE')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Refuser</button>
+            </>}
+            {doc.status === 'ACTIVE' && <button onClick={archive} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{busy ? '…' : 'Archiver'}</button>}
+            {doc.status === 'ARCHIVED' && <button onClick={reopen} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}><RotateCcw size={12} />{busy ? '…' : 'Réouvrir'}</button>}
+          </div>
+        </div>
+        {doc.status === 'SUPERSEDED' && <p className="text-xs mt-2" style={{ color: C.red }}>Ce document a été remplacé par une version plus récente — ne pas l'utiliser en l'état.</p>}
+        {actionError && <p className="text-xs mt-2" style={{ color: C.red }}>{actionError}</p>}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[11px]" style={{ color: C.textMuted }}>
+          <span>Responsable : {doc.responsible ? `${doc.responsible.firstName} ${doc.responsible.lastName}` : '—'}</span>
+          <span>Vérificateur : {doc.verificateur ? `${doc.verificateur.firstName} ${doc.verificateur.lastName}` : '—'}</span>
+          <span>Approbateur : {doc.approbateur ? `${doc.approbateur.firstName} ${doc.approbateur.lastName}` : '—'}</span>
+          <span>Criticité : {doc.criticite === 'CRITIQUE' ? <span style={{ color: C.red }}>Critique</span> : (doc.criticite || '—')}</span>
+          <span>Entrée en vigueur : {doc.dateEntreeVigueur ? new Date(doc.dateEntreeVigueur).toLocaleDateString('fr-FR') : '—'}</span>
+          <span>Prochaine révision : {doc.nextReviewAt ? new Date(doc.nextReviewAt).toLocaleDateString('fr-FR') : '—'}</span>
+        </div>
       </div>
 
       {preview.loading && <LoadingPanel />}
       {!preview.loading && preview.error && <p className="text-sm text-center py-8" style={{ color: C.red }}>{preview.error}</p>}
       {!preview.loading && preview.kind === 'pdf' && (
-        <iframe src={preview.content} title={doc.title} className="w-full rounded-lg" style={{ height: '65vh', border: `1px solid ${C.border}` }} />
+        <iframe src={preview.content} title={doc.title} className="w-full rounded-lg" style={{ height: '55vh', border: `1px solid ${C.border}` }} />
       )}
       {!preview.loading && preview.kind === 'html' && (
-        <div className="rounded-lg p-4 overflow-auto bg-white text-gray-900" style={{ maxHeight: '65vh' }} dangerouslySetInnerHTML={{ __html: preview.content }} />
+        <div className="rounded-lg p-4 overflow-auto bg-white text-gray-900" style={{ maxHeight: '55vh' }} dangerouslySetInnerHTML={{ __html: preview.content }} />
       )}
       {!preview.loading && preview.kind === 'unsupported' && (
         <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aperçu non disponible pour ce type de fichier — utilisez « Télécharger » pour l'ouvrir.</p>
@@ -2983,12 +3219,174 @@ function DocumentViewerModal({ doc, onClose, onNewVersion, onDeleted, onChanged 
           <p className="text-xs mb-2" style={{ color: C.textMuted }}>Historique des versions</p>
           {[...doc.versions].sort((a, b) => b.version - a.version).map((v) => (
             <div key={v.id} className="flex items-center justify-between text-xs py-1">
-              <span style={{ color: C.text }}>v{v.version} — {v.fileName}</span>
+              <span style={{ color: C.text }}>v{v.version} — {v.fileName}{v.motifModification ? ` (${v.motifModification})` : ''}</span>
               <a href={fileUrlFor(v.storagePath)} download={v.fileName} style={{ color: C.blue }}>Télécharger</a>
             </div>
           ))}
         </div>
       )}
+
+      {/* Historique des approbations */}
+      <div className="mt-5">
+        <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Historique des approbations ({approvals.length})</p>
+        {approvals.length
+          ? <div className="space-y-1.5">{approvals.map((a) => (
+              <div key={a.id} className="p-2 rounded-lg text-xs" style={{ backgroundColor: C.cardAlt }}>
+                <div className="flex items-center justify-between">
+                  <span style={{ color: C.text }}>{a.user ? `${a.user.firstName} ${a.user.lastName}` : (a.userId || '—')} · {a.role || '—'}</span>
+                  <span style={{ color: a.decision === 'APPROUVE' ? C.green : a.decision === 'REFUSE' ? C.red : C.amber }}>{decisionLabel[a.decision] || a.decision}</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5" style={{ color: C.textMuted }}>
+                  <span>{a.comment || 'Sans commentaire'}</span>
+                  <span>{a.createdAt ? new Date(a.createdAt).toLocaleString('fr-FR') : ''}</span>
+                </div>
+              </div>
+            ))}</div>
+          : <p className="text-xs" style={{ color: C.textMuted }}>Aucune approbation enregistrée</p>}
+      </div>
+
+      {/* Diffusion */}
+      <div className="mt-5">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold" style={{ color: C.text }}>Diffusion ({diffusions.length})</p>
+          <button onClick={() => setShowDiffuse((s) => !s)} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1" style={{ backgroundColor: C.green, color: '#052e1f' }}><Send size={12} />Diffuser cette version</button>
+        </div>
+        {showDiffuse && (
+          <div className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+            <p className="text-xs mb-1.5" style={{ color: C.textMuted }}>Destinataires</p>
+            <div className="max-h-32 overflow-y-auto mb-2 space-y-1">
+              {(usersQ.data || []).map((u) => (
+                <label key={u.id} className="flex items-center gap-2 text-xs" style={{ color: C.text }}>
+                  <input type="checkbox" checked={diffuseRecipients.includes(u.id)} onChange={() => toggleRecipient(u.id)} />
+                  {u.firstName} {u.lastName}
+                </label>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-xs mb-2" style={{ color: C.textMuted }}>
+              <input type="checkbox" checked={diffuseAccuse} onChange={(e) => setDiffuseAccuse(e.target.checked)} />Accusé de lecture requis
+            </label>
+            {diffuseError && <p className="text-xs mb-2" style={{ color: C.red }}>{diffuseError}</p>}
+            <button onClick={submitDiffuse} disabled={diffusing} className="w-full py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: diffusing ? 0.7 : 1 }}>{diffusing ? '…' : 'Envoyer la diffusion'}</button>
+          </div>
+        )}
+        {diffusions.length
+          ? <div className="space-y-2">
+              {diffusions.map((d) => (
+                <div key={d.id} className="p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                  <p className="text-xs mb-1" style={{ color: C.textMuted }}>Diffusion v{d.version} · {d.createdAt ? new Date(d.createdAt).toLocaleDateString('fr-FR') : ''}</p>
+                  <div className="space-y-1">
+                    {(d.recipients || []).map((r) => (
+                      <div key={r.id} className="flex items-center justify-between text-xs">
+                        <span style={{ color: C.text }}>{r.user ? `${r.user.firstName} ${r.user.lastName}` : (r.label || r.userId || '—')}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: r.lu ? `${C.green}22` : `${C.amber}22`, color: r.lu ? C.green : C.amber }}>{r.lu ? 'LU' : 'NON LU'}</span>
+                          {!r.lu && <button onClick={() => accuseRecipient(r.id)} className="text-[11px] flex items-center gap-1" style={{ color: C.blue }}><CheckCircle2 size={12} />Marquer lu</button>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          : <p className="text-xs" style={{ color: C.textMuted }}>Ce document n'a pas encore été diffusé</p>}
+      </div>
+
+      {/* QR / token */}
+      <div className="mt-5 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+        <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Code de vérification (QR)</p>
+        <div className="flex items-center gap-2">
+          <input readOnly value={doc.qrToken || '—'} className="flex-1 px-3 py-2 rounded-lg text-xs outline-none" style={inputStyle(C)} />
+          <button onClick={copyToken} className="px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Copy size={12} />{copied ? 'Copié !' : 'Copier'}</button>
+          <button onClick={regenQr} disabled={busy} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Régénérer</button>
+        </div>
+      </div>
+
+      {/* CAPA associées — un document peut être source d'une CAPA (ex. révision suite à un écart) */}
+      <div className="mt-5">
+        <CapaLinksPanel sourceModule="DOCUMENT" sourceEntityId={doc.id} prefill={{ title: `Réviser — ${doc.title}`, source: 'Documentation GED' }} />
+      </div>
+
+      {/* Édition des métadonnées enrichies */}
+      <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
+        <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Métadonnées du document</p>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Catégorie"><input value={meta.category} onChange={(e) => setMeta({ ...meta, category: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Type de document">
+            <input value={meta.documentType} onChange={(e) => setMeta({ ...meta, documentType: e.target.value })} list="doc-types-list-edit" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+            <datalist id="doc-types-list-edit">{(typesQ.data || []).map((t) => <option key={t.id} value={t.name} />)}</datalist>
+          </FormField>
+        </div>
+        <FormField label="Description"><textarea value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Domaine"><input value={meta.domaine} onChange={(e) => setMeta({ ...meta, domaine: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Service"><input value={meta.service} onChange={(e) => setMeta({ ...meta, service: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Activité"><input value={meta.activite} onChange={(e) => setMeta({ ...meta, activite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Site"><input value={meta.siteId} onChange={(e) => setMeta({ ...meta, siteId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Unité de travail">
+            <select value={meta.workUnitId} onChange={(e) => setMeta({ ...meta, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Responsable">
+            <select value={meta.responsibleId} onChange={(e) => setMeta({ ...meta, responsibleId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Vérificateur">
+            <select value={meta.verificateurId} onChange={(e) => setMeta({ ...meta, verificateurId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Approbateur">
+            <select value={meta.approbateurId} onChange={(e) => setMeta({ ...meta, approbateurId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          <FormField label="Entrée en vigueur"><input type="date" value={meta.dateEntreeVigueur} onChange={(e) => setMeta({ ...meta, dateEntreeVigueur: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Prochaine révision"><input type="date" value={meta.nextReviewAt} onChange={(e) => setMeta({ ...meta, nextReviewAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Fréquence de révision">
+            <select value={meta.frequenceRevision} onChange={(e) => setMeta({ ...meta, frequenceRevision: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{Object.entries(FREQUENCE_REVISION_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Criticité">
+            <select value={meta.criticite} onChange={(e) => setMeta({ ...meta, criticite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option><option value="NON_CRITIQUE">Non critique</option><option value="CRITIQUE">Critique</option>
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Processus concerné">
+          <select value={meta.processusId} onChange={(e) => setMeta({ ...meta, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Motif de création"><textarea value={meta.motifCreation} onChange={(e) => setMeta({ ...meta, motifCreation: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Références réglementaires"><textarea value={meta.referencesReglementaires} onChange={(e) => setMeta({ ...meta, referencesReglementaires: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Références normatives"><textarea value={meta.referencesNormatives} onChange={(e) => setMeta({ ...meta, referencesNormatives: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Mots-clés"><input value={meta.motsCles} onChange={(e) => setMeta({ ...meta, motsCles: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Veille réglementaire liée">
+          <select value={meta.veilleReglementaireId} onChange={(e) => setMeta({ ...meta, veilleReglementaireId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(veilleQ.data || []).map((v) => <option key={v.id} value={v.id}>{`${v.texte}`.slice(0, 60)}</option>)}
+          </select>
+        </FormField>
+        <label className="flex items-center gap-2 text-xs mb-2" style={{ color: C.textMuted }}><input type="checkbox" checked={meta.external} onChange={(e) => setMeta({ ...meta, external: e.target.checked })} />Document d'origine externe</label>
+        {meta.external && (
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Organisme source"><input value={meta.sourceOrganisme} onChange={(e) => setMeta({ ...meta, sourceOrganisme: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Référence externe"><input value={meta.externalReference} onChange={(e) => setMeta({ ...meta, externalReference: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          </div>
+        )}
+        <label className="flex items-center gap-2 text-xs mb-3" style={{ color: C.textMuted }}><input type="checkbox" checked={meta.diffusionAccuseRequis} onChange={(e) => setMeta({ ...meta, diffusionAccuseRequis: e.target.checked })} />Accusé de lecture requis à la diffusion</label>
+        <button onClick={saveMeta} disabled={savingMeta} className="px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: savingMeta ? 0.7 : 1 }}>{savingMeta ? '…' : 'Enregistrer les métadonnées'}</button>
+      </div>
     </Modal>
   );
 }
@@ -7707,6 +8105,82 @@ function CapaLinksPanel({ sourceModule, sourceEntityId, prefill }) {
   );
 }
 
+// Panneau générique réutilisable "Documents associés" (liens GED génériques
+// exposés par /documents/for-source) — même esprit que CapaLinksPanel :
+// un seul composant pour tous les modules plutôt qu'une implémentation par
+// module. Intégré en priorité dans les détails Audit et Non-conformité ;
+// d'autres modules pourront le réutiliser tel quel.
+function DocumentLinksPanel({ sourceModule, sourceEntityId }) {
+  const C = useTheme();
+  const linksQ = useCollection(`/documents/for-source?sourceModule=${sourceModule}&sourceEntityId=${sourceEntityId}`);
+  const allDocsQ = useCollection('/documents');
+  const [showAssociate, setShowAssociate] = useState(false);
+  const [search, setSearch] = useState('');
+  const [selectedDocId, setSelectedDocId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const links = linksQ.data || [];
+  const already = new Set(links.map((l) => l.documentId));
+  const candidates = (allDocsQ.data || []).filter((d) => !already.has(d.id));
+  const filtered = search ? candidates.filter((d) => normalizeText(`${d.code} ${d.title}`).includes(normalizeText(search))) : candidates;
+
+  async function associate() {
+    if (!selectedDocId) return;
+    setBusy(true); setError(null);
+    try {
+      await api.post(`/documents/${selectedDocId}/links`, { sourceModule, sourceEntityId });
+      setShowAssociate(false); setSelectedDocId(''); setSearch('');
+      linksQ.reload();
+    } catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+  async function requestRevision(documentId) {
+    const motif = window.prompt('Motif de la demande de révision documentaire');
+    if (!motif) return;
+    try {
+      await api.post(`/documents/${documentId}/request-revision`, { sourceModule, sourceEntityId, motif });
+      alert('Demande de révision documentaire envoyée.');
+      linksQ.reload();
+    } catch (err) { alert(err.message); }
+  }
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Documents associés ({links.length})</p>
+        <button onClick={() => setShowAssociate((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Associer un document</button>
+      </div>
+      {showAssociate && (
+        <div className="p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <FormField label="Rechercher (code ou titre)"><input value={search} onChange={(e) => setSearch(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Document existant">
+            <select value={selectedDocId} onChange={(e) => setSelectedDocId(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{filtered.map((d) => <option key={d.id} value={d.id}>{d.code} — {d.title}</option>)}
+            </select>
+          </FormField>
+          {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => setShowAssociate(false)} className="flex-1 py-2 rounded-lg text-xs" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>Annuler</button>
+            <button onClick={associate} disabled={busy || !selectedDocId} className="flex-1 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>{busy ? '…' : 'Associer'}</button>
+          </div>
+        </div>
+      )}
+      {links.length
+        ? <div className="space-y-1.5">{links.map((l) => (
+            <div key={l.id} className="flex items-center justify-between p-2 rounded-lg gap-2" style={{ backgroundColor: C.cardAlt }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <Link2 size={13} color={C.blue} />
+                <span className="text-xs truncate" style={{ color: C.text }}>{l.document?.code} — {l.document?.title}</span>
+                {l.document?.status && <DocumentStatusChip status={l.document.status} />}
+              </div>
+              <button onClick={() => requestRevision(l.documentId)} className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Demander une révision</button>
+            </div>
+          ))}</div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucun document associé</p>}
+    </div>
+  );
+}
+
 function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
   const C = useTheme();
   const detailQ = useCollection(`/business/non-conformities/${nc.id}`);
@@ -7795,6 +8269,7 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
       </div>
 
       <CapaLinksPanel sourceModule="NON_CONFORMITY" sourceEntityId={d.id} prefill={{ title: `Traiter — ${d.title}`, source: 'Non-conformité', nonConformityId: d.id, criticite: d.criticiteNiveau }} />
+      <DocumentLinksPanel sourceModule="NON_CONFORMITY" sourceEntityId={d.id} />
 
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold" style={{ color: C.text }}>Confinement / actions immédiates ({(d.containmentActions || []).length})</p>
@@ -8516,50 +8991,326 @@ function DocumentFolder({ label, icon: Icon, docs, defaultOpen, onOpenDoc }) {
   );
 }
 
+// Gestion des types de documents (Paramètres GED) — /documents/types.
+function DocumentTypesPanel() {
+  const C = useTheme();
+  const typesQ = useCollection('/documents/types');
+  const [form, setForm] = useState({ code: '', name: '', prefix: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const list = typesQ.data || [];
+  async function add(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try { await api.post('/documents/types', form); setForm({ code: '', name: '', prefix: '' }); typesQ.reload(); }
+    catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function toggleActive(t) {
+    try { await api.patch(`/documents/types/${t.id}`, { active: !t.active }); typesQ.reload(); }
+    catch (err) { alert(err.message); }
+  }
+  async function del(t) {
+    try { await confirmAndDelete(t.name, `/documents/types/${t.id}`, typesQ.reload); }
+    catch (err) { alert(err.message); }
+  }
+  return (
+    <Panel title="Types de documents">
+      <form onSubmit={add} className="grid grid-cols-4 gap-2 mb-3">
+        <input required placeholder="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        <input required placeholder="Nom" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        <input placeholder="Préfixe" value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        <button type="submit" disabled={saving} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{saving ? '…' : '+ Ajouter'}</button>
+      </form>
+      {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+      {list.length
+        ? <div className="space-y-1.5">{list.map((t) => (
+            <div key={t.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: C.cardAlt, opacity: t.active ? 1 : 0.5 }}>
+              <span className="text-sm" style={{ color: C.text }}>{t.name} <span style={{ color: C.textMuted }}>({t.code}{t.prefix ? ` · ${t.prefix}` : ''})</span></span>
+              <div className="flex gap-2">
+                <button onClick={() => toggleActive(t)} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: t.active ? `${C.green}22` : `${C.textMuted}22`, color: t.active ? C.green : C.textMuted }}>{t.active ? 'Actif' : 'Inactif'}</button>
+                <button onClick={() => del(t)} className="text-[11px]" style={{ color: C.red }}>Supprimer</button>
+              </div>
+            </div>
+          ))}</div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucun type défini</p>}
+    </Panel>
+  );
+}
+
+// Gestion des catégories documentaires (Paramètres GED) — /documents/categories.
+// Liste plate + sélection du parent (pas d'éditeur d'arbre sophistiqué).
+function DocumentCategoriesPanel() {
+  const C = useTheme();
+  const catQ = useCollection('/documents/categories');
+  const [form, setForm] = useState({ name: '', parentId: '', ordre: 0 });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const list = catQ.data || [];
+  async function add(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try { await api.post('/documents/categories', { name: form.name, parentId: form.parentId || undefined, ordre: Number(form.ordre) || 0 }); setForm({ name: '', parentId: '', ordre: 0 }); catQ.reload(); }
+    catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function del(c) {
+    try { await confirmAndDelete(c.name, `/documents/categories/${c.id}`, catQ.reload); }
+    catch (err) { alert(err.message); }
+  }
+  return (
+    <Panel title="Catégories documentaires">
+      <form onSubmit={add} className="grid grid-cols-4 gap-2 mb-3">
+        <input required placeholder="Nom" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        <select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+          <option value="">Sans parent</option>{list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <input type="number" placeholder="Ordre" value={form.ordre} onChange={(e) => setForm({ ...form, ordre: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        <button type="submit" disabled={saving} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{saving ? '…' : '+ Ajouter'}</button>
+      </form>
+      {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+      {list.length
+        ? <div className="space-y-1.5">{list.map((c) => (
+            <div key={c.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+              <span className="text-sm" style={{ color: C.text }}>{c.name}{c.parentId ? <span style={{ color: C.textMuted }}> — sous {list.find((p) => p.id === c.parentId)?.name || '?'}</span> : ''}</span>
+              <button onClick={() => del(c)} className="text-[11px]" style={{ color: C.red }}>Supprimer</button>
+            </div>
+          ))}</div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucune catégorie définie</p>}
+    </Panel>
+  );
+}
+
+const DOCUMENT_GROUP_LABELS = {
+  STRATEGIE_CONTEXTE: 'Stratégie et Contexte', RISQUES_SECURITE_CONFORMITE: 'Risques, Sécurité et Conformité',
+  SUPPORTS_MAITRISE_DOCUMENTAIRE: 'Supports et Maîtrise Documentaire', OPERATIONS_MAITRISE_TERRAIN: 'Opérations et Maîtrise Terrain',
+  EVALUATION_CONTROLE_AMELIORATION: 'Évaluation, Contrôle et Amélioration',
+};
+const DOCUMENT_A_TRAITER_LABELS = {
+  aApprouver: 'À approuver', aVerifier: 'À vérifier', aReviser: 'À réviser', enRetard: 'En retard',
+  aDiffuser: 'À diffuser', accuseManquant: 'Accusé de lecture manquant', obsoletes: 'Obsolètes', sansResponsable: 'Sans responsable',
+};
+
 function DocumentationPage() {
   const C = useTheme();
-  const docs = useCollection('/documents');
+  const dashboardQ = useCollection('/documents/dashboard');
   const groupsQ = useCollection('/documents/groups');
+  const libraryQ = useCollection('/documents');
+  const atraiterQ = useCollection('/documents/a-traiter');
+  const matriceQ = useCollection('/documents/matrice');
+  const processusQ = useCollection('/business/processus');
+  const [tab, setTab] = useState('apercu');
   const [showUpload, setShowUpload] = useState(false);
   const [viewing, setViewing] = useState(null);
+  const [viewingLoading, setViewingLoading] = useState(false);
   const [addingVersionTo, setAddingVersionTo] = useState(null);
-  if (docs.loading) return <LoadingPanel />;
-  if (docs.error) return <ErrorPanel message={docs.error} onRetry={docs.reload} />;
-  const list = docs.data || [];
-  const groupLabels = {
-    STRATEGIE_CONTEXTE: 'Stratégie et Contexte', RISQUES_SECURITE_CONFORMITE: 'Risques, Sécurité et Conformité',
-    SUPPORTS_MAITRISE_DOCUMENTAIRE: 'Supports et Maîtrise Documentaire', OPERATIONS_MAITRISE_TERRAIN: 'Opérations et Maîtrise Terrain',
-    EVALUATION_CONTROLE_AMELIORATION: 'Évaluation, Contrôle et Amélioration',
-  };
+  const [filters, setFilters] = useState({ q: '', status: '', documentType: '', domaine: '', processusId: '', service: '', siteId: '', criticite: '' });
+  const [filterResults, setFilterResults] = useState({ loading: false, data: null, error: null });
+
+  const hasFilters = Object.values(filters).some((v) => v);
+  useEffect(() => {
+    if (tab !== 'bibliotheque' || !hasFilters) { setFilterResults({ loading: false, data: null, error: null }); return; }
+    let cancelled = false;
+    setFilterResults((r) => ({ ...r, loading: true, error: null }));
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+    api.get(`/documents?${params.toString()}`)
+      .then((data) => { if (!cancelled) setFilterResults({ loading: false, data, error: null }); })
+      .catch((err) => { if (!cancelled) setFilterResults({ loading: false, data: null, error: err.message }); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, JSON.stringify(filters)]);
+
+  function reloadAll() { dashboardQ.reload(); libraryQ.reload(); atraiterQ.reload(); matriceQ.reload(); if (hasFilters) setFilters((f) => ({ ...f })); }
+
+  async function openDoc(idOrDoc) {
+    const id = idOrDoc && idOrDoc.id ? idOrDoc.id : idOrDoc;
+    setViewingLoading(true);
+    try { setViewing(await api.get(`/documents/${id}`)); }
+    catch (err) { alert(err.message); }
+    setViewingLoading(false);
+  }
+
+  const list = libraryQ.data || [];
   // Dossier transversal : rassemble toutes les procédures déjà en place,
   // quel que soit leur groupe ISO d'origine (un document peut donc
   // apparaître ici ET dans son dossier de groupe — deux vues, pas deux copies).
   const procedures = list.filter((d) => normalizeText(d.category).includes('procedure') || normalizeText(d.title).includes('procedure'));
   const nonClasses = list.filter((d) => !d.documentGroup);
+  const dash = dashboardQ.data || {};
+  const at = atraiterQ.data || {};
+  const matriceList = matriceQ.data || [];
+
+  function exportMatriceExcel() {
+    downloadWorkbook([
+      ['Matrice documentaire', [
+        ['Code', 'Titre', 'Version', 'Type', 'Processus', 'Responsable', 'Statut', 'Approbation', "Date d'effet", 'Prochaine révision', 'Criticité', 'Diffusion', 'Accusé', 'État'],
+        ...matriceList.map((m) => [m.code, m.title, m.version, m.documentType || '', m.processus || '', m.responsable || '', m.statut || '', m.approbation || '', m.dateEntreeVigueur ? new Date(m.dateEntreeVigueur).toLocaleDateString('fr-FR') : '', m.nextReviewAt ? new Date(m.nextReviewAt).toLocaleDateString('fr-FR') : '', m.criticite || '', m.diffusion || '', m.accuseLecture || '', m.etat || '']),
+      ]],
+    ], `Matrice-documentaire-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
 
   return (
     <div className="space-y-6">
-      {showUpload && <DocumentUploadForm groups={groupsQ.data || []} onClose={() => setShowUpload(false)} onCreated={docs.reload} />}
-      {viewing && <DocumentViewerModal doc={viewing} onClose={() => setViewing(null)} onNewVersion={() => { setAddingVersionTo(viewing); setViewing(null); }} onDeleted={docs.reload} onChanged={docs.reload} />}
-      {addingVersionTo && <DocumentVersionForm doc={addingVersionTo} onClose={() => setAddingVersionTo(null)} onCreated={docs.reload} />}
-      <div className="flex items-center justify-between">
-        <LiveBadge />
-        <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter un document</button>
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <KpiCard label="Documents" value={list.length} color={C.blue} icon={FolderOpen} />
-        <KpiCard label="Procédures" value={procedures.length} color={C.amber} icon={ClipboardList} />
-        <KpiCard label="Groupes classés" value={new Set(list.map((d) => d.documentGroup).filter(Boolean)).size} color={C.green} icon={ShieldCheck} />
-      </div>
-      <p className="text-xs" style={{ color: C.textMuted }}>Cliquez un document pour le lire directement ici (PDF affiché tel quel, Word et Excel convertis en aperçu). Chaque dossier se déplie/replie au clic.</p>
+      {showUpload && <DocumentUploadForm groups={groupsQ.data || []} onClose={() => setShowUpload(false)} onCreated={reloadAll} />}
+      {viewing && <DocumentViewerModal doc={viewing} onClose={() => setViewing(null)} onNewVersion={() => { setAddingVersionTo(viewing); setViewing(null); }} onDeleted={reloadAll} onChanged={reloadAll} />}
+      {addingVersionTo && <DocumentVersionForm doc={addingVersionTo} onClose={() => setAddingVersionTo(null)} onCreated={reloadAll} />}
 
-      <div className="space-y-3">
-        <DocumentFolder label="Procédures" icon={Wrench} docs={procedures} defaultOpen onOpenDoc={setViewing} />
-        {Object.entries(groupLabels).map(([key, label]) => (
-          <DocumentFolder key={key} label={label} icon={FolderOpen} docs={list.filter((d) => d.documentGroup === key)} onOpenDoc={setViewing} />
+      <div className="flex flex-wrap gap-2">
+        {[['apercu', "Vue d'ensemble"], ['bibliotheque', 'Bibliothèque'], ['atraiter', 'À traiter'], ['matrice', 'Matrice'], ['parametrage', 'Paramètres GED']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
-        <DocumentFolder label="Non classés" icon={FolderOpen} docs={nonClasses} onOpenDoc={setViewing} />
       </div>
+
+      {tab === 'apercu' && (
+        dashboardQ.loading ? <LoadingPanel /> : dashboardQ.error ? <ErrorPanel message={dashboardQ.error} onRetry={dashboardQ.reload} /> : (
+          <div className="space-y-6">
+            <LiveBadge />
+            <div className="flex flex-wrap gap-3">
+              <KpiCard label="Total documents" value={dash.total ?? '—'} color={C.blue} icon={FolderOpen} />
+              <KpiCard label="Actifs (en vigueur)" value={dash.actifs ?? '—'} color={C.green} icon={ShieldCheck} />
+              <KpiCard label="Brouillons" value={dash.brouillons ?? '—'} color={C.blue} icon={ClipboardList} />
+              <KpiCard label="En vérification" value={dash.enVerification ?? '—'} color={C.amber} icon={ClipboardCheck} />
+              <KpiCard label="En approbation" value={dash.enApprobation ?? '—'} color={C.amber} icon={ClipboardCheck} />
+              <KpiCard label="Obsolètes" value={dash.obsoletes ?? '—'} color={dash.obsoletes > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label="Archivés" value={dash.archives ?? '—'} color={C.textMuted} icon={FolderOpen} />
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <KpiCard label="À réviser (≤90j)" value={dash.aReviserProchainement ?? '—'} color={C.amber} icon={Bell} />
+              <KpiCard label="En retard de révision" value={dash.enRetardRevision ?? '—'} color={dash.enRetardRevision > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label="Sans responsable" value={dash.sansResponsable ?? '—'} color={dash.sansResponsable > 0 ? C.amber : C.green} icon={Users} />
+              <KpiCard label="Sans approbateur" value={dash.sansApprobateur ?? '—'} color={dash.sansApprobateur > 0 ? C.amber : C.green} icon={Users} />
+              <KpiCard label="Récemment modifiés" value={dash.recemmentModifies ?? '—'} color={C.blue} icon={RefreshCw} />
+              <KpiCard label="Critiques" value={dash.critiques ?? '—'} color={C.red} icon={AlertTriangle} />
+              <KpiCard label="Réglementaires" value={dash.reglementaires ?? '—'} color={C.blue} icon={BookOpen} />
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <KpiCard label="Diffusion en attente" value={dash.diffusionEnAttente ?? '—'} color={dash.diffusionEnAttente > 0 ? C.amber : C.green} icon={Send} />
+              <KpiCard label="Accusé manquant" value={dash.accuseManquant ?? '—'} color={dash.accuseManquant > 0 ? C.amber : C.green} icon={CheckCircle2} />
+              <KpiCard label="Taux à jour" value={dash.tauxAJour != null ? `${dash.tauxAJour}%` : '—'} color={C.green} icon={ShieldCheck} />
+              <KpiCard label="Taux obsolètes" value={dash.tauxObsoletes != null ? `${dash.tauxObsoletes}%` : '—'} color={dash.tauxObsoletes > 10 ? C.red : C.blue} icon={AlertTriangle} />
+              <KpiCard label="Taux approuvés correctement" value={dash.tauxApprouvesCorrectement != null ? `${dash.tauxApprouvesCorrectement}%` : '—'} color={C.green} icon={ClipboardCheck} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Panel title="Répartition par statut">
+                {(dash.repartitionParStatut || []).length ? <HorizontalBars data={dash.repartitionParStatut} labelKey="label" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              </Panel>
+              <Panel title="Répartition par catégorie">
+                {(dash.repartitionParCategorie || []).length ? <HorizontalBars data={dash.repartitionParCategorie} labelKey="label" valueKey="value" color={C.amber} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              </Panel>
+              <Panel title="Répartition par processus">
+                {(dash.repartitionParProcessus || []).length ? <HorizontalBars data={dash.repartitionParProcessus} labelKey="label" valueKey="value" color={C.green} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              </Panel>
+              <Panel title="Répartition par type">
+                {(dash.repartitionParType || []).length ? <HorizontalBars data={dash.repartitionParType} labelKey="label" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              </Panel>
+            </div>
+          </div>
+        )
+      )}
+
+      {tab === 'bibliotheque' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <LiveBadge />
+            <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter un document</button>
+          </div>
+          <Panel title="Recherche et filtres avancés">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <input placeholder="Titre, code, mots-clés..." value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">Statut — tous</option>{Object.entries(DOCUMENT_STATUS_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
+              </select>
+              <input placeholder="Type de document" value={filters.documentType} onChange={(e) => setFilters({ ...filters, documentType: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <input placeholder="Domaine" value={filters.domaine} onChange={(e) => setFilters({ ...filters, domaine: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <select value={filters.processusId} onChange={(e) => setFilters({ ...filters, processusId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">Processus — tous</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+              </select>
+              <input placeholder="Service" value={filters.service} onChange={(e) => setFilters({ ...filters, service: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <input placeholder="Site" value={filters.siteId} onChange={(e) => setFilters({ ...filters, siteId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <select value={filters.criticite} onChange={(e) => setFilters({ ...filters, criticite: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">Criticité — toutes</option><option value="NON_CRITIQUE">Non critique</option><option value="CRITIQUE">Critique</option>
+              </select>
+            </div>
+            {hasFilters && <button onClick={() => setFilters({ q: '', status: '', documentType: '', domaine: '', processusId: '', service: '', siteId: '', criticite: '' })} className="mt-3 text-xs" style={{ color: C.blue }}>Réinitialiser les filtres</button>}
+          </Panel>
+
+          {hasFilters ? (
+            <Panel title="Résultats de la recherche">
+              {filterResults.loading ? <LoadingPanel /> : filterResults.error ? <ErrorPanel message={filterResults.error} /> : (
+                (filterResults.data || []).length
+                  ? <DataTable columns={['Titre', 'Code', 'Version', 'Statut']}
+                      rows={(filterResults.data || []).map((d) => [d.title, d.code, `v${d.currentVersion}`, <DocumentStatusChip status={d.status} />])}
+                      onRowClick={(i) => openDoc(filterResults.data[i])} />
+                  : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun document ne correspond à ces critères</p>
+              )}
+            </Panel>
+          ) : libraryQ.loading ? <LoadingPanel /> : libraryQ.error ? <ErrorPanel message={libraryQ.error} onRetry={libraryQ.reload} /> : (
+            <>
+              <div className="flex flex-wrap gap-3">
+                <KpiCard label="Documents" value={list.length} color={C.blue} icon={FolderOpen} />
+                <KpiCard label="Procédures" value={procedures.length} color={C.amber} icon={ClipboardList} />
+                <KpiCard label="Groupes classés" value={new Set(list.map((d) => d.documentGroup).filter(Boolean)).size} color={C.green} icon={ShieldCheck} />
+              </div>
+              <p className="text-xs" style={{ color: C.textMuted }}>Cliquez un document pour le lire directement ici (PDF affiché tel quel, Word et Excel convertis en aperçu). Chaque dossier se déplie/replie au clic.</p>
+              <div className="space-y-3">
+                <DocumentFolder label="Procédures" icon={Wrench} docs={procedures} defaultOpen onOpenDoc={openDoc} />
+                {Object.entries(DOCUMENT_GROUP_LABELS).map(([key, label]) => (
+                  <DocumentFolder key={key} label={label} icon={FolderOpen} docs={list.filter((d) => d.documentGroup === key)} onOpenDoc={openDoc} />
+                ))}
+                <DocumentFolder label="Non classés" icon={FolderOpen} docs={nonClasses} onOpenDoc={openDoc} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === 'atraiter' && (
+        atraiterQ.loading ? <LoadingPanel /> : atraiterQ.error ? <ErrorPanel message={atraiterQ.error} onRetry={atraiterQ.reload} /> : (
+          <div className="space-y-4">
+            <LiveBadge />
+            {Object.entries(DOCUMENT_A_TRAITER_LABELS).map(([key, label]) => (
+              <Panel key={key} title={label} subtitle={`${(at[key] || []).length} document(s)`}>
+                {(at[key] || []).length
+                  ? <div className="space-y-1.5">{(at[key] || []).map((d) => (
+                      <div key={d.id} onClick={() => openDoc(d)} className="flex items-center justify-between p-2 rounded-lg cursor-pointer" style={{ backgroundColor: C.cardAlt }}>
+                        <span className="text-sm" style={{ color: C.text }}>{d.code} — {d.title}</span>
+                        <div className="flex items-center gap-2">
+                          {d.nextReviewAt && <span className="text-[11px]" style={{ color: C.textMuted }}>{new Date(d.nextReviewAt).toLocaleDateString('fr-FR')}</span>}
+                          <DocumentStatusChip status={d.status} />
+                        </div>
+                      </div>
+                    ))}</div>
+                  : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Rien à traiter ici</p>}
+              </Panel>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === 'matrice' && (
+        matriceQ.loading ? <LoadingPanel /> : matriceQ.error ? <ErrorPanel message={matriceQ.error} onRetry={matriceQ.reload} /> : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <LiveBadge />
+              <button onClick={exportMatriceExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Exporter Excel</button>
+            </div>
+            <Panel title="Matrice documentaire" subtitle={`${matriceList.length} document(s)`}>
+              {matriceList.length
+                ? <DataTable columns={['Code', 'Titre', 'Version', 'Type', 'Processus', 'Responsable', 'Statut', 'Approbation', "Date d'effet", 'Prochaine révision', 'Criticité', 'Diffusion', 'Accusé', 'État']}
+                    rows={matriceList.map((m) => [m.code, m.title, m.version, m.documentType || '—', m.processus || '—', m.responsable || '—', m.statut || '—', m.approbation || '—', m.dateEntreeVigueur ? new Date(m.dateEntreeVigueur).toLocaleDateString('fr-FR') : '—', m.nextReviewAt ? new Date(m.nextReviewAt).toLocaleDateString('fr-FR') : '—', m.criticite || '—', m.diffusion || '—', m.accuseLecture || '—', m.etat || '—'])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun document</p>}
+            </Panel>
+          </div>
+        )
+      )}
+
+      {tab === 'parametrage' && (
+        <div className="space-y-4">
+          <DocumentTypesPanel />
+          <DocumentCategoriesPanel />
+        </div>
+      )}
+
+      {viewingLoading && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}><LoadingPanel /></div>}
     </div>
   );
 }
