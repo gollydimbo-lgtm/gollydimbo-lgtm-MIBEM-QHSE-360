@@ -7587,6 +7587,77 @@ function CapaConfirmModal({ sourceModule, sourceEntityId, basePrefill, onCancel,
 // avec détection de doublon avant création (point 5) et écran de
 // confirmation + pièces jointes proposées (point 6) avant ouverture du
 // formulaire éditable.
+// CAPA commune (point 11 du cahier des charges) — une même cause qui se
+// répète sur plusieurs enregistrements (NC-001, NC-005, Audit-003...) ne
+// doit donner qu'une seule action, reliée à toutes ses sources plutôt que
+// dupliquée. Réutilisable depuis n'importe quel registre en mode sélection
+// multiple : il suffit de fournir la liste des sources cochées.
+function CapaCommonModal({ sources, onClose, onCreated }) {
+  const C = useTheme();
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({ title: '', description: '', actionType: 'CORRECTIVE', criticite: '', priority: 2, workUnitId: '', responsibleId: '', dueDate: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.title.trim()) { setError('Le titre est obligatoire'); return; }
+    setSaving(true); setError(null);
+    try {
+      await api.post('/business/capa-links/create-common', {
+        code: genCode('ACT'), ...form, priority: Number(form.priority),
+        workUnitId: form.workUnitId || null, responsibleId: form.responsibleId || null,
+        dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
+        sources: sources.map((s) => ({ sourceModule: s.sourceModule, sourceEntityId: s.sourceEntityId })),
+      });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={`Créer une CAPA commune (${sources.length} source${sources.length > 1 ? 's' : ''})`} onClose={onClose} wide>
+      <div className="mb-3 p-2.5 rounded-lg text-xs" style={{ backgroundColor: C.cardAlt, color: C.textMuted }}>
+        Sources sélectionnées : {sources.map((s) => s.label).join(', ')}
+      </div>
+      <form onSubmit={submit}>
+        <FormField label="Action"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type d'action">
+            <select value={form.actionType} onChange={(e) => setForm({ ...form, actionType: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="CURATIVE">Curative / immédiate</option><option value="CORRECTIVE">Corrective</option>
+              <option value="PREVENTIVE">Préventive</option><option value="AMELIORATION">Amélioration</option>
+            </select>
+          </FormField>
+          <FormField label="Criticité">
+            <select value={form.criticite} onChange={(e) => setForm({ ...form, criticite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option><option value="MINEURE">Mineure</option><option value="MAJEURE">Majeure</option><option value="CRITIQUE">Critique</option>
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Priorité"><select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value={1}>Urgente</option><option value={2}>Haute</option><option value={3}>Moyenne</option><option value={4}>Faible</option></select></FormField>
+          <FormField label="Échéance"><input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable">
+            <select value={form.responsibleId} onChange={(e) => setForm({ ...form, responsibleId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Unité de travail / service">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Créer la CAPA commune'}</button>
+      </form>
+    </Modal>
+  );
+}
+
 function CapaLinksPanel({ sourceModule, sourceEntityId, prefill }) {
   const C = useTheme();
   const linksQ = useCollection(`/business/capa-links/by-source?sourceModule=${sourceModule}&sourceEntityId=${sourceEntityId}`);
@@ -7839,6 +7910,9 @@ function NonConformitesPage() {
   const [tab, setTab] = useState('apercu');
   const [settingsForm, setSettingsForm] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showCapaCommon, setShowCapaCommon] = useState(false);
   useEffect(() => { if (!settingsForm && settingsQ.data) setSettingsForm(settingsQ.data); }, [settingsQ.data]);
   if (ncs.loading || dashboardQ.loading) return <LoadingPanel />;
   if (ncs.error) return <ErrorPanel message={ncs.error} onRetry={ncs.reload} />;
@@ -7931,22 +8005,57 @@ function NonConformitesPage() {
 
       {tab === 'registre' && (
         <div className="space-y-6">
+          {showCapaCommon && (
+            <CapaCommonModal
+              sources={selectedIds.map((id) => { const n = sorted.find((x) => x.id === id); return { sourceModule: 'NON_CONFORMITY', sourceEntityId: id, label: n ? `${n.code || ''} — ${n.title}` : id }; })}
+              onClose={() => setShowCapaCommon(false)}
+              onCreated={() => { setShowCapaCommon(false); setMultiSelectMode(false); setSelectedIds([]); reloadAll(); }}
+            />
+          )}
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setMultiSelectMode((v) => !v); setSelectedIds([]); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ backgroundColor: multiSelectMode ? C.blue : C.cardAlt, color: multiSelectMode ? '#fff' : C.text }}
+              >{multiSelectMode ? 'Annuler la sélection' : 'Sélection multiple'}</button>
+              <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
+            </div>
           </div>
           <Panel title="Registre des non-conformités">
             {sorted.length
-              ? <DataTable columns={['Titre', 'Source', 'Criticité', 'Responsable', 'Date', 'Statut']}
-                  rows={sorted.map((n) => [
-                    n.title, n.source || '—',
-                    n.criticiteNiveau ? <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600 }}>{n.criticiteScore} ({n.criticiteNiveau})</span> : '—',
-                    n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '—',
-                    new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={n.status} />,
-                  ])}
-                  onRowClick={(i) => setViewing(sorted[i])} />
+              ? (multiSelectMode
+                  ? <div className="space-y-1">
+                      {sorted.map((n) => (
+                        <div key={n.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer" style={{ borderBottom: `1px solid ${C.border}`, backgroundColor: selectedIds.includes(n.id) ? `${C.blue}11` : 'transparent' }}
+                          onClick={() => setSelectedIds((ids) => ids.includes(n.id) ? ids.filter((x) => x !== n.id) : [...ids, n.id])}>
+                          <input type="checkbox" checked={selectedIds.includes(n.id)} onChange={() => {}} className="w-4 h-4" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate" style={{ color: C.text }}>{n.code ? `${n.code} — ` : ''}{n.title}</p>
+                            <p className="text-[11px]" style={{ color: C.textMuted }}>{n.source || '—'} · {new Date(n.occurredAt).toLocaleDateString('fr-FR')}</p>
+                          </div>
+                          {n.criticiteNiveau && <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600, fontSize: 11 }}>{n.criticiteScore} ({n.criticiteNiveau})</span>}
+                          <StatusChip statut={n.status} />
+                        </div>
+                      ))}
+                    </div>
+                  : <DataTable columns={['Titre', 'Source', 'Criticité', 'Responsable', 'Date', 'Statut']}
+                      rows={sorted.map((n) => [
+                        n.title, n.source || '—',
+                        n.criticiteNiveau ? <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600 }}>{n.criticiteScore} ({n.criticiteNiveau})</span> : '—',
+                        n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '—',
+                        new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={n.status} />,
+                      ])}
+                      onRowClick={(i) => setViewing(sorted[i])} />)
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée pour le moment</p>}
           </Panel>
+          {multiSelectMode && selectedIds.length > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg z-40" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <span className="text-xs font-medium" style={{ color: C.text }}>{selectedIds.length} sélectionnée{selectedIds.length > 1 ? 's' : ''}</span>
+              <button onClick={() => setShowCapaCommon(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Créer une CAPA commune</button>
+            </div>
+          )}
         </div>
       )}
 
