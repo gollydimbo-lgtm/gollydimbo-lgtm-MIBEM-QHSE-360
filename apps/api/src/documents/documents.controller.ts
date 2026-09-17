@@ -1,92 +1,31 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { PrismaService } from '../common/prisma.service';
-import { DocumentGroup } from '@prisma/client';
-import { createHash } from 'crypto';
-import { mkdirSync, writeFileSync, existsSync, unlinkSync } from 'fs';
-import { join } from 'path';
-
-function saveFile(fileName: string, base64: string) {
-  const buffer = Buffer.from(String(base64).replace(/^data:[^;]+;base64,/, ''), 'base64');
-  if (buffer.length > 20 * 1024 * 1024) throw new BadRequestException('Fichier supérieur à 20 Mo');
-  const dir = join(process.cwd(), 'uploads');
-  mkdirSync(dir, { recursive: true });
-  const safeName = `${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  const storagePath = join(dir, safeName);
-  writeFileSync(storagePath, buffer);
-  return { storagePath, checksum: createHash('sha256').update(buffer).digest('hex') };
-}
-
-@Controller('documents')
-export class DocumentsController {
-  constructor(private db: PrismaService) {}
-
-  @Get()
-  list(@Query('group') group?: DocumentGroup) {
-    return this.db.document.findMany({
-      where: group ? { documentGroup: group } : undefined,
-      include: { versions: { orderBy: { version: 'desc' } }, attachments: true, processus: true },
-      orderBy: { updatedAt: 'desc' },
-    });
-  }
-
-  @Get('groups')
-  groups() {
-    return Object.values(DocumentGroup);
-  }
-
-  @Get(':id')
-  getOne(@Param('id') id: string) {
-    return this.db.document.findUnique({ where: { id }, include: { versions: { orderBy: { version: 'desc' } }, attachments: true, processus: true } });
-  }
-
-  // Crée un document. Si fileName/mimeType/base64 sont fournis, le fichier
-  // est enregistré tout de suite comme version 1 — sinon le document est
-  // créé sans fichier (une version pourra être ajoutée ensuite via
-  // POST /documents/:id/versions).
-  @Post()
-  async create(@Body() d: { code: string; title: string; category: string; documentGroup?: DocumentGroup; fileName?: string; mimeType?: string; base64?: string; processusId?: string; nextReviewAt?: string }) {
-    const doc = await this.db.document.create({ data: { code: d.code, title: d.title, category: d.category, documentGroup: d.documentGroup, status: d.base64 ? 'ACTIVE' : 'DRAFT', processusId: d.processusId, nextReviewAt: d.nextReviewAt ? new Date(d.nextReviewAt) : undefined } });
-    if (d.fileName && d.base64) {
-      const { storagePath, checksum } = saveFile(d.fileName, d.base64);
-      await this.db.documentVersion.create({ data: { documentId: doc.id, version: 1, fileName: d.fileName, storagePath, checksum, status: 'ACTIVE' } });
-    }
-    return this.db.document.findUnique({ where: { id: doc.id }, include: { versions: true, attachments: true } });
-  }
-
-  // Modifie les métadonnées d'un document déjà créé — titre, catégorie,
-  // processus rattaché, prochaine échéance de révision. Ne touche jamais
-  // au fichier lui-même (voir POST :id/versions pour ça).
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() d: { title?: string; category?: string; documentGroup?: DocumentGroup; processusId?: string | null; nextReviewAt?: string | null }) {
-    return this.db.document.update({
-      where: { id },
-      data: { title: d.title, category: d.category, documentGroup: d.documentGroup, processusId: d.processusId, nextReviewAt: d.nextReviewAt === undefined ? undefined : d.nextReviewAt ? new Date(d.nextReviewAt) : null },
-    });
-  }
-
-  // Ajoute une nouvelle version (mise à jour progressive) à un document
-  // existant. Le numéro de version s'incrémente automatiquement.
-  @Post(':id/versions')
-  async addVersion(@Param('id') id: string, @Body() d: { fileName: string; mimeType: string; base64: string }) {
-    if (!d?.fileName || !d?.base64) throw new BadRequestException('fileName et base64 sont obligatoires');
-    const doc = await this.db.document.findUnique({ where: { id }, include: { versions: true } });
-    if (!doc) throw new BadRequestException('Document introuvable');
-    const nextVersion = (doc.versions.reduce((max, v) => Math.max(max, v.version), 0)) + 1;
-    const { storagePath, checksum } = saveFile(d.fileName, d.base64);
-    await this.db.documentVersion.create({ data: { documentId: id, version: nextVersion, fileName: d.fileName, storagePath, checksum, status: 'ACTIVE' } });
-    return this.db.document.update({ where: { id }, data: { currentVersion: nextVersion, status: 'ACTIVE' }, include: { versions: { orderBy: { version: 'desc' } } } });
-  }
-
-  // Supprime un document et toutes ses versions — y compris les fichiers
-  // physiques sur le disque, pas seulement les lignes en base.
-  @Delete(':id')
-  async remove(@Param('id') id: string) {
-    const doc = await this.db.document.findUnique({ where: { id }, include: { versions: true } });
-    if (!doc) throw new BadRequestException('Document introuvable');
-    for (const v of doc.versions) {
-      if (existsSync(v.storagePath)) unlinkSync(v.storagePath);
-    }
-    // Les versions sont supprimées automatiquement (onDelete: Cascade côté schéma).
-    return this.db.document.delete({ where: { id } });
-  }
+import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'; import {DocumentsService} from './documents.service';
+@Controller('documents') export class DocumentsController {constructor(private s:DocumentsService){}
+@Get('dashboard') dashboard(){return this.s.dashboard()}
+@Get('a-traiter') aTraiter(){return this.s.aTraiter()}
+@Get('matrice') matrice(){return this.s.matrice()}
+@Get('groups') groups(){return this.s.groups()}
+@Get('types') typeList(){return this.s.typeList()} @Post('types') typeCreate(@Body()b:any){return this.s.typeCreate(b)} @Patch('types/:id') typeUpdate(@Param('id')id:string,@Body()b:any){return this.s.typeUpdate(id,b)} @Delete('types/:id') typeDelete(@Param('id')id:string){return this.s.typeDelete(id)}
+@Get('categories') categoryList(){return this.s.categoryList()} @Post('categories') categoryCreate(@Body()b:any){return this.s.categoryCreate(b)} @Patch('categories/:id') categoryUpdate(@Param('id')id:string,@Body()b:any){return this.s.categoryUpdate(id,b)} @Delete('categories/:id') categoryDelete(@Param('id')id:string){return this.s.categoryDelete(id)}
+@Get('for-source') linksBySource(@Query('sourceModule')sourceModule:string,@Query('sourceEntityId')sourceEntityId:string){return this.s.linksBySource(sourceModule,sourceEntityId)}
+@Get('qr/:token') byQrToken(@Param('token')token:string){return this.s.byQrToken(token)}
+@Get() list(@Query()q:any){return this.s.list(q)}
+@Get(':id') getOne(@Param('id')id:string){return this.s.get(id)}
+@Post() create(@Body()d:any){return this.s.create(d)}
+@Patch(':id') update(@Param('id')id:string,@Body()d:any){return this.s.update(id,d)}
+@Post(':id/versions') addVersion(@Param('id')id:string,@Body()d:any){return this.s.addVersion(id,d)}
+@Delete(':id') remove(@Param('id')id:string){return this.s.remove(id)}
+@Post(':id/submit') submit(@Param('id')id:string,@Body()b:any){return this.s.submit(id,b)}
+@Post(':id/verify') verify(@Param('id')id:string,@Body()b:any){return this.s.verify(id,b)}
+@Post(':id/approve') approve(@Param('id')id:string,@Body()b:any){return this.s.approve(id,b)}
+@Post(':id/archive') archive(@Param('id')id:string,@Body()b:any){return this.s.archive(id,b)}
+@Post(':id/reopen') reopen(@Param('id')id:string,@Body()b:any){return this.s.reopen(id,b)}
+@Post(':id/diffuse') diffuse(@Param('id')id:string,@Body()b:any){return this.s.diffuse(id,b)}
+@Get(':id/diffusions') diffusionsByDocument(@Param('id')id:string){return this.s.diffusionsByDocument(id)}
+@Post('diffusion-recipients/:id/accuse') accuseLecture(@Param('id')id:string,@Body()b:any){return this.s.accuseLecture(id,b)}
+@Get(':id/links') linksByDocument(@Param('id')id:string){return this.s.linksByDocument(id)}
+@Post(':id/links') linkCreate(@Param('id')id:string,@Body()b:any){return this.s.linkCreate(id,b)}
+@Delete('links/:id') linkDelete(@Param('id')id:string){return this.s.linkDelete(id)}
+@Post(':id/request-revision') requestRevision(@Param('id')id:string,@Body()b:any){return this.s.requestRevision(id,b)}
+@Post(':id/link-veille') linkVeille(@Param('id')id:string,@Body()b:any){return this.s.linkVeille(id,b)}
+@Post(':id/regenerate-qr') regenerateQr(@Param('id')id:string){return this.s.regenerateQr(id)}
 }
