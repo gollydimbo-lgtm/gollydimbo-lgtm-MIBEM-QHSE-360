@@ -98,6 +98,7 @@ enum AttachmentOwnerType {
   RISK
   AUDIT
   EPI
+  DOCUMENT
 }
 
 enum QualityShift {
@@ -120,6 +121,13 @@ model User {
   auditLogs AuditLog[]
   attachments Attachment[]
   documentsCreated Document[] @relation("DocumentCreator")
+  documentsResponsable Document[] @relation("DocumentResponsable")
+  documentsVerification Document[] @relation("DocumentVerificateur")
+  documentsApprobation Document[] @relation("DocumentApprobateur")
+  documentApprovalsDecided DocumentApproval[]
+  documentDiffusionsCreated DocumentDiffusion[]
+  documentDiffusionRecipient DocumentDiffusionRecipient[]
+  documentLinksCreated DocumentLink[]
   epiMovements EpiMovement[]
   safetyTalks SafetyTalk[]
   actionsResponsible Action[]
@@ -273,12 +281,44 @@ model Document {
   // Prochaine date de révision — sans elle, aucune alerte d'échéance
   // documentaire n'a de sens à calculer.
   nextReviewAt DateTime?
+  description String?
+  documentType String?
+  domaine String?
+  service String?
+  activite String?
+  siteId String?
+  responsibleId String?
+  verificateurId String?
+  approbateurId String?
+  dateEntreeVigueur DateTime?
+  frequenceRevision String?
+  criticite String @default("NON_CRITIQUE")
+  motifCreation String?
+  referencesReglementaires String?
+  referencesNormatives String?
+  motsCles String?
+  workUnitId String?
+  external Boolean @default(false)
+  sourceOrganisme String?
+  externalReference String?
+  qrToken String? @unique
+  diffusionAccuseRequis Boolean @default(false)
+  veilleReglementaireId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   createdBy User? @relation("DocumentCreator", fields:[createdById], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
+  responsible User? @relation("DocumentResponsable", fields:[responsibleId], references:[id], onDelete:SetNull)
+  verificateur User? @relation("DocumentVerificateur", fields:[verificateurId], references:[id], onDelete:SetNull)
+  approbateur User? @relation("DocumentApprobateur", fields:[approbateurId], references:[id], onDelete:SetNull)
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  veilleReglementaire VeilleReglementaire? @relation(fields:[veilleReglementaireId], references:[id], onDelete:SetNull)
   versions DocumentVersion[]
   attachments Attachment[]
+  approvals DocumentApproval[]
+  diffusions DocumentDiffusion[]
+  links DocumentLink[]
 }
 
 model DocumentVersion {
@@ -289,9 +329,95 @@ model DocumentVersion {
   storagePath String
   checksum String?
   status DocumentStatus @default(DRAFT)
+  motifModification String?
   createdAt DateTime @default(now())
   document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
   @@unique([documentId,version])
+}
+
+// Traçabilité des décisions du circuit de validation (vérification, approbation,
+// refus, demande de modification) — une version non approuvée ne doit jamais
+// être considérée comme la version officielle.
+model DocumentApproval {
+  id String @id @default(cuid())
+  documentId String
+  version Int
+  userId String?
+  role String
+  decision String
+  comment String?
+  createdAt DateTime @default(now())
+  document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+  @@index([documentId])
+}
+
+// Diffusion documentaire — qui a reçu quelle version, et accusé de lecture.
+model DocumentDiffusion {
+  id String @id @default(cuid())
+  documentId String
+  version Int
+  createdById String?
+  createdAt DateTime @default(now())
+  document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
+  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  recipients DocumentDiffusionRecipient[]
+}
+
+model DocumentDiffusionRecipient {
+  id String @id @default(cuid())
+  diffusionId String
+  userId String?
+  label String?
+  accuseRequis Boolean @default(false)
+  statutLecture String @default("NON_LU")
+  dateLecture DateTime?
+  createdAt DateTime @default(now())
+  diffusion DocumentDiffusion @relation(fields:[diffusionId], references:[id], onDelete:Cascade)
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+  @@index([diffusionId])
+}
+
+// Matrice de liaison générique document <-> n'importe quel module (même principe
+// que CapaLink, éprouvé ailleurs dans l'application) — permet à CHAQUE module
+// (NC, Audit, Risque, CAPA, Processus, HACCP, EPI, Formation, etc.) de relier un
+// document sans FK dédiée par module.
+model DocumentLink {
+  id String @id @default(cuid())
+  documentId String
+  sourceModule String
+  sourceEntityId String
+  relationType String @default("ASSOCIE")
+  metadata Json?
+  createdAt DateTime @default(now())
+  createdById String?
+  document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
+  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  @@index([sourceModule,sourceEntityId])
+  @@index([documentId])
+}
+
+// Types de documents configurables par l'administrateur (jamais une liste figée) —
+// section "types de documents personnalisables" du cahier des charges GED.
+model DocumentType {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  prefix String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+}
+
+// Arborescence documentaire configurable par l'administrateur — jamais imposée
+// à un secteur d'activité donné.
+model DocumentCategoryNode {
+  id String @id @default(cuid())
+  name String
+  parentId String?
+  ordre Int @default(0)
+  parent DocumentCategoryNode? @relation("CategoryTree", fields:[parentId], references:[id], onDelete:Cascade)
+  children DocumentCategoryNode[] @relation("CategoryTree")
+  createdAt DateTime @default(now())
 }
 
 // Catégories EPI — table gérable par l'administrateur, jamais une liste
@@ -854,6 +980,7 @@ model Site {
   analysesErgonomiques AnalyseErgonomique[]
   environnementAspects EnvironnementAspect[]
   workUnits WorkUnit[]
+  documents Document[]
   createdAt DateTime @default(now())
 }
 
@@ -1187,6 +1314,7 @@ model WorkUnit {
   auditPrograms AuditProgram[]
   nonConformities NonConformity[]
   actions Action[]
+  documents Document[]
 }
 
 // Bibliothèque de catégories de risques configurable par l'administrateur —
@@ -2131,6 +2259,7 @@ model VeilleReglementaire {
   responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  documents Document[]
 }
 
 model ObjectifQhse {
