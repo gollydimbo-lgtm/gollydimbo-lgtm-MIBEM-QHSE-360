@@ -616,6 +616,18 @@ import { writeAudit } from '../common/audit-log.helper';
      dueDate:this.capaEcheanceProposee('MODEREE'), attachments:await this.capaAttachmentsDisponibles('EPI',e.id),
     };
    }
+   case 'DOCUMENT':{
+    const doc=await this.db.document.findUnique({where:{id:sourceEntityId},include:{versions:{orderBy:{version:'desc'},take:1}}});
+    if(!doc) throw new Error('Document introuvable');
+    const niveau=doc.criticite==='CRITIQUE'?'CRITIQUE':'MINEURE';
+    return {
+     title:`Réviser — ${doc.title}`, description:doc.description||doc.title, date:new Date(),
+     processusId:doc.processusId, workUnitId:doc.workUnitId,
+     criticite:niveau, priority:this.capaPrioriteProposee(niveau), actionType:'CORRECTIVE',
+     responsibleId:doc.responsibleId, dueDate:doc.nextReviewAt||this.capaEcheanceProposee(niveau),
+     attachments:await this.capaAttachmentsDisponibles('DOCUMENT',sourceEntityId),
+    };
+   }
    default:
     throw new Error(`Module source non pris en charge pour le préremplissage : ${sourceModule}`);
   }
