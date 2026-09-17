@@ -1074,9 +1074,9 @@ function ActionForm({ record, prefill, onClose, onCreated }) {
   const usersQ = useCollection('/users');
   const [form, setForm] = useState({
     title: record?.title || prefill?.title || '', description: record?.description || prefill?.description || '',
-    priority: record?.priority || 2, dueDate: record?.dueDate ? new Date(record.dueDate).toISOString().slice(0, 10) : '',
-    status: record?.status || 'OPEN', actionType: record?.actionType || prefill?.actionType || '', criticite: record?.criticite || '',
-    source: record?.source || prefill?.source || '', workUnitId: record?.workUnitId || '', responsibleId: record?.responsibleId || '',
+    priority: record?.priority || prefill?.priority || 2, dueDate: (record?.dueDate || prefill?.dueDate) ? new Date(record?.dueDate || prefill.dueDate).toISOString().slice(0, 10) : '',
+    status: record?.status || 'OPEN', actionType: record?.actionType || prefill?.actionType || '', criticite: record?.criticite || prefill?.criticite || '',
+    source: record?.source || prefill?.source || '', workUnitId: record?.workUnitId || prefill?.workUnitId || '', responsibleId: record?.responsibleId || prefill?.responsibleId || '',
     avancement: record?.avancement ?? 0, dateDebutPrevue: record?.dateDebutPrevue ? new Date(record.dateDebutPrevue).toISOString().slice(0, 10) : '',
   });
   const [saving, setSaving] = useState(false);
@@ -1097,7 +1097,14 @@ function ActionForm({ record, prefill, onClose, onCreated }) {
       // Matrice de liaison générique : quand une source est fournie sans
       // colonne dédiée (indicateur, EPI, formation, équipement...), passer
       // par le point de création générique plutôt que par un champ propre.
-      else if (prefill?.sourceModule && prefill?.sourceEntityId) await api.post('/business/capa-links/create-from-source', { code: genCode('ACT'), ...payload, sourceModule: prefill.sourceModule, sourceEntityId: prefill.sourceEntityId });
+      else if (prefill?.sourceModule && prefill?.sourceEntityId) {
+        const created = await api.post('/business/capa-links/create-from-source', { code: genCode('ACT'), ...payload, sourceModule: prefill.sourceModule, sourceEntityId: prefill.sourceEntityId });
+        // Pièces jointes cochées à l'écran de confirmation — jamais dupliquées
+        // physiquement, seulement référencées sur la nouvelle CAPA.
+        if (prefill.selectedAttachmentIds?.length) {
+          await Promise.all(prefill.selectedAttachmentIds.map((attachmentId) => api.post('/attachments/link', { ownerType: 'ACTION', ownerId: created.id, attachmentId }).catch(() => {})));
+        }
+      }
       else await api.post('/business/actions', { code: genCode('ACT'), ...payload });
       onCreated(); onClose();
     } catch (err) { setError(err.message); }
@@ -1112,6 +1119,9 @@ function ActionForm({ record, prefill, onClose, onCreated }) {
   return (
     <Modal title={prefill?.parentActionId ? 'Nouvelle sous-action' : editing ? "Modifier l'action" : 'Nouvelle action CAPA'} onClose={onClose} wide>
       <form onSubmit={submit}>
+        {prefill?.sourceModule && (
+          <p className="text-xs mb-3 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: `${C.blue}18`, color: C.blue }}>Informations récupérées automatiquement depuis la source — modifiez-les librement avant d'enregistrer.</p>
+        )}
         <FormField label="Action"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
         <div className="grid grid-cols-2 gap-3">
@@ -7492,13 +7502,76 @@ function AuditsPage() {
 const NC_CAUSE_CATEGORIES = ['Main-d\'œuvre', 'Méthode', 'Machine', 'Matière', 'Milieu', 'Mesure', 'Management', 'Organisation'];
 const NC_CRITICITE_COLOR = (C, n) => ({ CRITIQUE: C.red, MAJEURE: C.amber, MODEREE: '#B45309', MINEURE: C.green }[n] || C.textMuted);
 
+const CAPA_TYPE_LABELS = { CURATIVE: 'Curative / immédiate', CORRECTIVE: 'Corrective', PREVENTIVE: 'Préventive', AMELIORATION: 'Amélioration' };
+const CAPA_PRIORITY_LABELS = { 1: 'Urgente', 2: 'Haute', 3: 'Moyenne', 4: 'Faible' };
+
+// Écran de confirmation (point 6 du cahier des charges CAPA intelligente) —
+// affiche le résumé calculé par le mapping serveur avant toute création,
+// avec les pièces jointes déjà disponibles depuis la source à cocher/décocher.
+function CapaConfirmModal({ sourceModule, sourceEntityId, basePrefill, onCancel, onConfirm }) {
+  const C = useTheme();
+  const prefillQ = useCollection(`/business/capa-links/prefill?sourceModule=${sourceModule}&sourceEntityId=${sourceEntityId}`);
+  const [selectedAttachments, setSelectedAttachments] = useState(null);
+  const p = prefillQ.data;
+  if (selectedAttachments === null && p?.attachments?.length) setSelectedAttachments(p.attachments.map((a) => a.id));
+  if (prefillQ.loading) return <Modal title="Créer une CAPA à partir de cette donnée ?" onClose={onCancel}><LoadingPanel /></Modal>;
+  if (prefillQ.error || !p) return (
+    <Modal title="Créer une CAPA à partir de cette donnée ?" onClose={onCancel}>
+      <p className="text-xs mb-3" style={{ color: C.textMuted }}>Préremplissage automatique indisponible pour ce module — le formulaire s'ouvre vide.</p>
+      <div className="flex gap-2"><button onClick={onCancel} className="flex-1 py-2.5 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button><button onClick={() => onConfirm(basePrefill, [])} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Créer la CAPA</button></div>
+    </Modal>
+  );
+  const attachments = p.attachments || [];
+  function toggleAttachment(id) { setSelectedAttachments((s) => (s || []).includes(id) ? (s || []).filter((x) => x !== id) : [...(s || []), id]); }
+  function confirm() {
+    onConfirm({
+      ...basePrefill, title: basePrefill?.title || p.title, description: p.description,
+      actionType: p.actionType, criticite: p.criticite, priority: p.priority,
+      workUnitId: p.workUnitId || undefined, responsibleId: p.responsibleId || undefined,
+      dueDate: p.dueDate ? new Date(p.dueDate).toISOString().slice(0, 10) : undefined,
+    }, selectedAttachments || []);
+  }
+  return (
+    <Modal title="Créer une CAPA à partir de cette donnée ?" onClose={onCancel}>
+      <div className="space-y-1.5 mb-4 text-sm">
+        <div className="flex justify-between"><span style={{ color: C.textMuted }}>Module source</span><span style={{ color: C.text }}>{sourceModule}</span></div>
+        <div className="flex justify-between"><span style={{ color: C.textMuted }}>Type proposé</span><span style={{ color: C.text }}>{CAPA_TYPE_LABELS[p.actionType] || p.actionType || '—'}</span></div>
+        <div className="flex justify-between"><span style={{ color: C.textMuted }}>Priorité proposée</span><span style={{ color: C.text }}>{CAPA_PRIORITY_LABELS[p.priority] || '—'}</span></div>
+        <div className="flex justify-between"><span style={{ color: C.textMuted }}>Criticité</span><span style={{ color: C.text }}>{p.criticite || '—'}</span></div>
+        <div className="flex justify-between"><span style={{ color: C.textMuted }}>Échéance proposée</span><span style={{ color: C.text }}>{p.dueDate ? new Date(p.dueDate).toLocaleDateString('fr-FR') : '—'}</span></div>
+      </div>
+      {attachments.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs font-semibold mb-1.5" style={{ color: C.text }}>Pièces jointes disponibles depuis la source</p>
+          <div className="space-y-1">
+            {attachments.map((a) => (
+              <label key={a.id} className="flex items-center gap-2 text-xs" style={{ color: C.text }}>
+                <input type="checkbox" checked={(selectedAttachments || []).includes(a.id)} onChange={() => toggleAttachment(a.id)} />
+                {a.nom}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="text-xs mb-3" style={{ color: C.textMuted }}>Informations récupérées automatiquement depuis la source — modifiables à l'étape suivante.</p>
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button>
+        <button onClick={confirm} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Créer la CAPA</button>
+      </div>
+    </Modal>
+  );
+}
+
 // Panneau réutilisable "N CAPA associées" (points 11, 6) — un seul
 // composant pour tous les modules plutôt qu'une implémentation par module,
-// avec détection de doublon avant création (point 5).
+// avec détection de doublon avant création (point 5) et écran de
+// confirmation + pièces jointes proposées (point 6) avant ouverture du
+// formulaire éditable.
 function CapaLinksPanel({ sourceModule, sourceEntityId, prefill }) {
   const C = useTheme();
   const linksQ = useCollection(`/business/capa-links/by-source?sourceModule=${sourceModule}&sourceEntityId=${sourceEntityId}`);
-  const [showForm, setShowForm] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [formPrefill, setFormPrefill] = useState(null);
   const [checking, setChecking] = useState(false);
   const [duplicates, setDuplicates] = useState(null);
   const links = linksQ.data || [];
@@ -7506,9 +7579,13 @@ function CapaLinksPanel({ sourceModule, sourceEntityId, prefill }) {
     setChecking(true);
     try {
       const dup = await api.get(`/business/capa-links/duplicates?sourceModule=${sourceModule}&sourceEntityId=${sourceEntityId}`);
-      if (dup.length) setDuplicates(dup); else setShowForm(true);
-    } catch (err) { setShowForm(true); }
+      if (dup.length) setDuplicates(dup); else setShowConfirm(true);
+    } catch (err) { setShowConfirm(true); }
     setChecking(false);
+  }
+  function onConfirmed(mergedPrefill, selectedAttachmentIds) {
+    setShowConfirm(false);
+    setFormPrefill({ sourceModule, sourceEntityId, ...mergedPrefill, selectedAttachmentIds });
   }
   return (
     <div className="mb-5">
@@ -7521,11 +7598,12 @@ function CapaLinksPanel({ sourceModule, sourceEntityId, prefill }) {
           Une action similaire existe déjà : {duplicates.map((d) => d.code).join(', ')}.
           <div className="flex gap-3 mt-1">
             <button onClick={() => setDuplicates(null)} className="underline">Annuler</button>
-            <button onClick={() => { setDuplicates(null); setShowForm(true); }} className="underline">Créer quand même</button>
+            <button onClick={() => { setDuplicates(null); setShowConfirm(true); }} className="underline">Créer quand même</button>
           </div>
         </div>
       )}
-      {showForm && <ActionForm prefill={{ sourceModule, sourceEntityId, ...prefill }} onClose={() => setShowForm(false)} onCreated={linksQ.reload} />}
+      {showConfirm && <CapaConfirmModal sourceModule={sourceModule} sourceEntityId={sourceEntityId} basePrefill={prefill} onCancel={() => setShowConfirm(false)} onConfirm={onConfirmed} />}
+      {formPrefill && <ActionForm prefill={formPrefill} onClose={() => setFormPrefill(null)} onCreated={linksQ.reload} />}
       {links.length
         ? <div className="space-y-1.5">{links.map((l) => (
             <div key={l.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
