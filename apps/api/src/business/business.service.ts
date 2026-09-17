@@ -443,6 +443,19 @@ import { writeAudit } from '../common/audit-log.helper';
   return action;
  }
 
+ // CAPA commune (point 11 du cahier des charges) — une même cause qui se
+ // répète sur plusieurs sources (NC-001, NC-005, Audit-003...) ne doit
+ // donner qu'une seule action, reliée à chacune. On ne renseigne jamais
+ // de colonne dédiée ici (ambiguë dès qu'il y a plus d'une source) : la
+ // matrice CapaLink seule porte la relation, pour chaque source fournie.
+ async capaCreateCommon(sources:{sourceModule:string,sourceEntityId:string}[],b:any){
+  if(!sources?.length) throw new Error('Au moins une source est requise pour une CAPA commune');
+  const data:any={...b}; delete data.sources; delete data.createdById;
+  const action=await this.db.action.create({data});
+  await this.db.capaLink.createMany({data:sources.map(s=>({actionId:action.id,sourceModule:s.sourceModule,sourceEntityId:s.sourceEntityId,relationType:'GENEREE_PAR',createdById:b.createdById||null}))});
+  return action;
+ }
+
  // Échéance suggérée par criticité — règle unique de l'entreprise plutôt
  // qu'une valeur ressaisie à chaque module (7j critique, 15j
  // majeure/élevée, 30j modérée, 60j mineure/faible, 30j par défaut).

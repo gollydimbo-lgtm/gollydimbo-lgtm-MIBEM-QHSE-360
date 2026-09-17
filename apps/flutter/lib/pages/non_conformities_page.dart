@@ -29,6 +29,8 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   Map dashboard = {}, ncSettings = {};
   bool loading = true;
   String? filter;
+  bool multiSelectMode = false;
+  Set<String> selectedIds = {};
 
   @override
   void initState() { super.initState(); load(); }
@@ -99,13 +101,35 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
       appBar: AppBar(
         title: const Text('Non-conformités'),
         bottom: const TabBar(tabs: [Tab(text: 'Registre'), Tab(text: 'Récurrence'), Tab(text: 'Analyses')]),
-        actions: [IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Paramétrage des seuils', onPressed: editSettings)],
+        actions: [
+          IconButton(
+            icon: Icon(multiSelectMode ? Icons.close : Icons.checklist_outlined),
+            tooltip: multiSelectMode ? 'Annuler la sélection' : 'Sélection multiple (CAPA commune)',
+            onPressed: () => setState(() { multiSelectMode = !multiSelectMode; selectedIds = {}; }),
+          ),
+          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Paramétrage des seuils', onPressed: editSettings),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NcFormPage())).then((_) => load()),
-        icon: const Icon(Icons.add),
-        label: const Text('Déclarer une NC'),
-      ),
+      floatingActionButton: multiSelectMode
+          ? (selectedIds.isNotEmpty
+              ? FloatingActionButton.extended(
+                  onPressed: () async {
+                    final sources = selectedIds.map((id) {
+                      final n = items.firstWhere((x) => x['id'] == id, orElse: () => {});
+                      return {'sourceModule': 'NON_CONFORMITY', 'sourceEntityId': id, 'label': '${n['code'] ?? ''} — ${n['title'] ?? ''}'};
+                    }).toList();
+                    final ok = await Navigator.push(c, MaterialPageRoute(builder: (_) => CapaCommonFormPage(sources: List<Map<String, String>>.from(sources.map((s) => s.map((k, v) => MapEntry(k, '$v')))))));
+                    if (ok == true) { setState(() { multiSelectMode = false; selectedIds = {}; }); load(); }
+                  },
+                  icon: const Icon(Icons.merge_type),
+                  label: Text('CAPA commune (${selectedIds.length})'),
+                )
+              : null)
+          : FloatingActionButton.extended(
+              onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NcFormPage())).then((_) => load()),
+              icon: const Icon(Icons.add),
+              label: const Text('Déclarer une NC'),
+            ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(children: [_buildRegistre(c), _buildRecurrence(), _buildAnalyses()]),
@@ -142,15 +166,21 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
                 itemBuilder: (_, i) {
                   final n = items[i];
                   final actions = List.from(n['actions'] ?? []);
+                  final selected = selectedIds.contains(n['id']);
                   return Card(
                     child: ListTile(
-                      leading: n['criticiteNiveau'] != null
-                          ? CircleAvatar(backgroundColor: _ncCriticiteColor(n['criticiteNiveau']), child: Text('${n['criticiteScore'] ?? ''}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))
-                          : null,
+                      leading: multiSelectMode
+                          ? Checkbox(value: selected, onChanged: (_) => setState(() { if (selected) { selectedIds.remove(n['id']); } else { selectedIds.add(n['id']); } }))
+                          : n['criticiteNiveau'] != null
+                              ? CircleAvatar(backgroundColor: _ncCriticiteColor(n['criticiteNiveau']), child: Text('${n['criticiteScore'] ?? ''}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))
+                              : null,
                       title: Text('${n['code']} — ${n['title']}'),
                       subtitle: Text('${_ncStatusLabels[n['status']] ?? n['status']} · ${actions.length} action(s)${n['criticiteNiveau'] != null ? ' · ${_ncCriticiteLabels[n['criticiteNiveau']]}' : ''}'),
-                      onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => NonConformityDetailPage(ncId: n['id']))).then((_) => load()),
-                      onLongPress: () => delete(n),
+                      selected: selected,
+                      onTap: multiSelectMode
+                          ? () => setState(() { if (selected) { selectedIds.remove(n['id']); } else { selectedIds.add(n['id']); } })
+                          : () => Navigator.push(c, MaterialPageRoute(builder: (_) => NonConformityDetailPage(ncId: n['id']))).then((_) => load()),
+                      onLongPress: multiSelectMode ? null : () => delete(n),
                     ),
                   );
                 },
