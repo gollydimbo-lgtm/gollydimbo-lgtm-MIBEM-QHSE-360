@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import 'capa_link_widget.dart';
 
 const Map<String, String> kFournisseurStatutLabels = {
   'PROSPECT': 'Prospect', 'EN_QUALIFICATION': 'En qualification', 'EN_ATTENTE_HOMOLOGATION': "En attente d'homologation",
@@ -306,6 +307,8 @@ class _FournisseurDetailPageState extends State<FournisseurDetailPage> {
           const Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           ...List.from(f!['actions']).take(5).map((a) => Card(child: ListTile(dense: true, title: Text(a['title'] ?? ''), trailing: Text(a['status'] ?? '', style: const TextStyle(fontSize: 11))))),
         ],
+        const SizedBox(height: 20),
+        CapaLinksSection(sourceModule: 'FOURNISSEUR', sourceEntityId: f!['id'], prefill: {'title': 'Plan de progrès — ${f!['nom'] ?? ''}', 'source': 'FOURNISSEUR'}),
       ]),
     );
   }
