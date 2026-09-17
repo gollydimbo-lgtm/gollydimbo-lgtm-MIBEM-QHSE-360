@@ -6,6 +6,36 @@ import 'actions_page.dart';
 const _capaTypeLabels = {'CURATIVE': 'Curative / immédiate', 'CORRECTIVE': 'Corrective', 'PREVENTIVE': 'Préventive', 'AMELIORATION': 'Amélioration'};
 const _capaPriorityLabels = {1: 'Urgente', 2: 'Haute', 3: 'Moyenne', 4: 'Faible'};
 
+// Retour de statut vers le module source (point 10 du cahier des charges) —
+// le module d'origine doit refléter automatiquement où en est sa CAPA,
+// jamais rester sur un statut technique brut ('OPEN', 'CLOSED'...).
+(String, Color) _capaStatutRetour(Map? action) {
+  if (action == null) return ('—', QhseColors.textSecondary);
+  final status = action['status'];
+  final eff = action['effectivenessResult'];
+  if (status == 'CLOSED') return ('CAPA clôturée', QhseColors.green);
+  if (eff == 'INEFFICACE') return ('CAPA inefficace — nouvelle action nécessaire', QhseColors.red);
+  if (eff == 'EFFICACE') return ('CAPA efficace', QhseColors.green);
+  if (['COMPLETED', 'EFFECTIVENESS_CHECK', 'VALIDATED'].contains(status)) return ('Action réalisée — efficacité à vérifier', QhseColors.amber);
+  if (['CANCELLED', 'REJECTED'].contains(status)) return ('CAPA annulée', QhseColors.textSecondary);
+  if (['DRAFT', 'TO_ANALYZE', 'PLANNED', 'ASSIGNED'].contains(status)) return ('CAPA ouverte', QhseColors.blue);
+  return ('Traitement en cours', QhseColors.blue);
+}
+
+class CapaStatutChip extends StatelessWidget {
+  final Map? action;
+  const CapaStatutChip({super.key, required this.action});
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = _capaStatutRetour(action);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
 // Section réutilisable "Actions CAPA associées" — un seul widget pour tous
 // les modules plutôt qu'une implémentation par module, avec détection de
 // doublon avant création (même logique que le panneau web CapaLinksPanel)
@@ -134,7 +164,7 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
         ...links.map((l) => Card(child: ListTile(
               dense: true,
               title: Text('${l['action']['code']} — ${l['action']['title']}'),
-              trailing: Text('${l['action']['status']}', style: const TextStyle(fontSize: 11)),
+              trailing: CapaStatutChip(action: l['action']),
             ))),
     ]),
   );
