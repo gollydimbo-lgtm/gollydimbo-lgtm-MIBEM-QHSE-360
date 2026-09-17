@@ -6,6 +6,7 @@ import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
+import 'document_link_widget.dart';
 
 const _auditStatusLabels = {
   'DRAFT': 'Brouillon', 'PLANNED': 'Planifié', 'TO_PREPARE': 'À préparer', 'PREPARING': 'Préparation en cours',
@@ -367,6 +368,7 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
 
           const SizedBox(height: 20),
           CapaLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id'], prefill: {'title': 'Suite audit — ${a['title']}', 'source': 'AUDIT'}),
+          DocumentLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id']),
         ]),
       ),
     );
