@@ -7505,6 +7505,26 @@ const NC_CRITICITE_COLOR = (C, n) => ({ CRITIQUE: C.red, MAJEURE: C.amber, MODER
 const CAPA_TYPE_LABELS = { CURATIVE: 'Curative / immédiate', CORRECTIVE: 'Corrective', PREVENTIVE: 'Préventive', AMELIORATION: 'Amélioration' };
 const CAPA_PRIORITY_LABELS = { 1: 'Urgente', 2: 'Haute', 3: 'Moyenne', 4: 'Faible' };
 
+// Retour de statut vers le module source (point 10 du cahier des charges) —
+// le module d'origine doit refléter automatiquement où en est sa CAPA,
+// jamais rester sur un statut technique brut ('OPEN', 'CLOSED'...).
+function capaStatutRetour(action) {
+  if (!action) return { label: '—', color: 'textMuted' };
+  if (action.status === 'CLOSED') return { label: 'CAPA clôturée', color: 'green' };
+  if (action.effectivenessResult === 'INEFFICACE') return { label: 'CAPA inefficace — nouvelle action nécessaire', color: 'red' };
+  if (action.effectivenessResult === 'EFFICACE') return { label: 'CAPA efficace', color: 'green' };
+  if (['COMPLETED', 'EFFECTIVENESS_CHECK', 'VALIDATED'].includes(action.status)) return { label: 'Action réalisée — efficacité à vérifier', color: 'amber' };
+  if (['CANCELLED', 'REJECTED'].includes(action.status)) return { label: 'CAPA annulée', color: 'textMuted' };
+  if (['DRAFT', 'TO_ANALYZE', 'PLANNED', 'ASSIGNED'].includes(action.status)) return { label: 'CAPA ouverte', color: 'blue' };
+  return { label: 'Traitement en cours', color: 'blue' };
+}
+function CapaStatutChip({ action }) {
+  const C = useTheme();
+  const s = capaStatutRetour(action);
+  const color = C[s.color] || C.textMuted;
+  return <span className="text-xs px-2 py-1 rounded-md font-medium whitespace-nowrap" style={{ backgroundColor: `${color}22`, color }}>{s.label}</span>;
+}
+
 // Écran de confirmation (point 6 du cahier des charges CAPA intelligente) —
 // affiche le résumé calculé par le mapping serveur avant toute création,
 // avec les pièces jointes déjà disponibles depuis la source à cocher/décocher.
@@ -7608,7 +7628,7 @@ function CapaLinksPanel({ sourceModule, sourceEntityId, prefill }) {
         ? <div className="space-y-1.5">{links.map((l) => (
             <div key={l.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
               <span className="text-xs" style={{ color: C.text }}>{l.action.code} — {l.action.title}</span>
-              <StatusChip statut={l.action.status} />
+              <CapaStatutChip action={l.action} />
             </div>
           ))}</div>
         : <p className="text-xs" style={{ color: C.textMuted }}>Aucune CAPA associée</p>}
