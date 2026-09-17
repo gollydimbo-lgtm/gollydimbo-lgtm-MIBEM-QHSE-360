@@ -182,7 +182,8 @@ class CapaFormPage extends StatefulWidget {
   final String? sourceModule;
   final String? sourceEntityId;
   final Map<String, dynamic> prefillData;
-  const CapaFormPage({super.key, this.record, this.parentActionId, this.sourceModule, this.sourceEntityId, this.prefillData = const {}});
+  final List<String> selectedAttachmentIds;
+  const CapaFormPage({super.key, this.record, this.parentActionId, this.sourceModule, this.sourceEntityId, this.prefillData = const {}, this.selectedAttachmentIds = const []});
   @override
   State<CapaFormPage> createState() => _CapaFormPageState();
 }
@@ -213,8 +214,14 @@ class _CapaFormPageState extends State<CapaFormPage> {
       priority = a['priority'] ?? 2; avancement = a['avancement'] ?? 0;
     } else if (widget.prefillData.isNotEmpty) {
       title.text = widget.prefillData['title'] ?? '';
+      description.text = widget.prefillData['description'] ?? '';
       source.text = widget.prefillData['source'] ?? '';
       criticite = widget.prefillData['criticite'];
+      actionType = widget.prefillData['actionType'];
+      workUnitId = widget.prefillData['workUnitId'];
+      responsibleId = widget.prefillData['responsibleId'];
+      priority = widget.prefillData['priority'] ?? 2;
+      if (widget.prefillData['dueDate'] != null) dueDate = DateTime.tryParse('${widget.prefillData['dueDate']}');
     }
     loadLists();
   }
@@ -251,7 +258,12 @@ class _CapaFormPageState extends State<CapaFormPage> {
       } else if (widget.sourceModule != null && widget.sourceEntityId != null) {
         // Matrice de liaison générique — le point de création commun à
         // tous les modules plutôt qu'une implémentation par module.
-        await api.post('/business/capa-links/create-from-source', {'code': genCode('ACT'), ...payload, 'sourceModule': widget.sourceModule, 'sourceEntityId': widget.sourceEntityId});
+        final created = await api.post('/business/capa-links/create-from-source', {'code': genCode('ACT'), ...payload, 'sourceModule': widget.sourceModule, 'sourceEntityId': widget.sourceEntityId});
+        // Pièces jointes cochées à l'écran de confirmation — jamais
+        // dupliquées, seulement référencées sur la nouvelle CAPA.
+        for (final attachmentId in widget.selectedAttachmentIds) {
+          try { await api.post('/attachments/link', {'ownerType': 'ACTION', 'ownerId': created['id'], 'attachmentId': attachmentId}); } catch (_) {}
+        }
       } else {
         await api.post('/business/actions', {'code': genCode('ACT'), ...payload});
       }
@@ -280,6 +292,9 @@ class _CapaFormPageState extends State<CapaFormPage> {
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
+            if (widget.sourceModule != null)
+              Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: QhseColors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: Text("Informations récupérées automatiquement depuis la source — modifiez-les librement avant d'enregistrer.", style: TextStyle(color: QhseColors.blue, fontSize: 11))),
             TextField(controller: title, decoration: const InputDecoration(labelText: 'Action')),
             const SizedBox(height: 12),
             TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),

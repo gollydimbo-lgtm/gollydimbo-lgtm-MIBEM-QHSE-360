@@ -3,9 +3,14 @@ import '../services/api.dart';
 import '../theme.dart';
 import 'actions_page.dart';
 
+const _capaTypeLabels = {'CURATIVE': 'Curative / immédiate', 'CORRECTIVE': 'Corrective', 'PREVENTIVE': 'Préventive', 'AMELIORATION': 'Amélioration'};
+const _capaPriorityLabels = {1: 'Urgente', 2: 'Haute', 3: 'Moyenne', 4: 'Faible'};
+
 // Section réutilisable "Actions CAPA associées" — un seul widget pour tous
 // les modules plutôt qu'une implémentation par module, avec détection de
-// doublon avant création (même logique que le panneau web CapaLinksPanel).
+// doublon avant création (même logique que le panneau web CapaLinksPanel)
+// et écran de confirmation + pièces jointes proposées avant ouverture du
+// formulaire éditable (même logique que CapaConfirmModal côté web).
 class CapaLinksSection extends StatefulWidget {
   final String sourceModule;
   final String sourceEntityId;
@@ -35,16 +40,70 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
     setState(() => checking = true);
     try {
       final dup = List.from(await api.get('/business/capa-links/duplicates?sourceModule=${widget.sourceModule}&sourceEntityId=${widget.sourceEntityId}'));
-      if (dup.isNotEmpty) { setState(() => duplicates = dup); } else { openForm(); }
-    } catch (_) { openForm(); }
+      if (dup.isNotEmpty) { setState(() => duplicates = dup); } else { showConfirm(); }
+    } catch (_) { showConfirm(); }
     setState(() => checking = false);
   }
 
-  void openForm() {
+  void openForm(Map<String, dynamic> mergedPrefill, List<String> selectedAttachmentIds) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => CapaFormPage(
-      sourceModule: widget.sourceModule, sourceEntityId: widget.sourceEntityId, prefillData: widget.prefill,
+      sourceModule: widget.sourceModule, sourceEntityId: widget.sourceEntityId,
+      prefillData: mergedPrefill, selectedAttachmentIds: selectedAttachmentIds,
     ))).then((_) => load());
   }
+
+  // Écran de confirmation — le mapping calculé côté serveur est présenté
+  // avant toute création, avec les pièces jointes déjà disponibles depuis
+  // la source à cocher/décocher, jamais dupliquées physiquement.
+  Future<void> showConfirm() async {
+    Map? p;
+    try { p = Map.from(await api.get('/business/capa-links/prefill?sourceModule=${widget.sourceModule}&sourceEntityId=${widget.sourceEntityId}')); } catch (_) {}
+    if (!mounted) return;
+    if (p == null) { openForm(widget.prefill, []); return; }
+    final attachments = List.from(p['attachments'] ?? []);
+    List<String> selected = attachments.map<String>((a) => '${a['id']}').toList();
+    await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
+      title: const Text('Créer une CAPA à partir de cette donnée ?'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _confirmRow('Module source', widget.sourceModule),
+        _confirmRow('Type proposé', _capaTypeLabels[p!['actionType']] ?? '${p['actionType'] ?? '—'}'),
+        _confirmRow('Priorité proposée', _capaPriorityLabels[p['priority']] ?? '—'),
+        _confirmRow('Criticité', '${p['criticite'] ?? '—'}'),
+        _confirmRow('Échéance proposée', p['dueDate'] != null ? '${p['dueDate']}'.substring(0, 10) : '—'),
+        if (attachments.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Pièces jointes disponibles depuis la source', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ...attachments.map((a) => CheckboxListTile(
+                dense: true, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading,
+                value: selected.contains('${a['id']}'), title: Text('${a['nom']}', style: const TextStyle(fontSize: 12)),
+                onChanged: (v) => setD(() { final id = '${a['id']}'; if (v == true) { if (!selected.contains(id)) selected.add(id); } else { selected.remove(id); } }),
+              )),
+        ],
+        const SizedBox(height: 10),
+        Text("Informations récupérées automatiquement depuis la source — modifiables à l'étape suivante.", style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+      ])),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        FilledButton(onPressed: () {
+          Navigator.pop(c);
+          openForm({
+            ...widget.prefill,
+            'title': widget.prefill['title'] ?? p!['title'],
+            'description': p!['description'], 'actionType': p['actionType'], 'criticite': p['criticite'],
+            'priority': p['priority'], 'workUnitId': p['workUnitId'], 'responsibleId': p['responsibleId'], 'dueDate': p['dueDate'],
+          }, selected);
+        }, child: const Text('Créer la CAPA')),
+      ],
+    )));
+  }
+
+  Widget _confirmRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(label, style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
+          Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
+      );
 
   @override
   Widget build(BuildContext c) => Padding(
@@ -63,7 +122,7 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
             Text('Une action similaire existe déjà : ${duplicates!.map((d) => d['code']).join(', ')}', style: TextStyle(color: QhseColors.amber, fontSize: 12)),
             Row(children: [
               TextButton(onPressed: () => setState(() => duplicates = null), child: const Text('Annuler')),
-              TextButton(onPressed: () { setState(() => duplicates = null); openForm(); }, child: const Text('Créer quand même')),
+              TextButton(onPressed: () { setState(() => duplicates = null); showConfirm(); }, child: const Text('Créer quand même')),
             ]),
           ]),
         ),
