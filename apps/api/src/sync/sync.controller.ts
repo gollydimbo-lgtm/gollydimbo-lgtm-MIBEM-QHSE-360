@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { BusinessService } from '../business/business.service';
+import { HaccpService } from '../haccp/haccp.service';
 
 // Entités que les applications terrain peuvent créer hors-ligne puis
 // pousser une fois la connexion revenue. Le mapping traduit le nom
@@ -8,28 +9,37 @@ import { BusinessService } from '../business/business.service';
 // "risk" passe par BusinessService (pas un create Prisma brut) pour que le
 // risque créé hors-ligne bénéficie du même moteur de calcul, de la même
 // traçabilité et du même historique d'évaluation qu'un risque créé en ligne.
-const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessService, payload: any) => Promise<any>> = {
-  nonConformity: (db, business, p) => business.ncCreate(p),
-  action: (db, business, p) => db.action.create({ data: p }),
-  safetyEvent: (db, business, p) => db.safetyEvent.create({ data: p }),
-  risk: (db, business, p) => business.riskCreate(p),
-  riskMeasure: (db, business, p) => db.riskMeasure.create({ data: p }),
-  audit: (db, business, p) => db.qhseAudit.create({ data: p }),
+const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessService, haccp: HaccpService, payload: any) => Promise<any>> = {
+  nonConformity: (db, business, haccp, p) => business.ncCreate(p),
+  action: (db, business, haccp, p) => db.action.create({ data: p }),
+  safetyEvent: (db, business, haccp, p) => db.safetyEvent.create({ data: p }),
+  risk: (db, business, haccp, p) => business.riskCreate(p),
+  riskMeasure: (db, business, haccp, p) => db.riskMeasure.create({ data: p }),
+  audit: (db, business, haccp, p) => db.qhseAudit.create({ data: p }),
+  // Geste terrain HACCP prioritaire pour l'offline : saisie d'un relevé de
+  // surveillance CCP hors ligne. Passe par HaccpService.monitoringCreate
+  // (pas un create Prisma brut) pour que la chaîne automatique HACCP →
+  // Non-conformité fonctionne aussi pour un relevé saisi hors ligne, comme
+  // "risk" le fait déjà pour son propre moteur.
+  haccpMonitoring: (db, business, haccp, p) => haccp.monitoringCreate(p.ccpId, p),
 };
 
-const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, id: string, payload: any) => Promise<any>> = {
-  nonConformity: (db, business, id, p) => business.ncUpdate(id, p),
-  action: (db, business, id, p) => business.actionUpdate(id, p),
-  risk: (db, business, id, p) => business.riskUpdate(id, p),
+const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, haccp: HaccpService, id: string, payload: any) => Promise<any>> = {
+  nonConformity: (db, business, haccp, id, p) => business.ncUpdate(id, p),
+  action: (db, business, haccp, id, p) => business.actionUpdate(id, p),
+  risk: (db, business, haccp, id, p) => business.riskUpdate(id, p),
   // Entité distincte plutôt qu'un simple "risk" mis à jour : une
   // réévaluation doit passer par le moteur dédié (historique conservé),
   // jamais par un update générique qui écraserait silencieusement.
-  riskReevaluate: (db, business, id, p) => business.riskReevaluate(id, p),
+  riskReevaluate: (db, business, haccp, id, p) => business.riskReevaluate(id, p),
+  // Même moteur qu'en ligne : la bascule conforme=false déclenche la NC
+  // automatiquement même pour un relevé mis à jour après une synchro.
+  haccpMonitoring: (db, business, haccp, id, p) => haccp.monitoringUpdate(id, p),
 };
 
 @Controller('sync')
 export class SyncController {
-  constructor(private db: PrismaService, private business: BusinessService) {}
+  constructor(private db: PrismaService, private business: BusinessService, private haccp: HaccpService) {}
 
   // Reçoit une file d'attente d'opérations créées hors-ligne par le client
   // (identifiées par un clientLocalId unique généré côté app) et les applique
@@ -56,13 +66,13 @@ export class SyncController {
         if (item.operation === 'CREATE') {
           const fn = ENTITY_CREATE[item.entity];
           if (!fn) throw new Error(`Entité inconnue : ${item.entity}`);
-          const created = await fn(this.db, this.business, item.payload);
+          const created = await fn(this.db, this.business, this.haccp, item.payload);
           entityId = created.id;
         } else if (item.operation === 'UPDATE') {
           const fn = ENTITY_UPDATE[item.entity];
           if (!fn) throw new Error(`Mise à jour non supportée pour : ${item.entity}`);
           if (!entityId) throw new Error('entityId requis pour une mise à jour');
-          await fn(this.db, this.business, entityId, item.payload);
+          await fn(this.db, this.business, this.haccp, entityId, item.payload);
         }
         await this.db.syncItem.update({ where: { id: record.id }, data: { status: 'SYNCED', entityId, syncedAt: new Date(), error: null } });
         results.push({ clientLocalId: item.clientLocalId, status: 'SYNCED', entityId });
