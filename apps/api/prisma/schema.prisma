@@ -1499,6 +1499,7 @@ model HaccpProcessStep {
   study HaccpStudy @relation(fields:[studyId], references:[id], onDelete:Cascade)
   responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
   hazards HaccpHazard[]
+  ccps HaccpCcp[]
 }
 
 // Analyse des dangers par étape — type biologique/chimique/physique/
