@@ -168,6 +168,7 @@ model User {
   processusExigencesResponsable ProcessusExigence[]
   reclamationsActionCurative Reclamation[]
   fournisseursResponsable Fournisseur[]
+  equipmentsResponsable Equipment[] @relation("EquipmentResponsable")
   safetyEventsEnquete SafetyEvent[]
   risquesSanitairesResponsable RisqueSanitaire[]
   analysesErgonomiquesEvaluateur AnalyseErgonomique[]
@@ -718,6 +719,7 @@ model SafetyEvent {
   processusId String?
   fournisseurId String?
   nonConformityId String?
+  equipmentId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
@@ -729,6 +731,7 @@ model SafetyEvent {
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+  equipment Equipment? @relation(fields:[equipmentId], references:[id], onDelete:SetNull)
   actions Action[]
 }
 
@@ -767,6 +770,7 @@ model NonConformity {
   processusId String?
   fournisseurId String?
   riskId String?
+  equipmentId String?
   // --- Phase 1 : criticité, confinement, étendue ---
   workUnitId String?
   declarantId String?
@@ -802,6 +806,7 @@ model NonConformity {
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
   risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
+  equipment Equipment? @relation(fields:[equipmentId], references:[id], onDelete:SetNull)
   workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
   declarant User? @relation("NcDeclarant", fields:[declarantId], references:[id], onDelete:SetNull)
   responsible User? @relation("NcResponsible", fields:[responsibleId], references:[id], onDelete:SetNull)
@@ -892,6 +897,7 @@ model Action {
   environnementAspectId String?
   riskId String?
   auditFindingId String?
+  equipmentId String?
   // --- Module Actions CAPA (Phases 1+2), additif ---
   // Distinction volontaire curative/corrective/préventive/amélioration —
   // jamais réduite au seul couple corrective/préventive, pour éviter la
@@ -922,6 +928,7 @@ model Action {
   environnementAspect EnvironnementAspect? @relation(fields:[environnementAspectId], references:[id], onDelete:SetNull)
   risk Risk? @relation(fields:[riskId], references:[id], onDelete:SetNull)
   auditFinding AuditFinding? @relation(fields:[auditFindingId], references:[id], onDelete:SetNull)
+  equipment Equipment? @relation(fields:[equipmentId], references:[id], onDelete:SetNull)
   workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
   parentAction Action? @relation("ActionParent", fields:[parentActionId], references:[id], onDelete:SetNull)
   subActions Action[] @relation("ActionParent")
@@ -1004,6 +1011,7 @@ model Site {
   documents Document[]
   safetyTalks SafetyTalk[]
   haccpStudies HaccpStudy[]
+  equipments Equipment[]
   createdAt DateTime @default(now())
 }
 
@@ -1299,6 +1307,7 @@ model Risk {
   residualScore Int?
   residualLevel String?
   controlStatus String @default("NON_MAITRISE")
+  equipmentId String?
   nextReviewDate DateTime?
   reviewPeriodDays Int @default(365)
   archivedAt DateTime?
@@ -1310,6 +1319,7 @@ model Risk {
   safetyEvents SafetyEvent[]
   workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
   category RiskCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
+  equipment Equipment? @relation(fields:[equipmentId], references:[id], onDelete:SetNull)
   actions Action[]
   riskMeasures RiskMeasure[]
   evaluations RiskEvaluation[]
@@ -1339,6 +1349,7 @@ model WorkUnit {
   actions Action[]
   documents Document[]
   safetyTalks SafetyTalk[]
+  equipments Equipment[]
 }
 
 // Bibliothèque de catégories de risques configurable par l'administrateur —
@@ -1936,6 +1947,40 @@ model Training {
   riskMeasures RiskMeasure[]
 }
 
+// Catalogue de catégories d'équipements — configurable par l'administrateur,
+// jamais une liste figée dans le code, pour rester adaptable à tout secteur
+// (production, levage/manutention, électrique, incendie/sécurité, appareils
+// sous pression, instruments de mesure, véhicules, installations techniques...).
+model EquipmentCategory {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  groupe String?
+  order Int @default(0)
+  active Boolean @default(true)
+  equipments Equipment[]
+}
+
+// Paramétrage global du module Équipements — seuils de criticité, cadence
+// d'alerte réglementaire (J-90/60/30/7) et pondération du score équipements
+// dans le score QHSE global : jamais codés en dur (cf. exigence de ne pas
+// imposer de fausses obligations universelles), modifiables par l'admin.
+model EquipmentSettings {
+  id String @id @default(cuid())
+  seuilCriticiteModere Int @default(30)
+  seuilCriticiteEleve Int @default(60)
+  seuilCriticiteCritique Int @default(85)
+  alerteJ90 Boolean @default(true)
+  alerteJ60 Boolean @default(true)
+  alerteJ30 Boolean @default(true)
+  alerteJ7 Boolean @default(true)
+  ponderationScoreGlobal Float @default(10)
+  updatedAt DateTime @updatedAt
+}
+
+// === MODULE ÉQUIPEMENTS — Phase 1 : fondations, criticité, chaîne
+// Équipement -> Risque -> Contrôle -> NC -> CAPA (additif, aucun champ
+// existant modifié ou supprimé) ===
 model Equipment {
   id String @id @default(cuid())
   code String @unique
@@ -1946,6 +1991,57 @@ model Equipment {
   lastInspectionAt DateTime?
   nextInspectionAt DateTime?
   notes String?
+  // --- Identification étendue ---
+  categoryId String?
+  type String?
+  sousType String?
+  marque String?
+  modele String?
+  numeroSerie String?
+  referenceFabricant String?
+  anneeFabrication Int?
+  dateAcquisition DateTime?
+  dateMiseEnService DateTime?
+  fournisseurId String?
+  constructeur String?
+  // --- Localisation ---
+  siteId String?
+  workUnitId String?
+  batiment String?
+  zone String?
+  // --- Utilisation / responsabilité ---
+  responsableId String?
+  utilisateursAutorises String?
+  // --- Cycle de vie (Actif/En maintenance/Hors service/Consigné/Réformé...) ---
+  etat String @default("ACTIF")
+  motifEtat String?
+  dateEtat DateTime?
+  responsableEtatId String?
+  risqueAssocieEtat String?
+  mesureMaitriseEtat String?
+  dateRemiseEnServicePrevue DateTime?
+  justificatifEtat String?
+  // --- Criticité configurable (sécurité/qualité/environnement/production) ---
+  criticiteSecurite Int?
+  criticiteQualite Int?
+  criticiteEnvironnement Int?
+  criticiteProduction Int?
+  criticiteScore Int?
+  criticiteNiveau String?
+  // --- Cycle de vie du champ (jamais de suppression définitive, cf. exigence
+  // "préférer l'archivage/réforme à la suppression") ---
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  categoryEq EquipmentCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
+  responsable User? @relation("EquipmentResponsable", fields:[responsableId], references:[id], onDelete:SetNull)
+  risks Risk[]
+  nonConformities NonConformity[]
+  actions Action[]
+  safetyEvents SafetyEvent[]
 }
 
 model SafetyTalk {
@@ -2410,6 +2506,7 @@ model Fournisseur {
   certifications FournisseurCertification[]
   safetyEvents SafetyEvent[]
   produitsChimiques ProduitChimique[]
+  equipments Equipment[]
 }
 
 // Certifications et documents réglementaires du fournisseur — jamais

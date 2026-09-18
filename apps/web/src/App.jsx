@@ -3551,53 +3551,6 @@ function UtilisateursPage() {
   );
 }
 
-function HaccpForm({ record, onClose, onCreated }) {
-  const C = useTheme();
-  const editing = !!record;
-  const [form, setForm] = useState({ process: record?.process || '', step: record?.step || '', hazard: record?.hazard || '', ccp: record?.ccp || false, criticalLimit: record?.criticalLimit || '', monitoring: record?.monitoring || '', result: record?.result || '', correctiveAction: record?.correctiveAction || '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  async function submit(e) {
-    e.preventDefault(); setSaving(true); setError(null);
-    try {
-      if (editing) await api.patch(`/business/haccp/${record.id}`, form);
-      else await api.post('/business/haccp', { code: genCode('HACCP'), ...form });
-      onCreated(); onClose();
-    } catch (err) { setError(err.message); }
-    setSaving(false);
-  }
-  async function del() {
-    setSaving(true);
-    try { await confirmAndDelete(`${record.process} — ${record.step}`, `/business/haccp/${record.id}`, () => { onCreated(); onClose(); }); }
-    catch (err) { setError(err.message); }
-    setSaving(false);
-  }
-  return (
-    <Modal title={editing ? 'Modifier le point HACCP' : 'Nouveau point HACCP'} onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Processus"><input required value={form.process} onChange={(e) => setForm({ ...form, process: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-          <FormField label="Étape"><input required value={form.step} onChange={(e) => setForm({ ...form, step: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        </div>
-        <FormField label="Danger identifié"><input required value={form.hazard} onChange={(e) => setForm({ ...form, hazard: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <label className="flex items-center gap-2 text-xs mb-3" style={{ color: C.textMuted }}>
-          <input type="checkbox" checked={form.ccp} onChange={(e) => setForm({ ...form, ccp: e.target.checked })} />
-          Point critique de maîtrise (CCP)
-        </label>
-        <FormField label="Limite critique"><input value={form.criticalLimit} onChange={(e) => setForm({ ...form, criticalLimit: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Surveillance"><input value={form.monitoring} onChange={(e) => setForm({ ...form, monitoring: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Résultat"><input value={form.result} onChange={(e) => setForm({ ...form, result: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Action corrective"><textarea value={form.correctiveAction} onChange={(e) => setForm({ ...form, correctiveAction: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
-        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
-        <div className="flex gap-2">
-          {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
-          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Enregistrer'}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
 function EquipmentForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
@@ -9428,34 +9381,977 @@ function RapportsPage() {
   );
 }
 
-function HaccpPage() {
-  const C = useTheme();
-  const haccp = useCollection('/business/haccp');
-  const [showForm, setShowForm] = useState(false);
-  const [selected, setSelected] = useState(null);
-  if (haccp.loading) return <LoadingPanel />;
-  if (haccp.error) return <ErrorPanel message={haccp.error} onRetry={haccp.reload} />;
-  const list = haccp.data || [];
-  const ccpCount = list.filter((h) => h.ccp).length;
+// ============================================================================
+// HACCP — remplace l'ancien module plat (HaccpForm/HaccpPage sur
+// /business/haccp). Le point le plus important : la chaîne relevé de
+// surveillance CCP hors limite → Non-conformité (créée automatiquement côté
+// serveur) → Action CAPA (créée par un humain via CapaLinksPanel) doit être
+// visible et fluide — voir HaccpMonitoringRow ci-dessous.
+// ============================================================================
+const HACCP_HAZARD_TYPE_LABELS = { BIOLOGIQUE: 'Biologique', CHIMIQUE: 'Chimique', PHYSIQUE: 'Physique', ALLERGENE: 'Allergène', AUTRE: 'Autre' };
+const HACCP_RISK_LEVEL_LABELS = { FAIBLE: 'Faible', MODERE: 'Modéré', SIGNIFICATIF: 'Significatif', CRITIQUE: 'Critique' };
+function haccpRiskColor(C, niveau) { return { FAIBLE: C.green, MODERE: C.amber, SIGNIFICATIF: C.amber, CRITIQUE: C.red }[niveau] || C.textMuted; }
+const HACCP_STUDY_STATUS_LABELS = { BROUILLON: 'Brouillon', EN_VALIDATION: 'En validation', VALIDE: 'Validé', SUSPENDU: 'Suspendu', ARCHIVE: 'Archivé' };
+const HACCP_PRP_TYPE_LABELS = { HYGIENE_PERSONNEL: 'Hygiène du personnel', NETTOYAGE_DESINFECTION: 'Nettoyage et désinfection', NUISIBLES: 'Lutte contre les nuisibles', DECHETS: 'Gestion des déchets', EAU: "Qualité de l'eau", MAINTENANCE: 'Maintenance', ETALONNAGE: 'Étalonnage', PRODUITS_CHIMIQUES: 'Produits chimiques', ALLERGENES: 'Allergènes', TEMPERATURE: 'Température', STOCKAGE: 'Stockage', TRANSPORT: 'Transport', HYGIENE_LOCAUX: 'Hygiène des locaux', HYGIENE_EQUIPEMENTS: 'Hygiène des équipements', CONTAMINATION_CROISEE: 'Contamination croisée', CONTROLE_FOURNISSEURS: 'Contrôle fournisseurs', RECEPTION: 'Réception', CORPS_ETRANGERS: 'Corps étrangers', TRACABILITE: 'Traçabilité', RETRAIT_RAPPEL: 'Retrait / rappel', AUTRE: 'Autre' };
+const HACCP_MONITORING_STATUS_LABELS = { A_REALISER: 'À réaliser', EN_RETARD: 'En retard', REALISE: 'Réalisé', CONFORME: 'Conforme', NON_CONFORME: 'Non conforme', ANNULE: 'Annulé', JUSTIFIE: 'Justifié' };
 
+function HaccpStudyFormModal({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({
+    code: record?.code || genCode('HACCP'), name: record?.name || '', activite: record?.activite || '', atelier: record?.atelier || '',
+    ligne: record?.ligne || '', produit: record?.produit || '', categorieProduit: record?.categorieProduit || '', descriptionProduit: record?.descriptionProduit || '',
+    destination: record?.destination || '', consommateurCible: record?.consommateurCible || '', conditionsStockage: record?.conditionsStockage || '',
+    dureeConservation: record?.dureeConservation || '', modeDistribution: record?.modeDistribution || '', responsableId: record?.responsableId || '',
+    prochaineRevision: record?.prochaineRevision ? record.prochaineRevision.slice(0, 10) : '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Le nom de l'étude est obligatoire."); return; }
+    setSaving(true); setError(null);
+    try {
+      const payload = { ...form, responsableId: form.responsableId || null, prochaineRevision: form.prochaineRevision || null };
+      if (editing) await api.patch(`/haccp/studies/${record.id}`, payload);
+      else await api.post('/haccp/studies', payload);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
   return (
-    <div className="space-y-6">
-      {(showForm || selected) && <HaccpForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={haccp.reload} />}
+    <Modal title={editing ? "Modifier l'étude HACCP" : 'Nouvelle étude HACCP'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Code"><input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Nom de l'étude *"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Activité"><input value={form.activite} onChange={(e) => setForm({ ...form, activite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Atelier"><input value={form.atelier} onChange={(e) => setForm({ ...form, atelier: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Ligne"><input value={form.ligne} onChange={(e) => setForm({ ...form, ligne: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Produit"><input value={form.produit} onChange={(e) => setForm({ ...form, produit: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Catégorie de produit"><input value={form.categorieProduit} onChange={(e) => setForm({ ...form, categorieProduit: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Description du produit"><textarea value={form.descriptionProduit} onChange={(e) => setForm({ ...form, descriptionProduit: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Destination"><input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Consommateur cible"><input value={form.consommateurCible} onChange={(e) => setForm({ ...form, consommateurCible: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Conditions de stockage"><input value={form.conditionsStockage} onChange={(e) => setForm({ ...form, conditionsStockage: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Durée de conservation"><input value={form.dureeConservation} onChange={(e) => setForm({ ...form, dureeConservation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Mode de distribution"><input value={form.modeDistribution} onChange={(e) => setForm({ ...form, modeDistribution: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable">
+            <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Prochaine révision"><input type="date" value={form.prochaineRevision} onChange={(e) => setForm({ ...form, prochaineRevision: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : "Créer l'étude"}</button>
+      </form>
+    </Modal>
+  );
+}
+
+function HaccpReviseModal({ study, onClose, onSaved }) {
+  const C = useTheme();
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({ version: '', declencheur: '', description: '', responsableId: '', prochaineRevision: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.declencheur.trim()) { setError('Le déclencheur de la révision est obligatoire.'); return; }
+    setSaving(true); setError(null);
+    try {
+      await api.post(`/haccp/studies/${study.id}/revise`, { ...form, version: form.version || undefined, responsableId: form.responsableId || undefined, prochaineRevision: form.prochaineRevision || undefined });
+      onSaved();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title="Réviser le plan HACCP" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Déclencheur *"><input value={form.declencheur} onChange={(e) => setForm({ ...form, declencheur: e.target.value })} placeholder="ex : changement de recette, nouvel équipement..." className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label={`Nouvelle version (actuelle : ${study.version})`}><input value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} placeholder={study.version} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Prochaine révision"><input type="date" value={form.prochaineRevision} onChange={(e) => setForm({ ...form, prochaineRevision: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Responsable">
+          <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+          </select>
+        </FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Enregistrer la révision'}</button>
+      </form>
+    </Modal>
+  );
+}
+
+function HaccpTeamSection({ studyId, team, onChanged }) {
+  const C = useTheme();
+  const employeesQ = useCollection('/epi/employees');
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ employeeId: '', fonction: '', roleEtude: '', formationHaccp: false, statut: 'ACTIF' });
+  const [busy, setBusy] = useState(false);
+  async function add(e) {
+    e.preventDefault();
+    setBusy(true);
+    try { await api.post(`/haccp/studies/${studyId}/team`, { ...form, employeeId: form.employeeId || undefined }); setForm({ employeeId: '', fonction: '', roleEtude: '', formationHaccp: false, statut: 'ACTIF' }); setShowAdd(false); onChanged(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  async function remove(memberId) {
+    if (!window.confirm("Retirer ce membre de l'équipe HACCP ?")) return;
+    try { await api.del(`/haccp/team/${memberId}`); onChanged(); } catch (err) { alert(err.message); }
+  }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Équipe HACCP ({team.length})</p>
+        <button onClick={() => setShowAdd((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter un membre</button>
+      </div>
+      {showAdd && (
+        <form onSubmit={add} className="p-3 rounded-lg mb-3 grid grid-cols-2 gap-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <FormField label="Collaborateur">
+            <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(employeesQ.data || []).map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Fonction"><input value={form.fonction} onChange={(e) => setForm({ ...form, fonction: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Rôle dans l'étude"><input value={form.roleEtude} onChange={(e) => setForm({ ...form, roleEtude: e.target.value })} placeholder="ex : Animateur, Expert produit..." className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Statut">
+            <select value={form.statut} onChange={(e) => setForm({ ...form, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="ACTIF">Actif</option><option value="INACTIF">Inactif</option>
+            </select>
+          </FormField>
+          <label className="flex items-center gap-2 text-xs col-span-2" style={{ color: C.textMuted }}>
+            <input type="checkbox" checked={form.formationHaccp} onChange={(e) => setForm({ ...form, formationHaccp: e.target.checked })} /> Formé(e) à la méthode HACCP
+          </label>
+          <div className="col-span-2 flex gap-2">
+            <button type="button" onClick={() => setShowAdd(false)} className="flex-1 py-2 rounded-lg text-xs" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>Annuler</button>
+            <button type="submit" disabled={busy} className="flex-1 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>{busy ? '…' : 'Ajouter'}</button>
+          </div>
+        </form>
+      )}
+      {team.length
+        ? <div className="space-y-1.5">{team.map((m) => (
+            <div key={m.id} className="flex items-center justify-between p-2 rounded-lg gap-2" style={{ backgroundColor: C.cardAlt }}>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold" style={{ color: C.text }}>{m.employee ? `${m.employee.firstName} ${m.employee.lastName}` : m.user ? `${m.user.firstName} ${m.user.lastName}` : '—'}{m.fonction ? ` · ${m.fonction}` : ''}</p>
+                <p className="text-[11px]" style={{ color: C.textMuted }}>{[m.roleEtude, m.formationHaccp ? 'Formé HACCP' : null].filter(Boolean).join(' · ') || '—'}</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <StatusChip statut={m.statut === 'ACTIF' ? 'Conforme' : 'Non conforme'} />
+                <button onClick={() => remove(m.id)} className="text-[11px]" style={{ color: C.red }}>Retirer</button>
+              </div>
+            </div>
+          ))}</div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucun membre pour le moment</p>}
+    </div>
+  );
+}
+
+function HaccpStepFormModal({ studyId, record, usersQ, onClose, onSaved }) {
+  const C = useTheme();
+  const editing = !!record;
+  const [form, setForm] = useState({
+    numero: record?.numero ?? '', nom: record?.nom || '', description: record?.description || '',
+    responsableId: record?.responsableId || '', zone: record?.zone || '', equipement: record?.equipement || '',
+    matiereEntrante: record?.matiereEntrante || '', matiereSortante: record?.matiereSortante || '', parametresControles: record?.parametresControles || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.nom.trim()) { setError("Le nom de l'étape est obligatoire."); return; }
+    setSaving(true); setError(null);
+    try {
+      const payload = { ...form, numero: form.numero === '' ? undefined : Number(form.numero), responsableId: form.responsableId || null };
+      if (editing) await api.patch(`/haccp/steps/${record.id}`, payload);
+      else await api.post(`/haccp/studies/${studyId}/steps`, payload);
+      onSaved();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? "Modifier l'étape" : 'Nouvelle étape du diagramme de flux'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="N° d'étape"><input type="number" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Nom *"><input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Zone"><input value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Équipement"><input value={form.equipement} onChange={(e) => setForm({ ...form, equipement: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Matière entrante"><input value={form.matiereEntrante} onChange={(e) => setForm({ ...form, matiereEntrante: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Matière sortante"><input value={form.matiereSortante} onChange={(e) => setForm({ ...form, matiereSortante: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Paramètres contrôlés"><input value={form.parametresControles} onChange={(e) => setForm({ ...form, parametresControles: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Responsable">
+          <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+          </select>
+        </FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : "Ajouter l'étape"}</button>
+      </form>
+    </Modal>
+  );
+}
+
+function HaccpStepsSection({ studyId, steps, usersQ, onChanged }) {
+  const C = useTheme();
+  const [showForm, setShowForm] = useState(false);
+  const [editingStep, setEditingStep] = useState(null);
+  const ordered = [...steps].sort((a, b) => a.ordre - b.ordre);
+  async function move(idx, dir) {
+    const j = idx + dir;
+    if (j < 0 || j >= ordered.length) return;
+    const ids = ordered.map((s) => s.id);
+    [ids[idx], ids[j]] = [ids[j], ids[idx]];
+    try { await api.post(`/haccp/studies/${studyId}/steps/reorder`, { ids }); onChanged(); }
+    catch (err) { alert(err.message); }
+  }
+  async function del(step) { await confirmAndDelete(step.nom, `/haccp/steps/${step.id}`, onChanged); }
+  return (
+    <div>
+      {(showForm || editingStep) && <HaccpStepFormModal studyId={studyId} record={editingStep} usersQ={usersQ} onClose={() => { setShowForm(false); setEditingStep(null); }} onSaved={() => { setShowForm(false); setEditingStep(null); onChanged(); }} />}
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Diagramme de flux ({ordered.length} étape(s))</p>
+        <button onClick={() => setShowForm(true)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter une étape</button>
+      </div>
+      {ordered.length
+        ? <div className="space-y-1.5">{ordered.map((s, i) => (
+            <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg gap-2" style={{ backgroundColor: C.cardAlt }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{s.numero ?? i + 1}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: C.text }}>{s.nom}</p>
+                  <p className="text-[11px] truncate" style={{ color: C.textMuted }}>{[s.zone, s.equipement].filter(Boolean).join(' · ') || '—'}{s.hazards ? ` · ${s.hazards.length} danger(s)` : ''}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => move(i, -1)} disabled={i === 0} className="text-xs px-1.5 py-1 rounded" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text, opacity: i === 0 ? 0.4 : 1 }}>▲</button>
+                <button onClick={() => move(i, 1)} disabled={i === ordered.length - 1} className="text-xs px-1.5 py-1 rounded" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text, opacity: i === ordered.length - 1 ? 0.4 : 1 }}>▼</button>
+                <button onClick={() => setEditingStep(s)} className="text-[11px] px-2 py-1 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+                <button onClick={() => del(s)} className="text-[11px]" style={{ color: C.red }}>Supprimer</button>
+              </div>
+            </div>
+          ))}</div>
+        : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune étape définie pour le moment</p>}
+    </div>
+  );
+}
+
+function HaccpHazardFormModal({ stepId, record, onClose, onSaved }) {
+  const C = useTheme();
+  const editing = !!record;
+  const [form, setForm] = useState({
+    type: record?.type || 'BIOLOGIQUE', libelle: record?.libelle || '', origine: record?.origine || '',
+    gravite: record?.gravite ?? '', probabilite: record?.probabilite ?? '', niveauMaitrise: record?.niveauMaitrise ?? '',
+    justification: record?.justification || '', mesuresExistantes: record?.mesuresExistantes || '', mesuresSupplementaires: record?.mesuresSupplementaires || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.libelle.trim()) { setError('Le libellé du danger est obligatoire.'); return; }
+    setSaving(true); setError(null);
+    try {
+      const payload = { ...form, gravite: form.gravite === '' ? undefined : Number(form.gravite), probabilite: form.probabilite === '' ? undefined : Number(form.probabilite), niveauMaitrise: form.niveauMaitrise === '' ? undefined : Number(form.niveauMaitrise) };
+      if (editing) await api.patch(`/haccp/hazards/${record.id}`, payload);
+      else await api.post(`/haccp/steps/${stepId}/hazards`, payload);
+      onSaved();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? 'Modifier le danger' : 'Nouveau danger identifié'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type *">
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              {Object.entries(HACCP_HAZARD_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Libellé *"><input value={form.libelle} onChange={(e) => setForm({ ...form, libelle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Origine"><input value={form.origine} onChange={(e) => setForm({ ...form, origine: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Gravité (1-5)"><input type="number" min="1" max="5" value={form.gravite} onChange={(e) => setForm({ ...form, gravite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Probabilité (1-5)"><input type="number" min="1" max="5" value={form.probabilite} onChange={(e) => setForm({ ...form, probabilite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Niveau de maîtrise"><input type="number" value={form.niveauMaitrise} onChange={(e) => setForm({ ...form, niveauMaitrise: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {editing && record.niveauRisque && <p className="text-xs mb-3" style={{ color: haccpRiskColor(C, record.niveauRisque) }}>Niveau de risque calculé automatiquement : {HACCP_RISK_LEVEL_LABELS[record.niveauRisque] || record.niveauRisque}</p>}
+        <FormField label="Justification"><textarea value={form.justification} onChange={(e) => setForm({ ...form, justification: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Mesures existantes"><textarea value={form.mesuresExistantes} onChange={(e) => setForm({ ...form, mesuresExistantes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Mesures supplémentaires"><textarea value={form.mesuresSupplementaires} onChange={(e) => setForm({ ...form, mesuresSupplementaires: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Ajouter le danger'}</button>
+      </form>
+    </Modal>
+  );
+}
+
+function HaccpCcpFormModal({ hazardId, record, usersQ, onClose, onSaved }) {
+  const C = useTheme();
+  const editing = !!record;
+  const [form, setForm] = useState({
+    type: record?.type || 'CCP', dangerMaitrise: record?.dangerMaitrise || '', causeDanger: record?.causeDanger || '',
+    mesureMaitrise: record?.mesureMaitrise || '', limiteCritique: record?.limiteCritique || '', critereAcceptation: record?.critereAcceptation || '',
+    parametre: record?.parametre || '', unite: record?.unite || '', methode: record?.methode || '', instrument: record?.instrument || '',
+    frequence: record?.frequence || '', responsableId: record?.responsableId || '', enregistrementAssocie: record?.enregistrementAssocie || '',
+    actionImmediate: record?.actionImmediate || '', active: record?.active ?? true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true); setError(null);
+    try {
+      const payload = { ...form, responsableId: form.responsableId || null };
+      if (editing) await api.patch(`/haccp/ccps/${record.id}`, payload);
+      else await api.post(`/haccp/hazards/${hazardId}/ccps`, payload);
+      onSaved();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? 'Modifier la fiche CCP/CP' : 'Nouveau CCP/CP'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        {editing && <p className="text-xs mb-3" style={{ color: C.textMuted }}>Référence : <strong style={{ color: C.text }}>{record.reference}</strong> (générée automatiquement, non modifiable)</p>}
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type">
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="CCP">CCP — point critique de maîtrise</option><option value="CP">CP — point de vigilance</option>
+            </select>
+          </FormField>
+          <FormField label="Danger maîtrisé"><input value={form.dangerMaitrise} onChange={(e) => setForm({ ...form, dangerMaitrise: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Cause du danger"><input value={form.causeDanger} onChange={(e) => setForm({ ...form, causeDanger: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Mesure de maîtrise"><textarea value={form.mesureMaitrise} onChange={(e) => setForm({ ...form, mesureMaitrise: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Limite critique"><input value={form.limiteCritique} onChange={(e) => setForm({ ...form, limiteCritique: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Critère d'acceptation"><input value={form.critereAcceptation} onChange={(e) => setForm({ ...form, critereAcceptation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Paramètre"><input value={form.parametre} onChange={(e) => setForm({ ...form, parametre: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Unité"><input value={form.unite} onChange={(e) => setForm({ ...form, unite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Fréquence"><input value={form.frequence} onChange={(e) => setForm({ ...form, frequence: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Méthode"><input value={form.methode} onChange={(e) => setForm({ ...form, methode: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Instrument"><input value={form.instrument} onChange={(e) => setForm({ ...form, instrument: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Responsable">
+          <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Enregistrement associé"><input value={form.enregistrementAssocie} onChange={(e) => setForm({ ...form, enregistrementAssocie: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Action immédiate en cas d'écart"><textarea value={form.actionImmediate} onChange={(e) => setForm({ ...form, actionImmediate: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <label className="flex items-center gap-2 text-xs mb-3" style={{ color: C.textMuted }}>
+          <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Actif
+        </label>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Créer la fiche CCP/CP'}</button>
+      </form>
+    </Modal>
+  );
+}
+
+function HaccpHazardsSection({ studyId, steps, usersQ, onChanged }) {
+  const C = useTheme();
+  const [openStepId, setOpenStepId] = useState(null);
+  const [addingToStep, setAddingToStep] = useState(null);
+  const [editingHazard, setEditingHazard] = useState(null);
+  const [addingCcpFor, setAddingCcpFor] = useState(null);
+  const ordered = [...steps].sort((a, b) => a.ordre - b.ordre);
+  async function delHazard(h) { await confirmAndDelete(h.libelle, `/haccp/hazards/${h.id}`, onChanged); }
+  return (
+    <div>
+      {addingToStep && <HaccpHazardFormModal stepId={addingToStep} onClose={() => setAddingToStep(null)} onSaved={() => { setAddingToStep(null); onChanged(); }} />}
+      {editingHazard && <HaccpHazardFormModal stepId={editingHazard.stepId} record={editingHazard} onClose={() => setEditingHazard(null)} onSaved={() => { setEditingHazard(null); onChanged(); }} />}
+      {addingCcpFor && <HaccpCcpFormModal hazardId={addingCcpFor} usersQ={usersQ} onClose={() => setAddingCcpFor(null)} onSaved={() => { setAddingCcpFor(null); onChanged(); }} />}
+      {ordered.length === 0 && <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Définissez d'abord le diagramme de flux pour pouvoir analyser les dangers par étape</p>}
+      <div className="space-y-2">
+        {ordered.map((s) => {
+          const open = openStepId === s.id;
+          const hazards = s.hazards || [];
+          return (
+            <div key={s.id} className="rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+              <div className="flex items-center justify-between p-2.5 cursor-pointer" onClick={() => setOpenStepId(open ? null : s.id)}>
+                <span className="text-sm font-medium" style={{ color: C.text }}>{s.numero ? `${s.numero}. ` : ''}{s.nom} <span className="text-xs" style={{ color: C.textMuted }}>({hazards.length} danger(s))</span></span>
+                <span className="text-xs" style={{ color: C.textMuted }}>{open ? '▲' : '▼'}</span>
+              </div>
+              {open && (
+                <div className="p-2.5 pt-0 space-y-2">
+                  <button onClick={() => setAddingToStep(s.id)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter un danger</button>
+                  {hazards.map((h) => (
+                    <div key={h.id} className="p-2.5 rounded-lg" style={{ backgroundColor: C.card }}>
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold" style={{ color: C.text }}>{HACCP_HAZARD_TYPE_LABELS[h.type] || h.type}</span>
+                            <span className="text-sm" style={{ color: C.text }}>{h.libelle}</span>
+                            {h.niveauRisque && <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${haccpRiskColor(C, h.niveauRisque)}22`, color: haccpRiskColor(C, h.niveauRisque) }}>{HACCP_RISK_LEVEL_LABELS[h.niveauRisque] || h.niveauRisque}</span>}
+                          </div>
+                          {h.mesuresExistantes && <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>Mesures existantes : {h.mesuresExistantes}</p>}
+                          {(h.ccps || []).length > 0 && <p className="text-[11px] mt-1" style={{ color: C.blue }}>{h.ccps.length} CCP/CP associé(s) : {h.ccps.map((c) => c.reference).join(', ')}</p>}
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={() => setAddingCcpFor(h.id)} className="text-[11px] px-2 py-1 rounded-lg" style={{ backgroundColor: C.blue, color: '#fff' }}>+ CCP/CP</button>
+                          <button onClick={() => setEditingHazard({ ...h, stepId: s.id })} className="text-[11px] px-2 py-1 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+                          <button onClick={() => delHazard(h)} className="text-[11px]" style={{ color: C.red }}>Supprimer</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {hazards.length === 0 && <p className="text-xs text-center py-3" style={{ color: C.textMuted }}>Aucun danger identifié pour cette étape</p>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HaccpCcpDetailModal({ ccp, usersQ, onClose, onChanged }) {
+  const C = useTheme();
+  const [editing, setEditing] = useState(false);
+  async function del() { await confirmAndDelete(ccp.reference, `/haccp/ccps/${ccp.id}`, () => { onChanged(); onClose(); }); }
+  if (editing) return <HaccpCcpFormModal record={ccp} hazardId={ccp.hazardId} usersQ={usersQ} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onChanged(); }} />;
+  return (
+    <Modal title={`${ccp.reference} — ${ccp.dangerMaitrise || 'Fiche CCP/CP'}`} onClose={onClose} wide>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{ccp.type === 'CCP' ? 'Point critique de maîtrise' : 'Point de vigilance'}</span>
+        <StatusChip statut={ccp.active ? 'Conforme' : 'Non conforme'} />
+      </div>
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setEditing(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+        <button onClick={del} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>
+      </div>
+      <div className="grid grid-cols-2 gap-4 mb-5 text-sm">
+        {ccp.causeDanger && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Cause du danger</p><p style={{ color: C.text }}>{ccp.causeDanger}</p></div>}
+        {ccp.mesureMaitrise && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Mesure de maîtrise</p><p style={{ color: C.text }}>{ccp.mesureMaitrise}</p></div>}
+        {ccp.limiteCritique && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Limite critique</p><p style={{ color: C.text }}>{ccp.limiteCritique}</p></div>}
+        {ccp.critereAcceptation && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Critère d'acceptation</p><p style={{ color: C.text }}>{ccp.critereAcceptation}</p></div>}
+        {ccp.parametre && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Paramètre surveillé</p><p style={{ color: C.text }}>{ccp.parametre}{ccp.unite ? ` (${ccp.unite})` : ''}</p></div>}
+        {ccp.frequence && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Fréquence</p><p style={{ color: C.text }}>{ccp.frequence}</p></div>}
+        {ccp.methode && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Méthode</p><p style={{ color: C.text }}>{ccp.methode}</p></div>}
+        {ccp.instrument && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Instrument</p><p style={{ color: C.text }}>{ccp.instrument}</p></div>}
+        {ccp.enregistrementAssocie && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Enregistrement associé</p><p style={{ color: C.text }}>{ccp.enregistrementAssocie}</p></div>}
+        {ccp.actionImmediate && <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Action immédiate en cas d'écart</p><p style={{ color: C.text }}>{ccp.actionImmediate}</p></div>}
+      </div>
+      <DocumentLinksPanel sourceModule="HACCP_CCP" sourceEntityId={ccp.id} />
+    </Modal>
+  );
+}
+
+function HaccpCcpsSection({ studyId, usersQ }) {
+  const C = useTheme();
+  const ccpsQ = useCollection(`/haccp/studies/${studyId}/ccps`);
+  const [selected, setSelected] = useState(null);
+  if (ccpsQ.loading) return <LoadingPanel />;
+  if (ccpsQ.error) return <ErrorPanel message={ccpsQ.error} onRetry={ccpsQ.reload} />;
+  const list = ccpsQ.data || [];
+  return (
+    <div>
+      {selected && <HaccpCcpDetailModal ccp={selected} usersQ={usersQ} onClose={() => setSelected(null)} onChanged={ccpsQ.reload} />}
+      <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>CCP / CP de l'étude ({list.length})</p>
+      {list.length
+        ? <DataTable columns={['Référence', 'Type', 'Étape', 'Danger maîtrisé', 'Limite critique', 'Statut']}
+            rows={list.map((c) => [c.reference, c.type, c.step?.nom || '—', c.dangerMaitrise || '—', c.limiteCritique || '—', <StatusChip statut={c.active ? 'Conforme' : 'Non conforme'} />])}
+            onRowClick={(i) => setSelected(list[i])} />
+        : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun CCP/CP défini — ajoutez-en depuis l'onglet « Analyse des dangers »</p>}
+    </div>
+  );
+}
+
+function HaccpRevisionsSection({ study, onRevise }) {
+  const C = useTheme();
+  const revisions = study.revisions || [];
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Historique des révisions ({revisions.length})</p>
+        <button onClick={onRevise} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Réviser le plan</button>
+      </div>
+      {study.prochaineRevision && <p className="text-xs mb-3" style={{ color: C.textMuted }}>Prochaine révision prévue le {new Date(study.prochaineRevision).toLocaleDateString('fr-FR')}</p>}
+      {revisions.length
+        ? <DataTable columns={['Date', 'Version', 'Déclencheur', 'Description']}
+            rows={revisions.map((r) => [new Date(r.date).toLocaleDateString('fr-FR'), r.version, r.declencheur, r.description || '—'])} />
+        : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune révision enregistrée pour le moment</p>}
+    </div>
+  );
+}
+
+function HaccpStudyDetailModal({ studyId, onClose, onChanged }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/haccp/studies/${studyId}`);
+  const usersQ = useCollection('/users');
+  const [tab, setTab] = useState('info');
+  const [editing, setEditing] = useState(false);
+  const [showRevise, setShowRevise] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (detailQ.loading) return <Modal title="Étude HACCP" onClose={onClose} wide><LoadingPanel /></Modal>;
+  if (detailQ.error || !detailQ.data) return <Modal title="Étude HACCP" onClose={onClose} wide><ErrorPanel message={detailQ.error} onRetry={detailQ.reload} /></Modal>;
+  const study = detailQ.data;
+  function reload() { detailQ.reload(); onChanged(); }
+  async function validate() {
+    setBusy(true);
+    try { await api.post(`/haccp/studies/${study.id}/validate`, {}); reload(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  async function del() {
+    if (!window.confirm(`Supprimer définitivement l'étude « ${study.name} » ? Cette action est irréversible.`)) return;
+    setBusy(true);
+    try { await api.del(`/haccp/studies/${study.id}`); onChanged(); onClose(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  if (editing) return <HaccpStudyFormModal record={study} onClose={() => setEditing(false)} onCreated={() => { setEditing(false); reload(); }} />;
+  if (showRevise) return <HaccpReviseModal study={study} onClose={() => setShowRevise(false)} onSaved={() => { setShowRevise(false); reload(); }} />;
+  return (
+    <Modal title={`${study.code} — ${study.name}`} onClose={onClose} wide>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p className="text-xs" style={{ color: C.textMuted }}>Version {study.version} · Créée le {new Date(study.dateCreation).toLocaleDateString('fr-FR')}{study.dateDerniereRevision ? ` · Dernière révision le ${new Date(study.dateDerniereRevision).toLocaleDateString('fr-FR')}` : ''}</p>
+        <StatusChip statut={HACCP_STUDY_STATUS_LABELS[study.status] || study.status} />
+      </div>
+      <div className="flex gap-2 flex-wrap mb-4">
+        <button onClick={() => setEditing(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+        {(study.status === 'BROUILLON' || study.status === 'EN_VALIDATION') && <button disabled={busy} onClick={validate} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{study.status === 'BROUILLON' ? 'Soumettre pour validation' : 'Valider'}</button>}
+        <button onClick={() => setShowRevise(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Réviser</button>
+        <button disabled={busy} onClick={del} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[['info', 'Info générale'], ['equipe', 'Équipe'], ['diagramme', 'Diagramme de flux'], ['dangers', 'Analyse des dangers'], ['ccp', 'CCP / CP'], ['revisions', 'Révisions']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
+      </div>
+      {tab === 'info' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            {study.activite && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Activité</p><p style={{ color: C.text }}>{study.activite}</p></div>}
+            {study.atelier && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Atelier</p><p style={{ color: C.text }}>{study.atelier}</p></div>}
+            {study.ligne && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Ligne</p><p style={{ color: C.text }}>{study.ligne}</p></div>}
+            {study.produit && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Produit</p><p style={{ color: C.text }}>{study.produit}</p></div>}
+            {study.categorieProduit && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Catégorie de produit</p><p style={{ color: C.text }}>{study.categorieProduit}</p></div>}
+            {study.descriptionProduit && <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Description du produit</p><p style={{ color: C.text }}>{study.descriptionProduit}</p></div>}
+            {study.destination && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Destination</p><p style={{ color: C.text }}>{study.destination}</p></div>}
+            {study.consommateurCible && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Consommateur cible</p><p style={{ color: C.text }}>{study.consommateurCible}</p></div>}
+            {study.conditionsStockage && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Conditions de stockage</p><p style={{ color: C.text }}>{study.conditionsStockage}</p></div>}
+            {study.dureeConservation && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Durée de conservation</p><p style={{ color: C.text }}>{study.dureeConservation}</p></div>}
+            {study.modeDistribution && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Mode de distribution</p><p style={{ color: C.text }}>{study.modeDistribution}</p></div>}
+          </div>
+          <DocumentLinksPanel sourceModule="HACCP" sourceEntityId={study.id} />
+        </div>
+      )}
+      {tab === 'equipe' && <HaccpTeamSection studyId={study.id} team={study.team || []} onChanged={reload} />}
+      {tab === 'diagramme' && <HaccpStepsSection studyId={study.id} steps={study.steps || []} usersQ={usersQ} onChanged={reload} />}
+      {tab === 'dangers' && <HaccpHazardsSection studyId={study.id} steps={study.steps || []} usersQ={usersQ} onChanged={reload} />}
+      {tab === 'ccp' && <HaccpCcpsSection studyId={study.id} usersQ={usersQ} />}
+      {tab === 'revisions' && <HaccpRevisionsSection study={study} onRevise={() => setShowRevise(true)} />}
+    </Modal>
+  );
+}
+
+function HaccpEtudesTab() {
+  const C = useTheme();
+  const studiesQ = useCollection('/haccp/studies');
+  const [showForm, setShowForm] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  if (studiesQ.loading) return <LoadingPanel />;
+  if (studiesQ.error) return <ErrorPanel message={studiesQ.error} onRetry={studiesQ.reload} />;
+  const list = studiesQ.data || [];
+  return (
+    <div className="space-y-4">
+      {showForm && <HaccpStudyFormModal onClose={() => setShowForm(false)} onCreated={studiesQ.reload} />}
+      {detailId && <HaccpStudyDetailModal studyId={detailId} onClose={() => setDetailId(null)} onChanged={studiesQ.reload} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau point HACCP</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle étude HACCP</button>
+      </div>
+      <Panel title="Études HACCP" subtitle={`${list.length} étude(s)`}>
+        {list.length
+          ? <DataTable columns={['Code', 'Nom', 'Produit', 'Version', 'Statut']}
+              rows={list.map((s) => [s.code, s.name, s.produit || '—', s.version, <StatusChip statut={HACCP_STUDY_STATUS_LABELS[s.status] || s.status} />])}
+              onRowClick={(i) => setDetailId(list[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune étude HACCP enregistrée pour le moment</p>}
+      </Panel>
+    </div>
+  );
+}
+
+// Ligne d'un relevé de surveillance — LE point le plus important : quand
+// nonConformityId est renseigné (créé automatiquement côté serveur pour un
+// relevé conforme:false), on affiche immédiatement le lien vers la NC et le
+// panneau CapaLinksPanel (sourceModule='HACCP_CCP', sourceEntityId=relevé)
+// pour créer l'Action CAPA en un clic, exactement comme pour SAFETY_TALK.
+function HaccpMonitoringRow({ record, onChanged }) {
+  const C = useTheme();
+  const [editingResult, setEditingResult] = useState(false);
+  const [form, setForm] = useState(null);
+  const ncQ = useCollection(record.nonConformityId ? `/business/non-conformities/${record.nonConformityId}` : null);
+  const [busy, setBusy] = useState(false);
+  function openEdit() {
+    setForm({ valeur: record.valeur ?? '', valeurTexte: record.valeurTexte || '', conforme: record.conforme === true ? 'true' : record.conforme === false ? 'false' : '', commentaire: record.commentaire || '', lotNumero: record.lotNumero || '' });
+    setEditingResult(true);
+  }
+  async function saveResult(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.patch(`/haccp/monitoring/${record.id}`, {
+        valeur: form.valeur === '' ? undefined : Number(form.valeur), valeurTexte: form.valeurTexte || undefined,
+        conforme: form.conforme === '' ? undefined : form.conforme === 'true', commentaire: form.commentaire || undefined,
+        lotNumero: form.lotNumero || undefined, dateRealisee: new Date().toISOString(),
+      });
+      setEditingResult(false); onChanged();
+    } catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  return (
+    <div className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium" style={{ color: C.text }}>{record.datePrevue ? new Date(record.datePrevue).toLocaleString('fr-FR') : 'Sans échéance'}</span>
+            <StatusChip statut={HACCP_MONITORING_STATUS_LABELS[record.statut] || record.statut} />
+          </div>
+          <p className="text-xs mt-1" style={{ color: C.textMuted }}>
+            {record.dateRealisee ? `Réalisé le ${new Date(record.dateRealisee).toLocaleString('fr-FR')}` : 'Non réalisé'}
+            {record.valeur != null ? ` · valeur : ${record.valeur}` : ''}{record.valeurTexte ? ` · ${record.valeurTexte}` : ''}
+            {record.lotNumero ? ` · lot ${record.lotNumero}` : ''}
+          </p>
+          {record.commentaire && <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>{record.commentaire}</p>}
+        </div>
+        {!editingResult && <button onClick={openEdit} className="text-[11px] px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>Saisir le résultat</button>}
+      </div>
+      {editingResult && (
+        <form onSubmit={saveResult} className="mt-2 pt-2 grid grid-cols-2 gap-2" style={{ borderTop: `1px solid ${C.border}` }}>
+          <FormField label="Valeur mesurée"><input type="number" step="any" value={form.valeur} onChange={(e) => setForm({ ...form, valeur: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Conforme ?">
+            <select value={form.conforme} onChange={(e) => setForm({ ...form, conforme: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option><option value="true">Oui</option><option value="false">Non</option>
+            </select>
+          </FormField>
+          <FormField label="Observation"><input value={form.valeurTexte} onChange={(e) => setForm({ ...form, valeurTexte: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="N° de lot"><input value={form.lotNumero} onChange={(e) => setForm({ ...form, lotNumero: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <div className="col-span-2"><FormField label="Commentaire"><textarea value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField></div>
+          <div className="col-span-2 flex gap-2">
+            <button type="button" onClick={() => setEditingResult(false)} className="flex-1 py-2 rounded-lg text-xs" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>Annuler</button>
+            <button type="submit" disabled={busy} className="flex-1 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: busy ? 0.7 : 1 }}>{busy ? '…' : 'Enregistrer le résultat'}</button>
+          </div>
+        </form>
+      )}
+      {record.nonConformityId && (
+        <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}` }}>
+          <div className="p-2.5 rounded-lg mb-2" style={{ backgroundColor: `${C.red}18`, border: `1px solid ${C.red}40` }}>
+            <p className="text-xs font-semibold" style={{ color: C.red }}>⚠ Non-conformité créée automatiquement</p>
+            <p className="text-xs mt-0.5" style={{ color: C.text }}>{ncQ.data ? `${ncQ.data.code} — ${ncQ.data.title}` : 'Chargement…'}</p>
+          </div>
+          <CapaLinksPanel sourceModule="HACCP_CCP" sourceEntityId={record.id} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HaccpMonitoringForm({ ccpId, usersQ, onCreated }) {
+  const C = useTheme();
+  const empty = { datePrevue: '', dateRealisee: '', valeur: '', valeurTexte: '', conforme: '', lotNumero: '', responsableId: '', commentaire: '', signature: '' };
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [justCreated, setJustCreated] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true); setError(null); setJustCreated(null);
+    try {
+      const created = await api.post(`/haccp/ccps/${ccpId}/monitoring`, {
+        datePrevue: form.datePrevue ? new Date(form.datePrevue).toISOString() : undefined,
+        dateRealisee: form.dateRealisee ? new Date(form.dateRealisee).toISOString() : undefined,
+        valeur: form.valeur === '' ? undefined : Number(form.valeur), valeurTexte: form.valeurTexte || undefined,
+        conforme: form.conforme === '' ? undefined : form.conforme === 'true',
+        lotNumero: form.lotNumero || undefined, responsableId: form.responsableId || undefined,
+        commentaire: form.commentaire || undefined, signature: form.signature || undefined,
+      });
+      setForm(empty); setJustCreated(created); onCreated();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <div>
+      <form onSubmit={submit} className="grid grid-cols-3 gap-3 p-3 rounded-lg mb-3" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+        <FormField label="Date/heure prévue"><input type="datetime-local" value={form.datePrevue} onChange={(e) => setForm({ ...form, datePrevue: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Valeur mesurée"><input type="number" step="any" value={form.valeur} onChange={(e) => setForm({ ...form, valeur: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Conforme ?">
+          <select value={form.conforme} onChange={(e) => setForm({ ...form, conforme: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Non évalué</option><option value="true">Oui</option><option value="false">Non</option>
+          </select>
+        </FormField>
+        <FormField label="Observation"><input value={form.valeurTexte} onChange={(e) => setForm({ ...form, valeurTexte: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="N° de lot"><input value={form.lotNumero} onChange={(e) => setForm({ ...form, lotNumero: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Responsable">
+          <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+          </select>
+        </FormField>
+        <div className="col-span-3"><FormField label="Commentaire"><textarea value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField></div>
+        <div className="col-span-3"><SignaturePad label="Signature de contrôle" value={form.signature} onChange={(v) => setForm({ ...form, signature: v })} /></div>
+        {error && <p className="text-xs col-span-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="col-span-3 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Enregistrer le relevé'}</button>
+      </form>
+      {justCreated?.nonConformityId && (
+        <div className="p-3 rounded-lg mb-3" style={{ backgroundColor: `${C.red}18`, border: `1px solid ${C.red}40` }}>
+          <p className="text-sm font-semibold" style={{ color: C.red }}>⚠ Relevé hors limite — Non-conformité créée automatiquement</p>
+          <p className="text-xs mt-1" style={{ color: C.text }}>Le relevé a été classé « Non conforme » et une non-conformité a été ouverte automatiquement. Retrouvez le lien vers la NC et créez une action CAPA directement depuis la ligne correspondante ci-dessous.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HaccpSurveillanceTab({ studyId, ccpId, onStudyChange, onCcpChange }) {
+  const C = useTheme();
+  const usersQ = useCollection('/users');
+  const studiesQ = useCollection('/haccp/studies');
+  const ccpsQ = useCollection(studyId ? `/haccp/studies/${studyId}/ccps` : null);
+  const recordsQ = useCollection(ccpId ? `/haccp/ccps/${ccpId}/monitoring` : null);
+  const ccps = ccpsQ.data || [];
+  const selectedCcp = ccps.find((c) => c.id === ccpId);
+  return (
+    <div className="space-y-4">
+      <LiveBadge />
+      <Panel title="Sélection du point de contrôle">
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Étude HACCP">
+            <select value={studyId || ''} onChange={(e) => { onStudyChange(e.target.value || null); onCcpChange(null); }} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">Sélectionner une étude…</option>{(studiesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="CCP / CP">
+            <select value={ccpId || ''} onChange={(e) => onCcpChange(e.target.value || null)} disabled={!studyId} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">Sélectionner un CCP/CP…</option>{ccps.map((c) => <option key={c.id} value={c.id}>{c.reference} — {c.dangerMaitrise || c.parametre || ''}</option>)}
+            </select>
+          </FormField>
+        </div>
+      </Panel>
+      {ccpId && selectedCcp && (
+        <>
+          <Panel title={`Nouveau relevé — ${selectedCcp.reference}`} subtitle={selectedCcp.limiteCritique ? `Limite critique : ${selectedCcp.limiteCritique}` : undefined}>
+            <HaccpMonitoringForm ccpId={ccpId} usersQ={usersQ} onCreated={recordsQ.reload} />
+          </Panel>
+          <Panel title="Historique des relevés" subtitle={`${(recordsQ.data || []).length} relevé(s)`}>
+            {recordsQ.loading ? <LoadingPanel /> : recordsQ.error ? <ErrorPanel message={recordsQ.error} onRetry={recordsQ.reload} /> : (
+              (recordsQ.data || []).length
+                ? <div className="space-y-2">{recordsQ.data.map((r) => <HaccpMonitoringRow key={r.id} record={r} onChanged={recordsQ.reload} />)}</div>
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun relevé enregistré pour ce point de contrôle</p>
+            )}
+          </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
+function HaccpPrpFormModal({ record, studiesQ, usersQ, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const [form, setForm] = useState({ studyId: record?.studyId || '', type: record?.type || 'HYGIENE_PERSONNEL', libelle: record?.libelle || '', description: record?.description || '', frequence: record?.frequence || '', responsableId: record?.responsableId || '', active: record?.active ?? true });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.libelle.trim()) { setError('Le libellé est obligatoire.'); return; }
+    setSaving(true); setError(null);
+    try {
+      const payload = { ...form, studyId: form.studyId || null, responsableId: form.responsableId || null };
+      if (editing) await api.patch(`/haccp/prps/${record.id}`, payload);
+      else await api.post('/haccp/prps', payload);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function del() {
+    setSaving(true);
+    try { await confirmAndDelete(record.libelle, `/haccp/prps/${record.id}`, () => { onCreated(); onClose(); }); }
+    catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? 'Modifier le PRP' : 'Nouveau PRP / BPH'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Type">
+          <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            {Object.entries(HACCP_PRP_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Libellé *"><input value={form.libelle} onChange={(e) => setForm({ ...form, libelle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Fréquence"><input value={form.frequence} onChange={(e) => setForm({ ...form, frequence: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Étude HACCP (optionnel)">
+            <select value={form.studyId} onChange={(e) => setForm({ ...form, studyId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(studiesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Responsable">
+          <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+          </select>
+        </FormField>
+        <label className="flex items-center gap-2 text-xs mb-3" style={{ color: C.textMuted }}>
+          <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Actif
+        </label>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Créer le PRP'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function HaccpPrpTab() {
+  const C = useTheme();
+  const prpsQ = useCollection('/haccp/prps');
+  const studiesQ = useCollection('/haccp/studies');
+  const usersQ = useCollection('/users');
+  const [showForm, setShowForm] = useState(false);
+  const [editingPrp, setEditingPrp] = useState(null);
+  if (prpsQ.loading) return <LoadingPanel />;
+  if (prpsQ.error) return <ErrorPanel message={prpsQ.error} onRetry={prpsQ.reload} />;
+  const list = prpsQ.data || [];
+  return (
+    <div className="space-y-4">
+      {(showForm || editingPrp) && <HaccpPrpFormModal record={editingPrp} studiesQ={studiesQ} usersQ={usersQ} onClose={() => { setShowForm(false); setEditingPrp(null); }} onCreated={prpsQ.reload} />}
+      <div className="flex items-center justify-between">
+        <LiveBadge />
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau PRP</button>
+      </div>
+      <Panel title="Programmes prérequis / Bonnes pratiques d'hygiène" subtitle={`${list.length} PRP`}>
+        {list.length
+          ? <DataTable columns={['Type', 'Libellé', 'Fréquence', 'Statut']}
+              rows={list.map((p) => [HACCP_PRP_TYPE_LABELS[p.type] || p.type, p.libelle, p.frequence || '—', <StatusChip statut={p.active ? 'Conforme' : 'Non conforme'} />])}
+              onRowClick={(i) => setEditingPrp(list[i])} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun PRP enregistré pour le moment</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function HaccpMatriceTab() {
+  const C = useTheme();
+  const matriceQ = useCollection('/haccp/matrice');
+  if (matriceQ.loading) return <LoadingPanel />;
+  if (matriceQ.error) return <ErrorPanel message={matriceQ.error} onRetry={matriceQ.reload} />;
+  const list = matriceQ.data || [];
+  return (
+    <div className="space-y-4">
+      <LiveBadge />
+      <Panel title="Matrice HACCP" subtitle={`${list.length} ligne(s)`}>
+        {list.length
+          ? <DataTable columns={['Étude', 'Étape', 'Danger', 'Type', 'Niveau de risque', 'CCP/CP', 'Statut']}
+              rows={list.map((l) => [`${l.etudeCode} — ${l.etude}`, l.etape, l.danger, HACCP_HAZARD_TYPE_LABELS[l.type] || l.type, l.niveauRisque ? <span style={{ color: haccpRiskColor(C, l.niveauRisque) }}>{HACCP_RISK_LEVEL_LABELS[l.niveauRisque] || l.niveauRisque}</span> : '—', l.ccp ? `${l.ccp} (${l.ccpType})` : '—', l.statut || '—'])} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée dans la matrice</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function HaccpOverviewTab({ onOpenMonitoring }) {
+  const C = useTheme();
+  const dashboardQ = useCollection('/haccp/dashboard');
+  const todayQ = useCollection('/haccp/monitoring/today');
+  const overdueQ = useCollection('/haccp/monitoring/overdue');
+  if (dashboardQ.loading) return <LoadingPanel />;
+  if (dashboardQ.error) return <ErrorPanel message={dashboardQ.error} onRetry={dashboardQ.reload} />;
+  const d = dashboardQ.data || {};
+  const today = todayQ.data || [];
+  const overdue = overdueQ.data || [];
+  function row(r) {
+    return (
+      <div key={r.id} onClick={() => onOpenMonitoring(r.ccp?.studyId, r.ccpId)} className="flex items-center justify-between p-2 rounded-lg cursor-pointer" style={{ backgroundColor: C.cardAlt }}>
+        <div><span className="text-sm" style={{ color: C.text }}>{r.ccp?.reference} — {r.ccp?.dangerMaitrise || r.ccp?.parametre || ''}</span>{r.datePrevue && <span className="text-xs ml-2" style={{ color: C.textMuted }}>{new Date(r.datePrevue).toLocaleString('fr-FR')}</span>}</div>
+        <StatusChip statut={HACCP_MONITORING_STATUS_LABELS[r.statut] || r.statut} />
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-6">
+      <LiveBadge />
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Études actives" value={d.etudesActives ?? '—'} objectif={`${d.etudesTotal ?? 0} au total`} color={C.blue} icon={ClipboardList} />
+        <KpiCard label="Étapes" value={d.etapes ?? '—'} color={C.blue} icon={ClipboardList} />
+        <KpiCard label="Dangers identifiés" value={d.dangers ?? '—'} color={C.amber} icon={AlertTriangle} />
+        <KpiCard label="CCP actifs" value={d.ccp ?? '—'} color={C.red} icon={ShieldCheck} />
+        <KpiCard label="CP actifs" value={d.cp ?? '—'} color={C.blue} icon={ShieldCheck} />
+        <KpiCard label="CCP en anomalie" value={d.ccpEnAnomalie ?? '—'} color={d.ccpEnAnomalie > 0 ? C.red : C.green} icon={AlertTriangle} />
       </div>
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="Points enregistrés" value={list.length} color={C.blue} icon={ClipboardList} />
-        <KpiCard label="Points critiques (CCP)" value={ccpCount} color={C.red} icon={AlertTriangle} />
+        <KpiCard label="Contrôles réalisés" value={d.controlesRealises ?? '—'} color={C.blue} icon={CheckCircle2} />
+        <KpiCard label="Contrôles conformes" value={d.controlesConformes ?? '—'} color={C.green} icon={CheckCircle2} />
+        <KpiCard label="Contrôles non conformes" value={d.controlesNonConformes ?? '—'} color={d.controlesNonConformes > 0 ? C.red : C.green} icon={AlertTriangle} />
+        <KpiCard label="Contrôles en retard" value={d.controlesEnRetard ?? '—'} color={d.controlesEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+        <KpiCard label="Taux de réalisation" value={d.tauxRealisation != null ? `${d.tauxRealisation}%` : '—'} color={C.blue} icon={Activity} />
+        <KpiCard label="Taux de conformité" value={d.tauxConformite != null ? `${d.tauxConformite}%` : '—'} color={C.green} icon={Activity} />
       </div>
-      <Panel title="Registre HACCP">
-        {list.length
-          ? <DataTable columns={['Processus', 'Étape', 'Danger', 'CCP', 'Résultat']}
-              rows={list.map((h) => [h.process, h.step, h.hazard, h.ccp ? <StatusChip statut="Non conforme" /> : '—', h.result || '—'])}
-              onRowClick={(i) => setSelected(list[i])} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun point HACCP enregistré pour le moment</p>}
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Non-conformités HACCP ouvertes" value={d.ncOuvertes ?? '—'} color={d.ncOuvertes > 0 ? C.red : C.green} icon={FileWarning} />
+        <KpiCard label="Actions CAPA ouvertes" value={d.actionsOuvertes ?? '—'} color={C.blue} icon={Wrench} />
+        <KpiCard label="Actions CAPA en retard" value={d.actionsEnRetard ?? '—'} color={d.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+      </div>
+      <Panel title="Contrôles du jour" subtitle={`${today.length} contrôle(s)`}>
+        {todayQ.loading ? <LoadingPanel /> : today.length ? <div className="space-y-1.5">{today.map(row)}</div> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun contrôle prévu aujourd'hui</p>}
       </Panel>
+      <Panel title="Contrôles en retard" subtitle={`${overdue.length} contrôle(s)`}>
+        {overdueQ.loading ? <LoadingPanel /> : overdue.length ? <div className="space-y-1.5">{overdue.map(row)}</div> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun contrôle en retard</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function HaccpPage() {
+  const C = useTheme();
+  const [tab, setTab] = useState('apercu');
+  const [surveillanceStudyId, setSurveillanceStudyId] = useState(null);
+  const [surveillanceCcpId, setSurveillanceCcpId] = useState(null);
+  function openMonitoring(studyId, ccpId) {
+    setSurveillanceStudyId(studyId || null); setSurveillanceCcpId(ccpId || null); setTab('surveillance');
+  }
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        {[['apercu', "Vue d'ensemble"], ['etudes', 'Études'], ['surveillance', 'Surveillance'], ['prp', 'PRP / BPH'], ['matrice', 'Matrice']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
+      </div>
+      {tab === 'apercu' && <HaccpOverviewTab onOpenMonitoring={openMonitoring} />}
+      {tab === 'etudes' && <HaccpEtudesTab />}
+      {tab === 'surveillance' && <HaccpSurveillanceTab studyId={surveillanceStudyId} ccpId={surveillanceCcpId} onStudyChange={setSurveillanceStudyId} onCcpChange={setSurveillanceCcpId} />}
+      {tab === 'prp' && <HaccpPrpTab />}
+      {tab === 'matrice' && <HaccpMatriceTab />}
     </div>
   );
 }

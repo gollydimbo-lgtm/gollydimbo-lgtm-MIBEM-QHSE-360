@@ -27,5 +27,19 @@ async function main(){
    {code:'LOT',label:'Numéro de lot conforme',type:'TEXT',required:true,order:2},
    {code:'ASPECT',label:'Aspect du produit conforme',type:'BOOLEAN',required:true,order:3}
  ]}}});
+ // Catégories d'équipements — exemples de départ, l'administrateur peut en
+ // ajouter/modifier/désactiver librement via /business/equipment-categories.
+ const categoriesEquip=[
+  ['EQ-PROD','Machines de production','Production'],
+  ['EQ-LEVAGE','Équipements de levage et manutention','Levage/Manutention'],
+  ['EQ-ELEC','Installations et équipements électriques','Électrique'],
+  ['EQ-INCENDIE','Équipements de sécurité incendie','Sécurité/Incendie'],
+  ['EQ-PRESSION','Appareils sous pression','Pression'],
+  ['EQ-MESURE','Instruments de mesure et de contrôle','Mesure'],
+  ['EQ-VEHICULE','Véhicules et engins','Véhicules'],
+  ['EQ-INSTALLATION','Installations techniques','Installations'],
+ ] as const;
+ for(const [code,label,groupe] of categoriesEquip) await db.equipmentCategory.upsert({where:{code},update:{label,groupe},create:{code,label,groupe}});
+ await db.equipmentSettings.findFirst().then(async(s)=>{ if(!s) await db.equipmentSettings.create({data:{}}); });
 }
 main().catch(e=>{console.error(e);process.exit(1)}).finally(()=>db.$disconnect());

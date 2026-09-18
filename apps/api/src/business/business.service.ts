@@ -1372,7 +1372,124 @@ import { writeAudit } from '../common/audit-log.helper';
   }));
  }
  trainingList(){return this.db.training.findMany({include:{processus:true},orderBy:{scheduledAt:'desc'}})} trainingCreate(b:any){return this.db.training.create({data:b})} trainingUpdate(id:string,b:any){return this.db.training.update({where:{id},data:b})} trainingDelete(id:string){return this.db.training.delete({where:{id}})}
- equipmentList(){return this.db.equipment.findMany({orderBy:{name:'asc'}})} equipmentCreate(b:any){return this.db.equipment.create({data:b})} equipmentUpdate(id:string,b:any){return this.db.equipment.update({where:{id},data:b})} equipmentDelete(id:string){return this.db.equipment.delete({where:{id}})}
+
+ // === MODULE ÉQUIPEMENTS — Phase 1 : fondations, criticité, chaîne
+ // Équipement -> Risque -> Contrôle -> NC -> CAPA ===
+ equipmentInclude = { categoryEq:true, site:true, workUnit:true, responsable:true, fournisseur:true,
+  risks:{orderBy:{code:'desc' as const}}, nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}}, safetyEvents:{orderBy:{occurredAt:'desc' as const}} };
+ equipmentList(){return this.db.equipment.findMany({include:this.equipmentInclude,orderBy:{name:'asc'}})}
+ equipmentGet(id:string){return this.db.equipment.findUnique({where:{id},include:this.equipmentInclude})}
+ async equipmentSettingsGet(){
+  let s=await this.db.equipmentSettings.findFirst();
+  if(!s) s=await this.db.equipmentSettings.create({data:{}});
+  return s;
+ }
+ async equipmentSettingsUpdate(b:any){
+  const current=await this.equipmentSettingsGet();
+  return this.db.equipmentSettings.update({where:{id:current.id},data:b});
+ }
+ private async calculerCriticiteEquipement(b:any){
+  const settings=await this.equipmentSettingsGet();
+  const vals=[b.criticiteSecurite,b.criticiteQualite,b.criticiteEnvironnement,b.criticiteProduction].map((v:any)=>Number(v)||0);
+  const criticiteScore=vals.reduce((a:number,v:number)=>a+v,0);
+  let criticiteNiveau='FAIBLE';
+  if(criticiteScore>=settings.seuilCriticiteCritique) criticiteNiveau='CRITIQUE';
+  else if(criticiteScore>=settings.seuilCriticiteEleve) criticiteNiveau='ELEVE';
+  else if(criticiteScore>=settings.seuilCriticiteModere) criticiteNiveau='MODERE';
+  return {criticiteScore,criticiteNiveau};
+ }
+ async equipmentCreate(b:any){
+  const hasCriticite=b.criticiteSecurite!=null||b.criticiteQualite!=null||b.criticiteEnvironnement!=null||b.criticiteProduction!=null;
+  const calc=hasCriticite?await this.calculerCriticiteEquipement(b):{};
+  const eq=await this.db.equipment.create({data:{...b,...calc}});
+  await writeAudit(this.db,'EQUIPMENT','CREATE',eq.id,null,eq);
+  return eq;
+ }
+ async equipmentUpdate(id:string,b:any){
+  const current=await this.db.equipment.findUnique({where:{id}});
+  if(!current) throw new Error('Équipement introuvable');
+  const hasCriticite=b.criticiteSecurite!=null||b.criticiteQualite!=null||b.criticiteEnvironnement!=null||b.criticiteProduction!=null;
+  const calc=hasCriticite?await this.calculerCriticiteEquipement({
+   criticiteSecurite:b.criticiteSecurite??current.criticiteSecurite,
+   criticiteQualite:b.criticiteQualite??current.criticiteQualite,
+   criticiteEnvironnement:b.criticiteEnvironnement??current.criticiteEnvironnement,
+   criticiteProduction:b.criticiteProduction??current.criticiteProduction,
+  }):{};
+  const eq=await this.db.equipment.update({where:{id},data:{...b,...calc}});
+  await writeAudit(this.db,'EQUIPMENT','UPDATE',id,current,eq);
+  return eq;
+ }
+ async equipmentDelete(id:string){
+  // Jamais de suppression définitive d'un historique QHSE significatif —
+  // on archive plutôt que de supprimer dès que l'équipement a un historique lié.
+  const eq=await this.db.equipment.findUnique({where:{id},include:{risks:true,nonConformities:true,actions:true,safetyEvents:true}});
+  if(!eq) throw new Error('Équipement introuvable');
+  const aHistorique=eq.risks.length||eq.nonConformities.length||eq.actions.length||eq.safetyEvents.length;
+  if(aHistorique){
+   const archived=await this.db.equipment.update({where:{id},data:{etat:'MIS_AU_REBUT',archivedAt:new Date()}});
+   await writeAudit(this.db,'EQUIPMENT','UPDATE',id,eq,archived);
+   return archived;
+  }
+  await writeAudit(this.db,'EQUIPMENT','DELETE',id,eq,null);
+  return this.db.equipment.delete({where:{id}});
+ }
+ equipmentCategoryList(){return this.db.equipmentCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
+ equipmentCategoryCreate(b:any){return this.db.equipmentCategory.create({data:b})}
+ equipmentCategoryUpdate(id:string,b:any){return this.db.equipmentCategory.update({where:{id},data:b})}
+ equipmentCategoryDelete(id:string){return this.db.equipmentCategory.delete({where:{id}})}
+ equipmentDashboard(){
+  return this.db.equipment.findMany({select:{etat:true,criticiteNiveau:true,categoryId:true,siteId:true}}).then((list)=>{
+   const parEtat:Record<string,number>={}, parCriticite:Record<string,number>={};
+   for(const e of list){
+    parEtat[e.etat]=(parEtat[e.etat]||0)+1;
+    const niv=e.criticiteNiveau||'NON_EVALUE';
+    parCriticite[niv]=(parCriticite[niv]||0)+1;
+   }
+   return {total:list.length,parEtat,parCriticite};
+  });
+ }
+ // Un équipement défaillant/dégradé ne doit jamais rester isolé — ces trois
+ // endpoints répliquent exactement le pattern generate-risk/generate-nc/
+ // generate-action déjà utilisé pour les constats d'audit et les événements
+ // sécurité, afin qu'une anomalie équipement alimente automatiquement le
+ // reste du système QHSE (registre des risques, NC, CAPA).
+ async equipmentGenerateRisk(id:string,b?:any){
+  const eq=await this.db.equipment.findUnique({where:{id}});
+  if(!eq) throw new Error('Équipement introuvable');
+  const calc=await this.calculerRisque({severity:b?.severity||(eq.criticiteNiveau==='CRITIQUE'?5:eq.criticiteNiveau==='ELEVE'?4:3),probability:b?.probability||3});
+  const risk=await this.db.risk.create({data:{
+   code:`RISK-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   hazard:b?.hazard||`Équipement — ${eq.name}`, hazardousEvent:b?.hazardousEvent||eq.notes||undefined,
+   equipmentId:eq.id, workUnitId:eq.workUnitId, ...calc,
+  }});
+  await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
+  return risk;
+ }
+ async equipmentGenerateNc(id:string,b?:any){
+  const eq=await this.db.equipment.findUnique({where:{id}});
+  if(!eq) throw new Error('Équipement introuvable');
+  return this.db.$transaction(async(tx)=>{
+   const nc=await tx.nonConformity.create({data:{
+    code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+    title:b?.title||`Anomalie équipement — ${eq.name}`, description:b?.description,
+    severity:b?.severity||(eq.criticiteNiveau==='CRITIQUE'?3:1),
+    classification:b?.classification||(eq.criticiteNiveau==='CRITIQUE'?'NC_CRITIQUE':'NC_MINEURE'),
+    source:'EQUIPEMENT', equipmentId:eq.id, workUnitId:eq.workUnitId,
+   }});
+   await tx.action.create({data:{code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,title:`Traiter ${nc.code}`,description:`Analyser et corriger l'anomalie relevée sur ${eq.name}`,priority:eq.criticiteNiveau==='CRITIQUE'?1:2,nonConformityId:nc.id,equipmentId:eq.id,workUnitId:eq.workUnitId}});
+   return nc;
+  });
+ }
+ async equipmentGenerateAction(id:string,b:any){
+  const eq=await this.db.equipment.findUnique({where:{id}});
+  if(!eq) throw new Error('Équipement introuvable');
+  return this.db.action.create({data:{
+   code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   title:b?.title||`Action CAPA — ${eq.name}`, description:b?.description,
+   priority:b?.priority||(eq.criticiteNiveau==='CRITIQUE'?1:2), equipmentId:eq.id, workUnitId:eq.workUnitId,
+   responsibleId:b?.responsibleId||null, dueDate:b?.dueDate||null, actionType:b?.actionType||'CORRECTIVE',
+  }});
+ }
  events(){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'}})}
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
