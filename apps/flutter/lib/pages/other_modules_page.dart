@@ -3,6 +3,7 @@ import '../services/api.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'environnement_pages.dart';
+import 'haccp_page.dart';
 
 // -------------------- Hub --------------------
 class OtherModulesPage extends StatelessWidget {
@@ -31,60 +32,9 @@ class OtherModulesPage extends StatelessWidget {
       );
 }
 
-// -------------------- HACCP --------------------
-class HaccpPage extends StatefulWidget {
-  const HaccpPage({super.key});
-  @override
-  State<HaccpPage> createState() => _HaccpPageState();
-}
-class _HaccpPageState extends State<HaccpPage> {
-  final api = Api();
-  List items = []; bool loading = true;
-  @override void initState() { super.initState(); load(); }
-  Future<void> load() async { try { items = List.from(await api.get('/business/haccp')); } catch (_) {} setState(() => loading = false); }
-
-  Future<void> create() async {
-    final process = TextEditingController(), step = TextEditingController(), hazard = TextEditingController();
-    bool ccp = false;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: const Text('Nouveau point HACCP'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: process, decoration: const InputDecoration(labelText: 'Processus')),
-          TextField(controller: step, decoration: const InputDecoration(labelText: 'Étape')),
-          TextField(controller: hazard, decoration: const InputDecoration(labelText: 'Danger identifié')),
-          SwitchListTile(title: const Text('Point critique (CCP)'), value: ccp, onChanged: (v) => setD(() => ccp = v)),
-        ])),
-        actions: [TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Créer'))],
-      )),
-    );
-    if (ok != true || process.text.trim().isEmpty) return;
-    try {
-      await api.post('/business/haccp', {'code': genCode('HACCP'), 'process': process.text.trim(), 'step': step.text.trim(), 'hazard': hazard.text.trim(), 'ccp': ccp});
-      load();
-    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
-  }
-
-  @override
-  Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('HACCP')),
-    floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: const Text('Nouveau point')),
-    body: loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
-      onRefresh: load,
-      child: items.isEmpty
-          ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun point HACCP enregistré')))])
-          : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
-              final h = items[i];
-              return Card(child: ListTile(
-                leading: Icon(Icons.warning_amber, color: h['ccp'] == true ? Colors.red : Colors.grey),
-                title: Text('${h['process']} — ${h['step']}'),
-                subtitle: Text('${h['hazard']}${h['ccp'] == true ? ' • CCP' : ''}'),
-              ));
-            }),
-    ),
-  );
-}
+// (HACCP dispose désormais de son propre module dédié — voir haccp_page.dart.
+// L'ancien CRUD plat référençait /business/haccp, route supprimée côté API
+// avec la reconstruction complète du module.)
 
 // (Environnement dispose désormais de son propre module dédié — voir environnement_pages.dart)
 
