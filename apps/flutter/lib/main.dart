@@ -24,6 +24,7 @@ import 'pages/hygiene_pages.dart';
 import 'pages/environnement_pages.dart';
 import 'pages/rapports_page.dart';
 import 'pages/other_modules_page.dart';
+import 'pages/haccp_page.dart';
 import 'pages/ged_page.dart';
 import 'pages/safety_events_page.dart';
 import 'pages/risks_page.dart';
@@ -322,4 +323,3 @@ class ComingSoonPage extends StatelessWidget {
         ),
       );
 }
-
