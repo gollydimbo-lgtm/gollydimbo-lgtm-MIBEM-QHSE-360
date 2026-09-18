@@ -1,0 +1,1 @@
+import {Module} from '@nestjs/common'; import {PrismaService} from '../common/prisma.service'; import {HaccpService} from './haccp.service'; import {HaccpController} from './haccp.controller'; @Module({controllers:[HaccpController],providers:[HaccpService,PrismaService],exports:[HaccpService]}) export class HaccpModule{}
