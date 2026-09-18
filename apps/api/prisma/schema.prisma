@@ -102,6 +102,8 @@ enum AttachmentOwnerType {
   EPI
   DOCUMENT
   SAFETY_TALK
+  HACCP
+  HACCP_CCP
 }
 
 enum QualityShift {
@@ -174,6 +176,13 @@ model User {
   veilleReglementaireResponsable VeilleReglementaire[]
   riskMeasuresResponsable RiskMeasure[]
   riskEvaluationsRealisees RiskEvaluation[]
+  haccpStudiesResponsable HaccpStudy[]
+  haccpTeamMemberships HaccpTeamMember[]
+  haccpStepsResponsable HaccpProcessStep[]
+  haccpCcpsResponsable HaccpCcp[]
+  haccpMonitoringResponsable HaccpMonitoringRecord[]
+  haccpPrpsResponsable HaccpPrp[]
+  haccpRevisionsResponsable HaccpRevision[]
 }
 
 model Role {
@@ -492,6 +501,7 @@ model Employee {
   tmsSignalements TmsSignalement[]
   penibiliteExpositions PenibiliteExposition[]
   safetyTalkParticipations SafetyTalkParticipant[]
+  haccpTeamMemberships HaccpTeamMember[]
 }
 
 model EpiAssignment {
@@ -781,8 +791,12 @@ model NonConformity {
   effectivenessResult String?
   effectivenessCheckedAt DateTime?
   effectivenessNotes String?
+  // --- Lien HACCP (additif) : NC générée automatiquement depuis un relevé
+  // de surveillance CCP hors limite (voir HaccpService), jamais l'inverse.
+  haccpMonitoringRecordId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
+  haccpMonitoringRecord HaccpMonitoringRecord? @relation(fields:[haccpMonitoringRecordId], references:[id], onDelete:SetNull)
   epi Epi? @relation(fields:[epiId], references:[id], onDelete:SetNull)
   epc Epc? @relation(fields:[epcId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
@@ -989,6 +1003,7 @@ model Site {
   workUnits WorkUnit[]
   documents Document[]
   safetyTalks SafetyTalk[]
+  haccpStudies HaccpStudy[]
   createdAt DateTime @default(now())
 }
 
@@ -1397,18 +1412,213 @@ model RiskSettings {
   updatedAt DateTime @updatedAt
 }
 
-model HaccpRecord {
+// ============================================================================
+// Module HACCP — remplace intégralement l'ancien HaccpRecord (CRUD plat sans
+// workflow). Modélise l'étude HACCP complète (équipe, diagramme de flux,
+// analyse des dangers, détermination des CCP/CP, surveillance, PRP,
+// révisions) avec le même principe directeur que le reste de l'application :
+// la chaîne HACCP → Non-conformité → Action CAPA → Vérification d'efficacité
+// est proposée automatiquement par le système mais jamais imposée sans
+// validation humaine (voir HaccpService, même pattern que
+// SafetyTalkFeedback.transformFeedback et le moteur de recommandation du
+// module Quart d'heure sécurité).
+// ============================================================================
+
+model HaccpStudy {
   id String @id @default(cuid())
   code String @unique
-  process String
-  step String
-  hazard String
-  ccp Boolean @default(false)
-  criticalLimit String?
-  monitoring String?
-  result String?
-  correctiveAction String?
-  recordDate DateTime @default(now())
+  name String
+  siteId String?
+  activite String?
+  atelier String?
+  ligne String?
+  produit String?
+  categorieProduit String?
+  descriptionProduit String?
+  destination String?
+  consommateurCible String?
+  conditionsStockage String?
+  dureeConservation String?
+  modeDistribution String?
+  responsableId String?
+  dateCreation DateTime @default(now())
+  dateValidation DateTime?
+  dateDerniereRevision DateTime?
+  prochaineRevision DateTime?
+  version String @default("1.0")
+  // BROUILLON / EN_VALIDATION / VALIDE / SUSPENDU / ARCHIVE
+  status String @default("BROUILLON")
+  createdAt DateTime @default(now())
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  team HaccpTeamMember[]
+  steps HaccpProcessStep[]
+  hazards HaccpHazard[]
+  ccps HaccpCcp[]
+  prps HaccpPrp[]
+  revisions HaccpRevision[]
+}
+
+// Équipe HACCP — composition, compétences et formation, exigées par le
+// référentiel (constitution de l'équipe pluridisciplinaire).
+model HaccpTeamMember {
+  id String @id @default(cuid())
+  studyId String
+  employeeId String?
+  userId String?
+  fonction String?
+  service String?
+  competence String?
+  formationHaccp Boolean @default(false)
+  dateFormation DateTime?
+  experience String?
+  roleEtude String?
+  responsabilites String?
+  statut String @default("ACTIF")
+  createdAt DateTime @default(now())
+  study HaccpStudy @relation(fields:[studyId], references:[id], onDelete:Cascade)
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+}
+
+// Diagramme de flux — une ligne par étape du procédé, dans l'ordre "ordre".
+model HaccpProcessStep {
+  id String @id @default(cuid())
+  studyId String
+  numero Int
+  nom String
+  description String?
+  responsableId String?
+  zone String?
+  equipement String?
+  matiereEntrante String?
+  matiereSortante String?
+  parametresControles String?
+  ordre Int @default(0)
+  createdAt DateTime @default(now())
+  study HaccpStudy @relation(fields:[studyId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  hazards HaccpHazard[]
+}
+
+// Analyse des dangers par étape — type biologique/chimique/physique/
+// allergène/autre, avec cotation gravité×probabilité×maîtrise et niveau de
+// risque calculé (voir HaccpService.calculerNiveauRisque).
+model HaccpHazard {
+  id String @id @default(cuid())
+  studyId String
+  stepId String
+  type String
+  libelle String
+  origine String?
+  gravite Int?
+  probabilite Int?
+  niveauMaitrise Int?
+  // FAIBLE / MODERE / SIGNIFICATIF / CRITIQUE — recalculé automatiquement.
+  niveauRisque String?
+  justification String?
+  mesuresExistantes String?
+  mesuresSupplementaires String?
+  createdAt DateTime @default(now())
+  study HaccpStudy @relation(fields:[studyId], references:[id], onDelete:Cascade)
+  step HaccpProcessStep @relation(fields:[stepId], references:[id], onDelete:Cascade)
+  ccps HaccpCcp[]
+}
+
+// Fiche CCP/CP — fusionne volontairement la détermination (arbre de
+// décision) et la fiche de surveillance détaillée pour rester réalisable,
+// plutôt que deux entités séparées peu exploitables en pratique.
+model HaccpCcp {
+  id String @id @default(cuid())
+  studyId String
+  hazardId String
+  stepId String
+  // Ex. CCP-01 / CP-01 — généré automatiquement (voir HaccpService.genererReference).
+  reference String @unique
+  // CCP ou CP (point de vigilance/point de contrôle)
+  type String @default("CCP")
+  arbreDecisionReponses Json?
+  dangerMaitrise String?
+  causeDanger String?
+  mesureMaitrise String?
+  limiteCritique String?
+  critereAcceptation String?
+  parametre String?
+  unite String?
+  methode String?
+  instrument String?
+  frequence String?
+  responsableId String?
+  enregistrementAssocie String?
+  actionImmediate String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  study HaccpStudy @relation(fields:[studyId], references:[id], onDelete:Cascade)
+  hazard HaccpHazard @relation(fields:[hazardId], references:[id], onDelete:Cascade)
+  step HaccpProcessStep @relation(fields:[stepId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  monitoringRecords HaccpMonitoringRecord[]
+}
+
+// Surveillance/contrôle d'un CCP — l'écran de saisie rapide terrain. Un
+// résultat hors limite (conforme=false) déclenche automatiquement la
+// création d'une NonConformity (jamais d'une Action CAPA, qui reste un acte
+// humain explicite) — voir HaccpService.enregistrerNonConformite.
+model HaccpMonitoringRecord {
+  id String @id @default(cuid())
+  ccpId String
+  // Copie dénormalisée de l'étude pour filtrer/lister sans jointure — le CCP
+  // reste la source de vérité (voir ccp.studyId).
+  studyId String
+  datePrevue DateTime?
+  dateRealisee DateTime?
+  valeur Float?
+  valeurTexte String?
+  conforme Boolean?
+  // A_REALISER / EN_RETARD / REALISE / CONFORME / NON_CONFORME / ANNULE / JUSTIFIE
+  statut String @default("A_REALISER")
+  lotNumero String?
+  responsableId String?
+  commentaire String?
+  photoUrl String?
+  signature String?
+  // Rempli automatiquement quand la NC est créée depuis ce relevé.
+  nonConformityId String?
+  createdAt DateTime @default(now())
+  ccp HaccpCcp @relation(fields:[ccpId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  nonConformities NonConformity[]
+}
+
+// Programmes prérequis / bonnes pratiques d'hygiène — un PRP peut être
+// transversal (studyId nul) ou rattaché à une étude précise.
+model HaccpPrp {
+  id String @id @default(cuid())
+  studyId String?
+  type String
+  libelle String
+  description String?
+  frequence String?
+  responsableId String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  study HaccpStudy? @relation(fields:[studyId], references:[id], onDelete:SetNull)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+}
+
+// Historique des révisions du plan HACCP — déclenchées par un nouveau
+// produit, une modification de recette, un changement fournisseur, etc.
+model HaccpRevision {
+  id String @id @default(cuid())
+  studyId String
+  version String
+  date DateTime @default(now())
+  declencheur String
+  description String?
+  responsableId String?
+  createdAt DateTime @default(now())
+  study HaccpStudy @relation(fields:[studyId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
 }
 
 model QhseAudit {
