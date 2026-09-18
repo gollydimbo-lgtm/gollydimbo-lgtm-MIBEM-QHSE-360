@@ -588,14 +588,23 @@ import { writeAudit } from '../common/audit-log.helper';
      dueDate:a.echeance||this.capaEcheanceProposee(niveau), attachments:[],
     };
    }
-   case 'HACCP':{
-    const h=await this.db.haccpRecord.findUnique({where:{id:sourceEntityId}});
-    if(!h) throw new Error('Enregistrement HACCP introuvable');
-    const niveau=h.ccp?'CRITIQUE':'MAJEURE';
+   case 'HACCP_CCP':{
+    // Remplace l'ancien case 'HACCP' (obsolète — référençait haccpRecord,
+    // supprimé avec l'ancien module plat). Source réelle : un relevé de
+    // surveillance CCP (HaccpMonitoringRecord), généralement hors limite,
+    // qui a déjà déclenché la création automatique de la NonConformity
+    // (voir HaccpService.declencherNonConformite) — ce préremplissage sert
+    // pour l'étape humaine suivante : la création explicite de l'Action CAPA.
+    const m=await this.db.haccpMonitoringRecord.findUnique({where:{id:sourceEntityId},include:{ccp:true}});
+    if(!m) throw new Error('Relevé de surveillance CCP introuvable');
+    const niveau=m.ccp.type==='CCP'?'CRITIQUE':'MAJEURE';
+    const detail=[m.ccp.limiteCritique?`limite critique : ${m.ccp.limiteCritique}`:null, m.valeur!=null?`valeur mesurée : ${m.valeur}${m.ccp.unite||''}`:null, m.valeurTexte].filter(Boolean).join(', ');
     return {
-     title:`Traiter l'écart CCP — ${h.step}`, description:`${h.hazard}${h.criticalLimit?` — limite critique : ${h.criticalLimit}`:''}`,
-     date:h.recordDate, criticite:niveau, priority:this.capaPrioriteProposee(niveau),
-     actionType:'CORRECTIVE', dueDate:this.capaEcheanceProposee(niveau), attachments:[],
+     title:`Traiter l'écart CCP — ${m.ccp.reference}${m.ccp.dangerMaitrise?` — ${m.ccp.dangerMaitrise}`:''}`,
+     description:`Relevé de surveillance hors limite sur ${m.ccp.reference}${detail?` (${detail})`:''}.`,
+     date:m.dateRealisee||m.datePrevue||new Date(), criticite:niveau, priority:this.capaPrioriteProposee(niveau),
+     actionType:'CORRECTIVE', responsibleId:m.ccp.responsableId||undefined,
+     dueDate:this.capaEcheanceProposee(niveau), attachments:[],
     };
    }
    case 'INDICATEUR':{
@@ -879,7 +888,9 @@ import { writeAudit } from '../common/audit-log.helper';
   }
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
- haccpList(){return this.db.haccpRecord.findMany({orderBy:{recordDate:'desc'}})} haccpCreate(b:any){return this.db.haccpRecord.create({data:b})} haccpUpdate(id:string,b:any){return this.db.haccpRecord.update({where:{id},data:b})} haccpDelete(id:string){return this.db.haccpRecord.delete({where:{id}})}
+ // Le module HACCP est désormais géré par HaccpModule (apps/api/src/haccp) —
+ // les anciennes méthodes haccpList/haccpCreate/haccpUpdate/haccpDelete sur
+ // haccpRecord ont été supprimées avec l'ancien modèle plat.
  auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})}
  async auditGet(id:string){
   const audit=await this.db.qhseAudit.findUnique({where:{id},include:{
