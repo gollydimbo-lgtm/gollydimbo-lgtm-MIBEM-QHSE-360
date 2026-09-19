@@ -169,6 +169,11 @@ model User {
   reclamationsActionCurative Reclamation[]
   fournisseursResponsable Fournisseur[]
   equipmentsResponsable Equipment[] @relation("EquipmentResponsable")
+  equipmentMaintenancePlans EquipmentMaintenancePlan[]
+  equipmentMaintenanceRecords EquipmentMaintenanceRecord[]
+  equipmentControls EquipmentControl[]
+  equipmentInspections EquipmentInspection[]
+  equipmentConsignations EquipmentConsignation[]
   safetyEventsEnquete SafetyEvent[]
   risquesSanitairesResponsable RisqueSanitaire[]
   analysesErgonomiquesEvaluateur AnalyseErgonomique[]
@@ -816,6 +821,8 @@ model NonConformity {
   containmentActions NcContainmentAction[]
   causes NcCause[]
   costs NcCost[]
+  equipmentControls EquipmentControl[]
+  equipmentCalibrations EquipmentCalibration[]
   @@index([status,occurredAt])
 }
 
@@ -2042,6 +2049,144 @@ model Equipment {
   nonConformities NonConformity[]
   actions Action[]
   safetyEvents SafetyEvent[]
+  maintenancePlans EquipmentMaintenancePlan[]
+  maintenanceRecords EquipmentMaintenanceRecord[]
+  controls EquipmentControl[]
+  calibrations EquipmentCalibration[]
+  inspections EquipmentInspection[]
+  consignations EquipmentConsignation[]
+}
+
+// === MODULE ÉQUIPEMENTS — Phase 2 : maintenance préventive/corrective,
+// contrôles réglementaires, étalonnage, inspections, consignation (additif,
+// aucun champ existant modifié ou supprimé) ===
+
+// Plan de maintenance préventive — la périodicité n'est jamais universelle
+// ni codée en dur (cf. exigence "ne pas coder de fausses obligations
+// réglementaires universelles") : type de fréquence et valeur sont saisis
+// par l'utilisateur pour chaque équipement.
+model EquipmentMaintenancePlan {
+  id String @id @default(cuid())
+  equipmentId String
+  designation String
+  frequenceType String @default("CALENDAIRE")
+  frequenceValeur Int
+  uniteFrequence String?
+  dateDerniere DateTime?
+  dateProchaine DateTime?
+  responsableId String?
+  prestataire String?
+  actif Boolean @default(true)
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  equipment Equipment @relation(fields:[equipmentId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  records EquipmentMaintenanceRecord[]
+}
+
+// Une ligne par intervention, préventive (rattachée à un plan) ou corrective
+// (panne) — jamais mélangées dans un simple statut, pour permettre le calcul
+// MTBF/MTTR/disponibilité sans ambiguïté.
+model EquipmentMaintenanceRecord {
+  id String @id @default(cuid())
+  equipmentId String
+  planId String?
+  type String @default("CORRECTIVE")
+  statut String @default("PLANIFIEE")
+  datePanne DateTime?
+  dateDebut DateTime?
+  dateFin DateTime?
+  dureeHeures Float?
+  responsableId String?
+  prestataire String?
+  description String?
+  causePanne String?
+  piecesRemplacees String?
+  cout Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  equipment Equipment @relation(fields:[equipmentId], references:[id], onDelete:Cascade)
+  plan EquipmentMaintenancePlan? @relation(fields:[planId], references:[id], onDelete:SetNull)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+}
+
+// Contrôle réglementaire (levage, incendie, électrique, pression...) — la
+// nature exacte et la périodicité restent du texte libre configurable par
+// équipement/secteur, jamais une liste figée.
+model EquipmentControl {
+  id String @id @default(cuid())
+  equipmentId String
+  designation String
+  organisme String?
+  referenceReglementaire String?
+  dateControle DateTime @default(now())
+  dateProchainControle DateTime?
+  statut String @default("CONFORME")
+  observations String?
+  controleurId String?
+  cout Float?
+  nonConformityId String?
+  createdAt DateTime @default(now())
+  equipment Equipment @relation(fields:[equipmentId], references:[id], onDelete:Cascade)
+  controleur User? @relation(fields:[controleurId], references:[id], onDelete:SetNull)
+  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+}
+
+// Étalonnage des instruments de mesure — un résultat non conforme ou expiré
+// déclenche le flag "Ne pas utiliser", jamais une suppression ou un silence.
+model EquipmentCalibration {
+  id String @id @default(cuid())
+  equipmentId String
+  dateEtalonnage DateTime @default(now())
+  dateProchaineEtalonnage DateTime?
+  organismeEtalonneur String?
+  certificatNumero String?
+  resultat String @default("CONFORME")
+  incertitude String?
+  nePasUtiliser Boolean @default(false)
+  nonConformityId String?
+  cout Float?
+  createdAt DateTime @default(now())
+  equipment Equipment @relation(fields:[equipmentId], references:[id], onDelete:Cascade)
+  nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
+}
+
+// Vérification avant utilisation / inspection périodique — checklist libre
+// en JSON (label/statut/commentaire par point) pour rester adaptable à tout
+// type d'équipement sans modèle de données figé par secteur.
+model EquipmentInspection {
+  id String @id @default(cuid())
+  equipmentId String
+  type String @default("PRE_USE")
+  date DateTime @default(now())
+  inspecteurId String?
+  statutGlobal String @default("CONFORME")
+  items Json?
+  commentaire String?
+  signature String?
+  localisation String?
+  createdAt DateTime @default(now())
+  equipment Equipment @relation(fields:[equipmentId], references:[id], onDelete:Cascade)
+  inspecteur User? @relation(fields:[inspecteurId], references:[id], onDelete:SetNull)
+}
+
+// Consignation / cadenassage (LOTO) — tant qu'elle est en cours, l'équipement
+// bascule à l'état CONSIGNE ; la levée restaure l'état et trace la date réelle.
+model EquipmentConsignation {
+  id String @id @default(cuid())
+  equipmentId String
+  dateDebut DateTime @default(now())
+  dateFinPrevue DateTime?
+  dateFinReelle DateTime?
+  motif String
+  responsableId String?
+  risqueAssocie String?
+  mesureControle String?
+  statut String @default("EN_COURS")
+  createdAt DateTime @default(now())
+  equipment Equipment @relation(fields:[equipmentId], references:[id], onDelete:Cascade)
+  responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
 }
 
 model SafetyTalk {

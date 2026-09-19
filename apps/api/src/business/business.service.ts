@@ -1490,6 +1490,123 @@ import { writeAudit } from '../common/audit-log.helper';
    responsibleId:b?.responsibleId||null, dueDate:b?.dueDate||null, actionType:b?.actionType||'CORRECTIVE',
   }});
  }
+
+ // === MODULE ÉQUIPEMENTS — Phase 2 : maintenance préventive/corrective,
+ // contrôles réglementaires, étalonnage, inspections, consignation ===
+ equipmentMaintenancePlanList(equipmentId?:string){return this.db.equipmentMaintenancePlan.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true,equipment:true},orderBy:{dateProchaine:'asc'}})}
+ equipmentMaintenancePlanCreate(b:any){return this.db.equipmentMaintenancePlan.create({data:b})}
+ equipmentMaintenancePlanUpdate(id:string,b:any){return this.db.equipmentMaintenancePlan.update({where:{id},data:b})}
+ equipmentMaintenancePlanDelete(id:string){return this.db.equipmentMaintenancePlan.delete({where:{id}})}
+
+ equipmentMaintenanceRecordList(equipmentId?:string){return this.db.equipmentMaintenanceRecord.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true,plan:true},orderBy:{createdAt:'desc'}})}
+ async equipmentMaintenanceRecordCreate(b:any){
+  const record=await this.db.equipmentMaintenanceRecord.create({data:b});
+  // Une intervention préventive terminée met à jour automatiquement le plan
+  // (dernière date + prochaine échéance calendaire) — jamais ressaisi à la main.
+  if(record.type==='PREVENTIVE' && record.statut==='TERMINEE' && record.planId){
+   const plan=await this.db.equipmentMaintenancePlan.findUnique({where:{id:record.planId}});
+   if(plan){
+    const dateDerniere=record.dateFin||new Date();
+    const dateProchaine=plan.frequenceType==='CALENDAIRE'?new Date(dateDerniere.getTime()+plan.frequenceValeur*86400000):plan.dateProchaine;
+    await this.db.equipmentMaintenancePlan.update({where:{id:plan.id},data:{dateDerniere,dateProchaine}});
+   }
+  }
+  await writeAudit(this.db,'EQUIPMENT_MAINTENANCE','CREATE',record.id,null,record);
+  return record;
+ }
+ equipmentMaintenanceRecordUpdate(id:string,b:any){return this.db.equipmentMaintenanceRecord.update({where:{id},data:b})}
+ equipmentMaintenanceRecordDelete(id:string){return this.db.equipmentMaintenanceRecord.delete({where:{id}})}
+
+ // MTBF/MTTR/disponibilité calculés à la demande depuis l'historique réel des
+ // pannes — jamais des champs ressaisis, pour rester toujours exacts.
+ async equipmentMaintenanceStats(equipmentId:string){
+  const pannes=await this.db.equipmentMaintenanceRecord.findMany({where:{equipmentId,type:'CORRECTIVE'},orderBy:{datePanne:'asc'}});
+  const nombrePannes=pannes.length;
+  const dureesReparation=pannes.map(p=>p.dureeHeures||(p.dateDebut&&p.dateFin?(p.dateFin.getTime()-p.dateDebut.getTime())/3600000:null)).filter((v):v is number=>v!=null);
+  const mttrHeures=dureesReparation.length?dureesReparation.reduce((a,b)=>a+b,0)/dureesReparation.length:null;
+  const datesPannes=pannes.map(p=>p.datePanne).filter((d):d is Date=>d!=null);
+  let mtbfHeures:number|null=null;
+  if(datesPannes.length>=2){
+   const spanHeures=(datesPannes[datesPannes.length-1].getTime()-datesPannes[0].getTime())/3600000;
+   mtbfHeures=spanHeures/(datesPannes.length-1);
+  }
+  const disponibilite=(mtbfHeures!=null&&mttrHeures!=null&&(mtbfHeures+mttrHeures)>0)?mtbfHeures/(mtbfHeures+mttrHeures):null;
+  const coutTotal=pannes.reduce((a,p)=>a+(p.cout||0),0);
+  return {nombrePannes,mtbfHeures,mttrHeures,disponibilite,coutTotal};
+ }
+
+ equipmentControlList(equipmentId?:string){return this.db.equipmentControl.findMany({where:equipmentId?{equipmentId}:undefined,include:{controleur:true,nonConformity:true},orderBy:{dateProchainControle:'asc'}})}
+ equipmentControlCreate(b:any){return this.db.equipmentControl.create({data:b})}
+ equipmentControlUpdate(id:string,b:any){return this.db.equipmentControl.update({where:{id},data:b})}
+ equipmentControlDelete(id:string){return this.db.equipmentControl.delete({where:{id}})}
+ async equipmentControlGenerateNc(id:string,b?:any){
+  const control=await this.db.equipmentControl.findUnique({where:{id},include:{equipment:true}});
+  if(!control) throw new Error('Contrôle introuvable');
+  if(control.nonConformityId) throw new Error('Une non-conformité a déjà été générée pour ce contrôle');
+  return this.db.$transaction(async(tx)=>{
+   const nc=await tx.nonConformity.create({data:{
+    code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+    title:b?.title||`Contrôle non conforme — ${control.equipment.name}`, description:control.observations,
+    severity:2, classification:'NC_MINEURE', source:'EQUIPEMENT_CONTROLE', equipmentId:control.equipmentId,
+   }});
+   await tx.equipmentControl.update({where:{id},data:{nonConformityId:nc.id}});
+   return nc;
+  });
+ }
+
+ equipmentCalibrationList(equipmentId?:string){return this.db.equipmentCalibration.findMany({where:equipmentId?{equipmentId}:undefined,include:{nonConformity:true},orderBy:{dateProchaineEtalonnage:'asc'}})}
+ equipmentCalibrationCreate(b:any){
+  const nePasUtiliser=b.resultat&&b.resultat!=='CONFORME'?true:!!b.nePasUtiliser;
+  return this.db.equipmentCalibration.create({data:{...b,nePasUtiliser}});
+ }
+ equipmentCalibrationUpdate(id:string,b:any){
+  const nePasUtiliser=b.resultat!=null?(b.resultat!=='CONFORME'):undefined;
+  return this.db.equipmentCalibration.update({where:{id},data:{...b,...(nePasUtiliser!=null?{nePasUtiliser}:{})}});
+ }
+ equipmentCalibrationDelete(id:string){return this.db.equipmentCalibration.delete({where:{id}})}
+ // Un étalonnage non conforme n'est jamais transformé en NC automatiquement —
+ // seule une proposition explicite (bouton) le fait, jamais une décision prise
+ // à la place du responsable QHSE.
+ async equipmentCalibrationGenerateNc(id:string,b?:any){
+  const calib=await this.db.equipmentCalibration.findUnique({where:{id},include:{equipment:true}});
+  if(!calib) throw new Error('Étalonnage introuvable');
+  if(calib.nonConformityId) throw new Error('Une non-conformité a déjà été générée pour cet étalonnage');
+  return this.db.$transaction(async(tx)=>{
+   const nc=await tx.nonConformity.create({data:{
+    code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+    title:b?.title||`Étalonnage non conforme — ${calib.equipment.name}`, description:`Résultat : ${calib.resultat}`,
+    severity:2, classification:'NC_MINEURE', source:'EQUIPEMENT_ETALONNAGE', equipmentId:calib.equipmentId,
+   }});
+   await tx.equipmentCalibration.update({where:{id},data:{nonConformityId:nc.id}});
+   return nc;
+  });
+ }
+
+ equipmentInspectionList(equipmentId?:string){return this.db.equipmentInspection.findMany({where:equipmentId?{equipmentId}:undefined,include:{inspecteur:true},orderBy:{date:'desc'}})}
+ equipmentInspectionCreate(b:any){return this.db.equipmentInspection.create({data:b})}
+ equipmentInspectionUpdate(id:string,b:any){return this.db.equipmentInspection.update({where:{id},data:b})}
+ equipmentInspectionDelete(id:string){return this.db.equipmentInspection.delete({where:{id}})}
+
+ equipmentConsignationList(equipmentId?:string){return this.db.equipmentConsignation.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true},orderBy:{dateDebut:'desc'}})}
+ async equipmentConsignationCreate(b:any){
+  return this.db.$transaction(async(tx)=>{
+   const c=await tx.equipmentConsignation.create({data:b});
+   await tx.equipment.update({where:{id:b.equipmentId},data:{etat:'CONSIGNE'}});
+   return c;
+  });
+ }
+ async equipmentConsignationLever(id:string,b?:any){
+  const c=await this.db.equipmentConsignation.findUnique({where:{id}});
+  if(!c) throw new Error('Consignation introuvable');
+  if(c.statut==='LEVEE') throw new Error('Cette consignation est déjà levée');
+  return this.db.$transaction(async(tx)=>{
+   const updated=await tx.equipmentConsignation.update({where:{id},data:{statut:'LEVEE',dateFinReelle:new Date()}});
+   await tx.equipment.update({where:{id:c.equipmentId},data:{etat:b?.etatRetour||'ACTIF'}});
+   return updated;
+  });
+ }
+ equipmentConsignationDelete(id:string){return this.db.equipmentConsignation.delete({where:{id}})}
+
  events(){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'}})}
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
