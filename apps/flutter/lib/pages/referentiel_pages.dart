@@ -250,31 +250,3 @@ class RegulatoryLegacyCataloguePage extends StatelessWidget {
       );
 }
 
-class ObjectifsQhsePage extends StatelessWidget {
-  const ObjectifsQhsePage({super.key});
-  @override
-  Widget build(BuildContext context) => SimpleCrudPage(
-        title: 'Objectifs QHSE', endpoint: '/business/objectifs-qhse', codePrefix: 'OBJ',
-        fields: const [
-          FieldSpec('titre', 'Titre', required: true),
-          FieldSpec('pilier', 'Pilier', type: 'select', options: ['Qualité', 'Sécurité', 'Hygiène', 'Environnement']),
-          FieldSpec('cible', 'Cible', type: 'number', required: true),
-          FieldSpec('actuel', 'Actuel', type: 'number', defaultValue: '0'),
-          FieldSpec('unite', 'Unité (%, ...)'),
-          FieldSpec('echeance', 'Échéance', type: 'date'),
-        ],
-        titleOf: (i) => i['titre'] ?? '—',
-        subtitleOf: (i) => '${i['actuel']}${i['unite'] ?? ''} / ${i['cible']}${i['unite'] ?? ''}',
-        kpiBuilder: (items) {
-          final atteints = items.where((i) {
-            final actuel = (i['actuel'] as num?) ?? 0;
-            final cible = (i['cible'] as num?) ?? 1;
-            return cible == 0 ? actuel == 0 : (actuel / cible) >= 0.9;
-          }).length;
-          return [
-            KpiStat('Objectifs suivis', '${items.length}', color: QhseColors.blue, icon: Icons.flag_outlined),
-            KpiStat('Atteints (≥90%)', '$atteints', color: QhseColors.green, icon: Icons.emoji_events_outlined),
-          ];
-        },
-      );
-}

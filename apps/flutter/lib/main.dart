@@ -16,6 +16,7 @@ import 'pages/epi_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/users_page.dart';
 import 'pages/referentiel_pages.dart';
+import 'pages/objectifs_qhse_page.dart';
 import 'pages/regulatory_page.dart';
 import 'pages/equipment_page.dart';
 import 'pages/processus_pages.dart';
