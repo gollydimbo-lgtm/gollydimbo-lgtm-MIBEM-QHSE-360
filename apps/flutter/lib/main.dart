@@ -17,6 +17,7 @@ import 'pages/settings_page.dart';
 import 'pages/users_page.dart';
 import 'pages/referentiel_pages.dart';
 import 'pages/regulatory_page.dart';
+import 'pages/equipment_page.dart';
 import 'pages/processus_pages.dart';
 import 'pages/indicateurs_pages.dart';
 import 'pages/reclamations_pages.dart';
