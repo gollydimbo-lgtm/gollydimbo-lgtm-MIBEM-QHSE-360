@@ -3551,18 +3551,69 @@ function UtilisateursPage() {
   );
 }
 
+// ============================================================================
+// ÉQUIPEMENTS — étiquettes/couleurs partagées, formulaire, fiche détaillée
+// (Identification/Localisation/Criticité), maintenance préventive/corrective,
+// contrôles réglementaires, étalonnage, consignation, et chaîne
+// Équipement -> Risque -> Non-conformité -> Action CAPA.
+// ============================================================================
+const EQUIPMENT_ETAT_LABELS = { ACTIF: 'Actif', EN_MAINTENANCE: 'En maintenance', EN_ATTENTE_REPARATION: 'En attente de réparation', HORS_SERVICE: 'Hors service', CONSIGNE: 'Consigné', REFORME: 'Réformé', MIS_AU_REBUT: 'Mis au rebut', REMPLACE: 'Remplacé' };
+function equipmentEtatColor(C, e) { return { ACTIF: C.green, EN_MAINTENANCE: C.blue, EN_ATTENTE_REPARATION: C.amber, HORS_SERVICE: C.red, CONSIGNE: C.red, REFORME: C.textMuted, MIS_AU_REBUT: C.textMuted, REMPLACE: C.textMuted }[e] || C.textMuted; }
+const EQUIPMENT_CRITICITE_LABELS = { FAIBLE: 'Faible', MODERE: 'Modéré', ELEVE: 'Élevé', CRITIQUE: 'Critique' };
+function equipmentCriticiteColor(C, n) { return { FAIBLE: C.green, MODERE: C.blue, ELEVE: C.amber, CRITIQUE: C.red }[n] || C.textMuted; }
+function equipmentNextDueDate(eq) {
+  const dates = [
+    ...(eq.maintenancePlans || []).map((p) => p.dateProchaine),
+    ...(eq.controls || []).map((c) => c.dateProchainControle),
+    ...(eq.calibrations || []).map((c) => c.dateProchaineEtalonnage),
+  ].filter(Boolean).map((d) => new Date(d));
+  if (!dates.length) return null;
+  return new Date(Math.min(...dates.map((d) => d.getTime())));
+}
+function equipmentIsOverdue(eq) {
+  const d = equipmentNextDueDate(eq);
+  return d ? d.getTime() < Date.now() : false;
+}
+function equipmentHasNonConformiteOuverte(eq) { return (eq.nonConformities || []).some((n) => n.status !== 'CLOSED'); }
+
 function EquipmentForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
-  const [form, setForm] = useState({ name: record?.name || '', category: record?.category || '', location: record?.location || '', status: record?.status || 'ACTIVE', lastInspectionAt: record?.lastInspectionAt ? new Date(record.lastInspectionAt).toISOString().slice(0, 10) : '', nextInspectionAt: record?.nextInspectionAt ? new Date(record.nextInspectionAt).toISOString().slice(0, 10) : '', notes: record?.notes || '' });
+  const categoriesQ = useCollection('/business/equipment-categories');
+  const sitesQ = useCollection('/quality/catalog/sites');
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const fournisseursQ = useCollection('/business/fournisseurs');
+  const [form, setForm] = useState({
+    name: record?.name || '', categoryId: record?.categoryId || '', type: record?.type || '', sousType: record?.sousType || '',
+    marque: record?.marque || '', modele: record?.modele || '', numeroSerie: record?.numeroSerie || '', referenceFabricant: record?.referenceFabricant || '',
+    anneeFabrication: record?.anneeFabrication ?? '', dateAcquisition: record?.dateAcquisition ? new Date(record.dateAcquisition).toISOString().slice(0, 10) : '',
+    dateMiseEnService: record?.dateMiseEnService ? new Date(record.dateMiseEnService).toISOString().slice(0, 10) : '',
+    fournisseurId: record?.fournisseurId || '', constructeur: record?.constructeur || '',
+    siteId: record?.siteId || '', workUnitId: record?.workUnitId || '', batiment: record?.batiment || '', zone: record?.zone || '', location: record?.location || '',
+    responsableId: record?.responsableId || '', utilisateursAutorises: record?.utilisateursAutorises || '',
+    etat: record?.etat || 'ACTIF',
+    criticiteSecurite: record?.criticiteSecurite ?? '', criticiteQualite: record?.criticiteQualite ?? '', criticiteEnvironnement: record?.criticiteEnvironnement ?? '', criticiteProduction: record?.criticiteProduction ?? '',
+    notes: record?.notes || '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   async function submit(e) {
     e.preventDefault(); setSaving(true); setError(null);
     try {
-      const payload = { ...form, lastInspectionAt: form.lastInspectionAt ? new Date(form.lastInspectionAt).toISOString() : null, nextInspectionAt: form.nextInspectionAt ? new Date(form.nextInspectionAt).toISOString() : null };
+      const payload = {
+        ...form,
+        categoryId: form.categoryId || null, fournisseurId: form.fournisseurId || null, siteId: form.siteId || null, workUnitId: form.workUnitId || null, responsableId: form.responsableId || null,
+        anneeFabrication: form.anneeFabrication === '' ? null : Number(form.anneeFabrication),
+        criticiteSecurite: form.criticiteSecurite === '' ? null : Number(form.criticiteSecurite),
+        criticiteQualite: form.criticiteQualite === '' ? null : Number(form.criticiteQualite),
+        criticiteEnvironnement: form.criticiteEnvironnement === '' ? null : Number(form.criticiteEnvironnement),
+        criticiteProduction: form.criticiteProduction === '' ? null : Number(form.criticiteProduction),
+        dateAcquisition: form.dateAcquisition ? new Date(form.dateAcquisition).toISOString() : null,
+        dateMiseEnService: form.dateMiseEnService ? new Date(form.dateMiseEnService).toISOString() : null,
+      };
       if (editing) await api.patch(`/business/equipment/${record.id}`, payload);
-      else await api.post('/business/equipment', { code: genCode('EQ'), ...payload });
+      else await api.post('/business/equipment', { code: genCode('EQ'), status: 'ACTIVE', ...payload });
       onCreated(); onClose();
     } catch (err) { setError(err.message); }
     setSaving(false);
@@ -3574,19 +3625,87 @@ function EquipmentForm({ record, onClose, onCreated }) {
     setSaving(false);
   }
   return (
-    <Modal title={editing ? "Modifier l'équipement" : 'Nouvel équipement'} onClose={onClose}>
+    <Modal title={editing ? "Modifier l'équipement" : 'Nouvel équipement'} onClose={onClose} wide>
       <form onSubmit={submit}>
-        <FormField label="Nom"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Identification</p>
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Catégorie"><input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-          <FormField label="Localisation"><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Désignation"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Catégorie (optionnel)">
+            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(categoriesQ.data || []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </FormField>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Dernière inspection"><input type="date" value={form.lastInspectionAt} onChange={(e) => setForm({ ...form, lastInspectionAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-          <FormField label="Prochaine inspection"><input type="date" value={form.nextInspectionAt} onChange={(e) => setForm({ ...form, nextInspectionAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Type (optionnel)"><input value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Sous-type (optionnel)"><input value={form.sousType} onChange={(e) => setForm({ ...form, sousType: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         </div>
-        <FormField label="Statut"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="ACTIVE">Actif</option><option value="MAINTENANCE">En maintenance</option><option value="HORS_SERVICE">Hors service</option></select></FormField>
-        <FormField label="Notes"><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Marque (optionnel)"><input value={form.marque} onChange={(e) => setForm({ ...form, marque: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Modèle (optionnel)"><input value={form.modele} onChange={(e) => setForm({ ...form, modele: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="N° de série (optionnel)"><input value={form.numeroSerie} onChange={(e) => setForm({ ...form, numeroSerie: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Référence fabricant (optionnel)"><input value={form.referenceFabricant} onChange={(e) => setForm({ ...form, referenceFabricant: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Année de fabrication (optionnel)"><input type="number" value={form.anneeFabrication} onChange={(e) => setForm({ ...form, anneeFabrication: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Date d'acquisition (optionnel)"><input type="date" value={form.dateAcquisition} onChange={(e) => setForm({ ...form, dateAcquisition: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Date de mise en service (optionnel)"><input type="date" value={form.dateMiseEnService} onChange={(e) => setForm({ ...form, dateMiseEnService: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Fournisseur (optionnel)">
+            <select value={form.fournisseurId} onChange={(e) => setForm({ ...form, fournisseurId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(fournisseursQ.data || []).map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Constructeur (optionnel)"><input value={form.constructeur} onChange={(e) => setForm({ ...form, constructeur: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2 mt-4" style={{ color: C.textMuted }}>Localisation</p>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Site (optionnel)">
+            <select value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(sitesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Service / unité (optionnel)">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Bâtiment (optionnel)"><input value={form.batiment} onChange={(e) => setForm({ ...form, batiment: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Zone (optionnel)"><input value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Localisation libre (optionnel)"><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2 mt-4" style={{ color: C.textMuted }}>Utilisation et responsabilité</p>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable (optionnel)">
+            <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="État">
+            <select value={form.etat} onChange={(e) => setForm({ ...form, etat: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              {Object.entries(EQUIPMENT_ETAT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Utilisateurs autorisés (optionnel)"><input value={form.utilisateursAutorises} onChange={(e) => setForm({ ...form, utilisateursAutorises: e.target.value })} placeholder="Noms ou postes séparés par une virgule" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2 mt-4" style={{ color: C.textMuted }}>Criticité par axe (échelle libre — seuils configurables dans les réglages)</p>
+        <div className="grid grid-cols-4 gap-3">
+          <FormField label="Sécurité"><input type="number" min="0" value={form.criticiteSecurite} onChange={(e) => setForm({ ...form, criticiteSecurite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Qualité"><input type="number" min="0" value={form.criticiteQualite} onChange={(e) => setForm({ ...form, criticiteQualite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Environnement"><input type="number" min="0" value={form.criticiteEnvironnement} onChange={(e) => setForm({ ...form, criticiteEnvironnement: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Production"><input type="number" min="0" value={form.criticiteProduction} onChange={(e) => setForm({ ...form, criticiteProduction: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+
+        <FormField label="Notes (optionnel)"><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
         <div className="flex gap-2">
           {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
@@ -10356,33 +10475,433 @@ function HaccpPage() {
   );
 }
 
+function EquipmentMaintenanceTab({ equipment, onChanged }) {
+  const C = useTheme();
+  const plansQ = useCollection(`/business/equipment-maintenance-plans?equipmentId=${equipment.id}`);
+  const recordsQ = useCollection(`/business/equipment-maintenance-records?equipmentId=${equipment.id}`);
+  const statsQ = useCollection(`/business/equipment/${equipment.id}/maintenance-stats`);
+  const usersQ = useCollection('/users');
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [showRecordForm, setShowRecordForm] = useState(false);
+  const [planForm, setPlanForm] = useState({ designation: '', frequenceType: 'CALENDAIRE', frequenceValeur: 30, responsableId: '' });
+  const [recordForm, setRecordForm] = useState({ type: 'CORRECTIVE', statut: 'TERMINEE', planId: '', datePanne: '', dateDebut: '', dateFin: '', dureeHeures: '', cout: '', description: '', causePanne: '', piecesRemplacees: '' });
+  const [saving, setSaving] = useState(false);
+  function reload() { plansQ.reload(); recordsQ.reload(); statsQ.reload(); onChanged(); }
+  async function submitPlan(e) {
+    e.preventDefault(); setSaving(true);
+    try { await api.post('/business/equipment-maintenance-plans', { ...planForm, equipmentId: equipment.id, frequenceValeur: Number(planForm.frequenceValeur), responsableId: planForm.responsableId || null }); setShowPlanForm(false); reload(); }
+    catch (err) { alert(err.message); }
+    setSaving(false);
+  }
+  async function submitRecord(e) {
+    e.preventDefault(); setSaving(true);
+    try {
+      await api.post('/business/equipment-maintenance-records', {
+        ...recordForm, equipmentId: equipment.id, planId: recordForm.planId || null,
+        datePanne: recordForm.datePanne ? new Date(recordForm.datePanne).toISOString() : null,
+        dateDebut: recordForm.dateDebut ? new Date(recordForm.dateDebut).toISOString() : null,
+        dateFin: recordForm.dateFin ? new Date(recordForm.dateFin).toISOString() : null,
+        dureeHeures: recordForm.dureeHeures === '' ? null : Number(recordForm.dureeHeures),
+        cout: recordForm.cout === '' ? null : Number(recordForm.cout),
+      });
+      setShowRecordForm(false); reload();
+    } catch (err) { alert(err.message); }
+    setSaving(false);
+  }
+  const stats = statsQ.data;
+  return (
+    <div className="space-y-4">
+      {stats && (
+        <div className="flex flex-wrap gap-3">
+          <KpiCard label="Pannes enregistrées" value={stats.nombrePannes} color={C.blue} icon={Wrench} />
+          <KpiCard label="MTBF (h)" value={stats.mtbfHeures != null ? Math.round(stats.mtbfHeures) : '—'} color={C.blue} icon={Activity} />
+          <KpiCard label="MTTR (h)" value={stats.mttrHeures != null ? Math.round(stats.mttrHeures) : '—'} color={C.amber} icon={Activity} />
+          <KpiCard label="Disponibilité" value={stats.disponibilite != null ? `${Math.round(stats.disponibilite * 100)}%` : '—'} color={C.green} icon={CheckCircle2} />
+        </div>
+      )}
+      <Panel title="Plans de maintenance préventive" right={<button onClick={() => setShowPlanForm(!showPlanForm)} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau plan</button>}>
+        {showPlanForm && (
+          <form onSubmit={submitPlan} className="mb-4 p-3 rounded-lg space-y-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Désignation"><input required value={planForm.designation} onChange={(e) => setPlanForm({ ...planForm, designation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label="Responsable (optionnel)">
+                <select value={planForm.responsableId} onChange={(e) => setPlanForm({ ...planForm, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                  <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+                </select>
+              </FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Type de fréquence">
+                <select value={planForm.frequenceType} onChange={(e) => setPlanForm({ ...planForm, frequenceType: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                  <option value="CALENDAIRE">Calendaire (jours)</option><option value="HEURES">Heures de fonctionnement</option><option value="KM">Kilométrage</option><option value="CYCLES">Cycles</option><option value="RECOMMANDATION_FABRICANT">Recommandation fabricant</option><option value="RISQUE">Basée sur le risque</option>
+                </select>
+              </FormField>
+              <FormField label="Valeur"><input type="number" required value={planForm.frequenceValeur} onChange={(e) => setPlanForm({ ...planForm, frequenceValeur: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            </div>
+            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Enregistrer</button>
+          </form>
+        )}
+        {plansQ.data?.length
+          ? <DataTable columns={['Désignation', 'Fréquence', 'Dernière', 'Prochaine', 'Responsable']}
+              rows={plansQ.data.map((p) => [p.designation, `${p.frequenceValeur} (${p.frequenceType})`, p.dateDerniere ? new Date(p.dateDerniere).toLocaleDateString('fr-FR') : '—', p.dateProchaine ? new Date(p.dateProchaine).toLocaleDateString('fr-FR') : '—', p.responsable ? `${p.responsable.firstName} ${p.responsable.lastName}` : '—'])} />
+          : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun plan de maintenance préventive</p>}
+      </Panel>
+      <Panel title="Interventions (préventives et correctives)" right={<button onClick={() => setShowRecordForm(!showRecordForm)} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle intervention</button>}>
+        {showRecordForm && (
+          <form onSubmit={submitRecord} className="mb-4 p-3 rounded-lg space-y-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+            <div className="grid grid-cols-3 gap-3">
+              <FormField label="Type">
+                <select value={recordForm.type} onChange={(e) => setRecordForm({ ...recordForm, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                  <option value="CORRECTIVE">Corrective (panne)</option><option value="PREVENTIVE">Préventive</option>
+                </select>
+              </FormField>
+              <FormField label="Statut">
+                <select value={recordForm.statut} onChange={(e) => setRecordForm({ ...recordForm, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                  <option value="PLANIFIEE">Planifiée</option><option value="EN_COURS">En cours</option><option value="TERMINEE">Terminée</option><option value="REPORTEE">Reportée</option>
+                </select>
+              </FormField>
+              {recordForm.type === 'PREVENTIVE' && (
+                <FormField label="Plan lié (optionnel)">
+                  <select value={recordForm.planId} onChange={(e) => setRecordForm({ ...recordForm, planId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                    <option value="">—</option>{(plansQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.designation}</option>)}
+                  </select>
+                </FormField>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {recordForm.type === 'CORRECTIVE' && <FormField label="Date de panne"><input type="date" value={recordForm.datePanne} onChange={(e) => setRecordForm({ ...recordForm, datePanne: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>}
+              <FormField label="Début d'intervention"><input type="date" value={recordForm.dateDebut} onChange={(e) => setRecordForm({ ...recordForm, dateDebut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label="Fin d'intervention"><input type="date" value={recordForm.dateFin} onChange={(e) => setRecordForm({ ...recordForm, dateFin: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Durée (heures, optionnel)"><input type="number" value={recordForm.dureeHeures} onChange={(e) => setRecordForm({ ...recordForm, dureeHeures: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label="Coût (optionnel)"><input type="number" value={recordForm.cout} onChange={(e) => setRecordForm({ ...recordForm, cout: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            </div>
+            {recordForm.type === 'CORRECTIVE' && <FormField label="Cause de la panne (optionnel)"><input value={recordForm.causePanne} onChange={(e) => setRecordForm({ ...recordForm, causePanne: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>}
+            <FormField label="Description (optionnel)"><textarea value={recordForm.description} onChange={(e) => setRecordForm({ ...recordForm, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Enregistrer</button>
+          </form>
+        )}
+        {recordsQ.data?.length
+          ? <DataTable columns={['Type', 'Statut', 'Date', 'Durée (h)', 'Coût']}
+              rows={recordsQ.data.map((r) => [r.type === 'PREVENTIVE' ? 'Préventive' : 'Corrective', r.statut, (r.datePanne || r.dateDebut) ? new Date(r.datePanne || r.dateDebut).toLocaleDateString('fr-FR') : '—', r.dureeHeures ?? '—', r.cout ? `${r.cout} FCFA` : '—'])} />
+          : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune intervention enregistrée</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function EquipmentControlsTab({ equipment, onChanged }) {
+  const C = useTheme();
+  const controlsQ = useCollection(`/business/equipment-controls?equipmentId=${equipment.id}`);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ designation: '', organisme: '', referenceReglementaire: '', dateControle: new Date().toISOString().slice(0, 10), dateProchainControle: '', statut: 'CONFORME', observations: '' });
+  const [saving, setSaving] = useState(false);
+  const [genId, setGenId] = useState(null);
+  function reload() { controlsQ.reload(); onChanged(); }
+  async function submit(e) {
+    e.preventDefault(); setSaving(true);
+    try {
+      await api.post('/business/equipment-controls', { ...form, equipmentId: equipment.id, dateControle: new Date(form.dateControle).toISOString(), dateProchainControle: form.dateProchainControle ? new Date(form.dateProchainControle).toISOString() : null });
+      setShowForm(false); reload();
+    } catch (err) { alert(err.message); }
+    setSaving(false);
+  }
+  async function generateNc(id) {
+    setGenId(id);
+    try { await api.post(`/business/equipment-controls/${id}/generate-nc`, {}); reload(); }
+    catch (err) { alert(err.message); }
+    setGenId(null);
+  }
+  return (
+    <Panel title="Contrôles réglementaires" right={<button onClick={() => setShowForm(!showForm)} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau contrôle</button>}>
+      {showForm && (
+        <form onSubmit={submit} className="mb-4 p-3 rounded-lg space-y-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Désignation"><input required value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Organisme (optionnel)"><input value={form.organisme} onChange={(e) => setForm({ ...form, organisme: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <FormField label="Date du contrôle"><input type="date" required value={form.dateControle} onChange={(e) => setForm({ ...form, dateControle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Prochain contrôle (optionnel)"><input type="date" value={form.dateProchainControle} onChange={(e) => setForm({ ...form, dateProchainControle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Statut">
+              <select value={form.statut} onChange={(e) => setForm({ ...form, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="CONFORME">Conforme</option><option value="CONFORME_AVEC_OBSERVATIONS">Conforme avec observations</option><option value="NON_CONFORME">Non conforme</option><option value="EN_ATTENTE">En attente</option><option value="EXPIRE">Expiré</option>
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Observations (optionnel)"><textarea value={form.observations} onChange={(e) => setForm({ ...form, observations: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Enregistrer</button>
+        </form>
+      )}
+      {controlsQ.data?.length
+        ? <DataTable columns={['Désignation', 'Organisme', 'Date', 'Prochain', 'Statut', 'Action']}
+            rows={controlsQ.data.map((c) => [c.designation, c.organisme || '—', new Date(c.dateControle).toLocaleDateString('fr-FR'), c.dateProchainControle ? new Date(c.dateProchainControle).toLocaleDateString('fr-FR') : '—', <StatusChip statut={c.statut} />,
+              (c.statut === 'NON_CONFORME' && !c.nonConformityId) ? <button onClick={() => generateNc(c.id)} disabled={genId === c.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>{genId === c.id ? '…' : 'Générer une NC'}</button> : (c.nonConformityId ? 'NC créée' : '—')])} />
+        : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun contrôle réglementaire enregistré</p>}
+    </Panel>
+  );
+}
+
+function EquipmentCalibrationsTab({ equipment, onChanged }) {
+  const C = useTheme();
+  const calibQ = useCollection(`/business/equipment-calibrations?equipmentId=${equipment.id}`);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ dateEtalonnage: new Date().toISOString().slice(0, 10), dateProchaineEtalonnage: '', organismeEtalonneur: '', certificatNumero: '', resultat: 'CONFORME', incertitude: '' });
+  const [saving, setSaving] = useState(false);
+  const [genId, setGenId] = useState(null);
+  function reload() { calibQ.reload(); onChanged(); }
+  async function submit(e) {
+    e.preventDefault(); setSaving(true);
+    try {
+      await api.post('/business/equipment-calibrations', { ...form, equipmentId: equipment.id, dateEtalonnage: new Date(form.dateEtalonnage).toISOString(), dateProchaineEtalonnage: form.dateProchaineEtalonnage ? new Date(form.dateProchaineEtalonnage).toISOString() : null });
+      setShowForm(false); reload();
+    } catch (err) { alert(err.message); }
+    setSaving(false);
+  }
+  async function generateNc(id) {
+    setGenId(id);
+    try { await api.post(`/business/equipment-calibrations/${id}/generate-nc`, {}); reload(); }
+    catch (err) { alert(err.message); }
+    setGenId(null);
+  }
+  return (
+    <Panel title="Étalonnage des instruments de mesure" right={<button onClick={() => setShowForm(!showForm)} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel étalonnage</button>}>
+      {showForm && (
+        <form onSubmit={submit} className="mb-4 p-3 rounded-lg space-y-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <div className="grid grid-cols-3 gap-3">
+            <FormField label="Date d'étalonnage"><input type="date" required value={form.dateEtalonnage} onChange={(e) => setForm({ ...form, dateEtalonnage: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Prochain étalonnage (optionnel)"><input type="date" value={form.dateProchaineEtalonnage} onChange={(e) => setForm({ ...form, dateProchaineEtalonnage: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Résultat">
+              <select value={form.resultat} onChange={(e) => setForm({ ...form, resultat: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="CONFORME">Conforme</option><option value="CONFORME_AVEC_AJUSTEMENT">Conforme avec ajustement</option><option value="NON_CONFORME">Non conforme</option>
+              </select>
+            </FormField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Organisme étalonneur (optionnel)"><input value={form.organismeEtalonneur} onChange={(e) => setForm({ ...form, organismeEtalonneur: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="N° certificat (optionnel)"><input value={form.certificatNumero} onChange={(e) => setForm({ ...form, certificatNumero: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          </div>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Enregistrer</button>
+        </form>
+      )}
+      {calibQ.data?.length
+        ? <DataTable columns={['Date', 'Prochain', 'Résultat', 'Ne pas utiliser', 'Action']}
+            rows={calibQ.data.map((c) => [new Date(c.dateEtalonnage).toLocaleDateString('fr-FR'), c.dateProchaineEtalonnage ? new Date(c.dateProchaineEtalonnage).toLocaleDateString('fr-FR') : '—', <StatusChip statut={c.resultat} />, c.nePasUtiliser ? <span style={{ color: C.red, fontWeight: 600 }}>Oui</span> : 'Non',
+              (c.resultat !== 'CONFORME' && !c.nonConformityId) ? <button onClick={() => generateNc(c.id)} disabled={genId === c.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>{genId === c.id ? '…' : 'Générer une NC'}</button> : (c.nonConformityId ? 'NC créée' : '—')])} />
+        : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun étalonnage enregistré</p>}
+    </Panel>
+  );
+}
+
+function EquipmentConsignationsTab({ equipment, onChanged }) {
+  const C = useTheme();
+  const consQ = useCollection(`/business/equipment-consignations?equipmentId=${equipment.id}`);
+  const usersQ = useCollection('/users');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ motif: '', dateFinPrevue: '', risqueAssocie: '', mesureControle: '', responsableId: '' });
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  function reload() { consQ.reload(); onChanged(); }
+  async function submit(e) {
+    e.preventDefault(); setSaving(true);
+    try {
+      await api.post('/business/equipment-consignations', { ...form, equipmentId: equipment.id, responsableId: form.responsableId || null, dateFinPrevue: form.dateFinPrevue ? new Date(form.dateFinPrevue).toISOString() : null });
+      setShowForm(false); reload();
+    } catch (err) { alert(err.message); }
+    setSaving(false);
+  }
+  async function lever(id) {
+    setBusyId(id);
+    try { await api.post(`/business/equipment-consignations/${id}/lever`, {}); reload(); }
+    catch (err) { alert(err.message); }
+    setBusyId(null);
+  }
+  return (
+    <Panel title="Consignation / cadenassage (LOTO)" subtitle="Tant qu'une consignation est en cours, l'équipement passe à l'état Consigné" right={<button onClick={() => setShowForm(!showForm)} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle consignation</button>}>
+      {showForm && (
+        <form onSubmit={submit} className="mb-4 p-3 rounded-lg space-y-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+          <FormField label="Motif"><input required value={form.motif} onChange={(e) => setForm({ ...form, motif: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Fin prévue (optionnel)"><input type="date" value={form.dateFinPrevue} onChange={(e) => setForm({ ...form, dateFinPrevue: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+            <FormField label="Responsable (optionnel)">
+              <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+                <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Risque associé (optionnel)"><input value={form.risqueAssocie} onChange={(e) => setForm({ ...form, risqueAssocie: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Mesure de maîtrise (optionnel)"><input value={form.mesureControle} onChange={(e) => setForm({ ...form, mesureControle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Enregistrer</button>
+        </form>
+      )}
+      {consQ.data?.length
+        ? <DataTable columns={['Motif', 'Début', 'Fin prévue', 'Statut', 'Action']}
+            rows={consQ.data.map((c) => [c.motif, new Date(c.dateDebut).toLocaleDateString('fr-FR'), c.dateFinPrevue ? new Date(c.dateFinPrevue).toLocaleDateString('fr-FR') : '—', <StatusChip statut={c.statut} />,
+              c.statut === 'EN_COURS' ? <button onClick={() => lever(c.id)} disabled={busyId === c.id} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.green}22`, color: C.green }}>{busyId === c.id ? '…' : 'Lever la consignation'}</button> : '—'])} />
+        : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune consignation enregistrée</p>}
+    </Panel>
+  );
+}
+
+function EquipmentLinksTab({ equipment, onChanged }) {
+  const C = useTheme();
+  const [busy, setBusy] = useState(false);
+  async function run(action) {
+    setBusy(true);
+    try { await api.post(`/business/equipment/${equipment.id}/${action}`, {}); onChanged(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  const risks = equipment.risks || [], ncs = equipment.nonConformities || [], actions = equipment.actions || [], events = equipment.safetyEvents || [];
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => run('generate-risk')} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Créer un risque associé</button>
+        <button onClick={() => run('generate-nc')} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Créer une non-conformité</button>
+        <button onClick={() => run('generate-action')} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>Créer une action CAPA</button>
+      </div>
+      <Panel title={`Risques liés (${risks.length})`}>
+        {risks.length ? <DataTable columns={['Code', 'Danger', 'Niveau', 'Statut']} rows={risks.map((r) => [r.code, r.hazard, r.grossLevel || '—', r.status])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun risque lié</p>}
+      </Panel>
+      <Panel title={`Non-conformités liées (${ncs.length})`}>
+        {ncs.length ? <DataTable columns={['Code', 'Titre', 'Statut']} rows={ncs.map((n) => [n.code, n.title, n.status])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune non-conformité liée</p>}
+      </Panel>
+      <Panel title={`Actions CAPA liées (${actions.length})`}>
+        {actions.length ? <DataTable columns={['Code', 'Titre', 'Statut', 'Échéance']} rows={actions.map((a) => [a.code, a.title, a.status, a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—'])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune action CAPA liée</p>}
+      </Panel>
+      <Panel title={`Accidents / incidents liés (${events.length})`}>
+        {events.length ? <DataTable columns={['Date', 'Titre', 'Gravité']} rows={events.map((e) => [new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.title, e.severity])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun accident/incident lié</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function EquipmentHistoryTab({ equipment }) {
+  const C = useTheme();
+  const logsQ = useCollection('/audit-logs?module=EQUIPMENT');
+  if (logsQ.loading) return <LoadingPanel />;
+  const list = (logsQ.data || []).filter((l) => l.entityId === equipment.id);
+  return (
+    <Panel title="Historique de l'équipement" subtitle="Toutes les créations et modifications, tracées automatiquement">
+      {list.length
+        ? <DataTable columns={['Date', 'Utilisateur', 'Action']}
+            rows={list.map((l) => [new Date(l.createdAt).toLocaleString('fr-FR'), l.user ? `${l.user.firstName} ${l.user.lastName}` : 'Système', l.action === 'CREATE' ? 'Création' : l.action === 'UPDATE' ? 'Modification' : 'Suppression'])} />
+        : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
+    </Panel>
+  );
+}
+
+function EquipmentDetailModal({ equipmentId, onClose, onChanged }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/equipment/${equipmentId}`);
+  const [tab, setTab] = useState('identification');
+  const [editing, setEditing] = useState(false);
+  if (detailQ.loading) return <Modal title="Équipement" onClose={onClose} wide><LoadingPanel /></Modal>;
+  if (detailQ.error || !detailQ.data) return <Modal title="Équipement" onClose={onClose} wide><ErrorPanel message={detailQ.error} onRetry={detailQ.reload} /></Modal>;
+  const eq = detailQ.data;
+  function reload() { detailQ.reload(); onChanged(); }
+  if (editing) return <EquipmentForm record={eq} onClose={() => setEditing(false)} onCreated={() => { setEditing(false); reload(); }} />;
+  return (
+    <Modal title={`${eq.code} — ${eq.name}`} onClose={onClose} wide>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p className="text-xs" style={{ color: C.textMuted }}>{eq.categoryEq?.label || 'Sans catégorie'} · {eq.site?.name || 'Site non renseigné'}</p>
+        <div className="flex gap-2">
+          <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ backgroundColor: `${equipmentEtatColor(C, eq.etat)}22`, color: equipmentEtatColor(C, eq.etat) }}>{EQUIPMENT_ETAT_LABELS[eq.etat] || eq.etat}</span>
+          {eq.criticiteNiveau && <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ backgroundColor: `${equipmentCriticiteColor(C, eq.criticiteNiveau)}22`, color: equipmentCriticiteColor(C, eq.criticiteNiveau) }}>Criticité {EQUIPMENT_CRITICITE_LABELS[eq.criticiteNiveau]}</span>}
+        </div>
+      </div>
+      <div className="flex gap-2 flex-wrap mb-4">
+        <button onClick={() => setEditing(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[['identification', 'Identification'], ['maintenance', 'Maintenance'], ['controles', 'Contrôles'], ['etalonnage', 'Étalonnage'], ['consignation', 'Consignation'], ['liens', 'Risques / NC / CAPA'], ['historique', 'Historique']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
+      </div>
+      {tab === 'identification' && (
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          {eq.type && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Type</p><p style={{ color: C.text }}>{eq.type}{eq.sousType ? ` / ${eq.sousType}` : ''}</p></div>}
+          {(eq.marque || eq.modele) && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Marque / Modèle</p><p style={{ color: C.text }}>{eq.marque || '—'} {eq.modele || ''}</p></div>}
+          {eq.numeroSerie && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>N° de série</p><p style={{ color: C.text }}>{eq.numeroSerie}</p></div>}
+          {eq.anneeFabrication && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Année de fabrication</p><p style={{ color: C.text }}>{eq.anneeFabrication}</p></div>}
+          {eq.fournisseur && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Fournisseur</p><p style={{ color: C.text }}>{eq.fournisseur.nom}</p></div>}
+          {eq.workUnit && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Service / unité</p><p style={{ color: C.text }}>{eq.workUnit.name}</p></div>}
+          {(eq.batiment || eq.zone) && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Bâtiment / Zone</p><p style={{ color: C.text }}>{eq.batiment || '—'} {eq.zone || ''}</p></div>}
+          {eq.responsable && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Responsable</p><p style={{ color: C.text }}>{eq.responsable.firstName} {eq.responsable.lastName}</p></div>}
+          {eq.utilisateursAutorises && <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Utilisateurs autorisés</p><p style={{ color: C.text }}>{eq.utilisateursAutorises}</p></div>}
+          {(eq.criticiteSecurite != null || eq.criticiteQualite != null || eq.criticiteEnvironnement != null || eq.criticiteProduction != null) && (
+            <div className="col-span-2">
+              <p className="text-xs font-semibold mb-1" style={{ color: C.textMuted }}>Criticité par axe</p>
+              <div className="flex gap-4 text-xs" style={{ color: C.text }}>
+                <span>Sécurité : {eq.criticiteSecurite ?? '—'}</span><span>Qualité : {eq.criticiteQualite ?? '—'}</span><span>Environnement : {eq.criticiteEnvironnement ?? '—'}</span><span>Production : {eq.criticiteProduction ?? '—'}</span>
+              </div>
+            </div>
+          )}
+          {eq.notes && <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Notes</p><p style={{ color: C.text }}>{eq.notes}</p></div>}
+        </div>
+      )}
+      {tab === 'maintenance' && <EquipmentMaintenanceTab equipment={eq} onChanged={reload} />}
+      {tab === 'controles' && <EquipmentControlsTab equipment={eq} onChanged={reload} />}
+      {tab === 'etalonnage' && <EquipmentCalibrationsTab equipment={eq} onChanged={reload} />}
+      {tab === 'consignation' && <EquipmentConsignationsTab equipment={eq} onChanged={reload} />}
+      {tab === 'liens' && <EquipmentLinksTab equipment={eq} onChanged={reload} />}
+      {tab === 'historique' && <EquipmentHistoryTab equipment={eq} />}
+    </Modal>
+  );
+}
+
 function EquipmentPage() {
   const C = useTheme();
   const equipment = useCollection('/business/equipment');
+  const dashboardQ = useCollection('/business/equipment-dashboard');
   const [showForm, setShowForm] = useState(false);
-  const [selected, setSelected] = useState(null);
+  const [detailId, setDetailId] = useState(null);
+  const [filter, setFilter] = useState('TOUS');
   if (equipment.loading) return <LoadingPanel />;
   if (equipment.error) return <ErrorPanel message={equipment.error} onRetry={equipment.reload} />;
   const list = equipment.data || [];
-  const statutLabel = { ACTIVE: 'Conforme', MAINTENANCE: 'Sous surveillance', HORS_SERVICE: 'Non conforme' };
-
+  const filtered = list.filter((e) => {
+    if (filter === 'TOUS') return true;
+    if (filter === 'A_JOUR') return !equipmentIsOverdue(e) && !equipmentHasNonConformiteOuverte(e) && e.etat === 'ACTIF';
+    if (filter === 'EN_RETARD') return equipmentIsOverdue(e);
+    if (filter === 'NON_CONFORMES') return equipmentHasNonConformiteOuverte(e);
+    if (filter === 'MAINTENANCE') return e.etat === 'EN_MAINTENANCE';
+    if (filter === 'HORS_SERVICE') return ['HORS_SERVICE', 'CONSIGNE', 'REFORME', 'MIS_AU_REBUT'].includes(e.etat);
+    if (filter === 'CRITIQUES') return e.criticiteNiveau === 'CRITIQUE';
+    return true;
+  });
+  const dash = dashboardQ.data;
   return (
     <div className="space-y-6">
-      {(showForm || selected) && <EquipmentForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={equipment.reload} />}
+      {showForm && <EquipmentForm onClose={() => setShowForm(false)} onCreated={() => { equipment.reload(); dashboardQ.reload(); }} />}
+      {detailId && <EquipmentDetailModal equipmentId={detailId} onClose={() => setDetailId(null)} onChanged={() => { equipment.reload(); dashboardQ.reload(); }} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
         <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel équipement</button>
       </div>
       <div className="flex flex-wrap gap-3">
         <KpiCard label="Équipements" value={list.length} color={C.blue} icon={Cog} />
-        <KpiCard label="Hors service" value={list.filter((e) => e.status === 'HORS_SERVICE').length} color={C.red} icon={AlertTriangle} />
+        <KpiCard label="En retard" value={list.filter(equipmentIsOverdue).length} color={C.red} icon={AlertTriangle} />
+        <KpiCard label="Non conformes" value={list.filter(equipmentHasNonConformiteOuverte).length} color={C.amber} icon={FileWarning} />
+        <KpiCard label="Critiques" value={list.filter((e) => e.criticiteNiveau === 'CRITIQUE').length} color={C.red} icon={Shield} />
+        <KpiCard label="Hors service" value={list.filter((e) => ['HORS_SERVICE', 'CONSIGNE', 'REFORME', 'MIS_AU_REBUT'].includes(e.etat)).length} color={C.textMuted} icon={Wrench} />
       </div>
-      <Panel title="Registre des équipements">
-        {list.length
-          ? <DataTable columns={['Nom', 'Catégorie', 'Localisation', 'Prochaine inspection', 'Statut']}
-              rows={list.map((e) => [e.name, e.category || '—', e.location || '—', e.nextInspectionAt ? new Date(e.nextInspectionAt).toLocaleDateString('fr-FR') : '—', <StatusChip statut={statutLabel[e.status] || e.status} />])}
-              onRowClick={(i) => setSelected(list[i])} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun équipement enregistré pour le moment</p>}
+      <div className="flex flex-wrap gap-2">
+        {[['TOUS', 'Tous'], ['A_JOUR', 'À jour'], ['EN_RETARD', 'En retard'], ['NON_CONFORMES', 'Non conformes'], ['MAINTENANCE', 'Maintenance'], ['HORS_SERVICE', 'Hors service'], ['CRITIQUES', 'Critiques']].map(([id, label]) => (
+          <button key={id} onClick={() => setFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: filter === id ? C.blue : C.cardAlt, color: filter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
+        ))}
+      </div>
+      <Panel title="Registre des équipements" subtitle={`${filtered.length} équipement(s)`}>
+        {filtered.length
+          ? <DataTable columns={['Code', 'Équipement', 'Catégorie', 'Site', 'Responsable', 'État', 'Criticité', 'Prochaine échéance']}
+              rows={filtered.map((e) => [
+                e.code, e.name, e.categoryEq?.label || e.category || '—', e.site?.name || '—', e.responsable ? `${e.responsable.firstName} ${e.responsable.lastName}` : '—',
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${equipmentEtatColor(C, e.etat)}22`, color: equipmentEtatColor(C, e.etat) }}>{EQUIPMENT_ETAT_LABELS[e.etat] || e.etat}</span>,
+                e.criticiteNiveau ? <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${equipmentCriticiteColor(C, e.criticiteNiveau)}22`, color: equipmentCriticiteColor(C, e.criticiteNiveau) }}>{EQUIPMENT_CRITICITE_LABELS[e.criticiteNiveau]}</span> : '—',
+                equipmentNextDueDate(e) ? <span style={{ color: equipmentIsOverdue(e) ? C.red : C.text }}>{equipmentNextDueDate(e).toLocaleDateString('fr-FR')}</span> : '—',
+              ])} onRowClick={(i) => setDetailId(filtered[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun équipement pour ce filtre</p>}
       </Panel>
     </div>
   );

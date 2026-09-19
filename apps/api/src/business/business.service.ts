@@ -1376,7 +1376,8 @@ import { writeAudit } from '../common/audit-log.helper';
  // === MODULE ÉQUIPEMENTS — Phase 1 : fondations, criticité, chaîne
  // Équipement -> Risque -> Contrôle -> NC -> CAPA ===
  equipmentInclude = { categoryEq:true, site:true, workUnit:true, responsable:true, fournisseur:true,
-  risks:{orderBy:{code:'desc' as const}}, nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}}, safetyEvents:{orderBy:{occurredAt:'desc' as const}} };
+  risks:{orderBy:{code:'desc' as const}}, nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}}, safetyEvents:{orderBy:{occurredAt:'desc' as const}},
+  maintenancePlans:{where:{actif:true},orderBy:{dateProchaine:'asc' as const}}, controls:{orderBy:{dateProchainControle:'asc' as const}}, calibrations:{orderBy:{dateProchaineEtalonnage:'asc' as const}}, consignations:{where:{statut:'EN_COURS'},orderBy:{dateDebut:'desc' as const}} };
  equipmentList(){return this.db.equipment.findMany({include:this.equipmentInclude,orderBy:{name:'asc'}})}
  equipmentGet(id:string){return this.db.equipment.findUnique({where:{id},include:this.equipmentInclude})}
  async equipmentSettingsGet(){
