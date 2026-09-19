@@ -2374,54 +2374,6 @@ function TrainingForm({ record, onClose, onCreated }) {
   );
 }
 
-function ObjectifForm({ record, onClose, onCreated }) {
-  const C = useTheme();
-  const editing = !!record;
-  const processusQ = useCollection('/business/processus');
-  const [form, setForm] = useState({ titre: record?.titre || '', pilier: record?.pilier || '', cible: record?.cible ?? '', actuel: record?.actuel ?? 0, unite: record?.unite || '', echeance: record?.echeance ? new Date(record.echeance).toISOString().slice(0, 10) : '', processusId: record?.processusId || '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  async function submit(e) {
-    e.preventDefault(); setSaving(true); setError(null);
-    try {
-      const payload = { ...form, echeance: form.echeance ? new Date(form.echeance).toISOString() : null, processusId: form.processusId || null };
-      if (editing) await api.patch(`/business/objectifs-qhse/${record.id}`, payload);
-      else await api.post('/business/objectifs-qhse', { code: genCode('OBJ'), ...payload });
-      onCreated(); onClose();
-    } catch (err) { setError(err.message); }
-    setSaving(false);
-  }
-  async function del() {
-    setSaving(true);
-    try { await confirmAndDelete(record.titre, `/business/objectifs-qhse/${record.id}`, () => { onCreated(); onClose(); }); }
-    catch (err) { setError(err.message); }
-    setSaving(false);
-  }
-  return (
-    <Modal title={editing ? "Modifier l'objectif" : 'Nouvel objectif QHSE'} onClose={onClose}>
-      <form onSubmit={submit}>
-        <FormField label="Titre"><input required value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Pilier"><select value={form.pilier} onChange={(e) => setForm({ ...form, pilier: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option><option>Qualité</option><option>Sécurité</option><option>Hygiène</option><option>Environnement</option></select></FormField>
-        <div className="grid grid-cols-3 gap-3">
-          <FormField label="Cible"><input required type="number" step="any" value={form.cible} onChange={(e) => setForm({ ...form, cible: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-          <FormField label="Actuel"><input type="number" step="any" value={form.actuel} onChange={(e) => setForm({ ...form, actuel: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-          <FormField label="Unité"><input value={form.unite} onChange={(e) => setForm({ ...form, unite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="%" /></FormField>
-        </div>
-        <FormField label="Échéance"><input type="date" value={form.echeance} onChange={(e) => setForm({ ...form, echeance: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Processus concerné (optionnel)">
-          <select value={form.processusId} onChange={(e) => setForm({ ...form, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
-            <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
-          </select>
-        </FormField>
-        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
-        <div className="flex gap-2">
-          {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
-          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Enregistrer'}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
 
 function CategoryForm({ record, endpoint, label, onClose, onCreated }) {
   const C = useTheme();
@@ -10349,36 +10301,617 @@ function DocumentationPage() {
     </div>
   );
 }
-function ObjectifsPage() {
+// ============================================================================
+// OBJECTIFS QHSE — Interface complète (tableau de bord, matrice, formulaire
+// SMART, KPI manuels/auto, actions CAPA et risques liés, revues PDCA,
+// bibliothèque de modèles, checklist de recette CA-01 à CA-49). Toutes les
+// données viennent de /business/objectifs-qhse* ; aucun calcul dupliqué
+// côté client — avancement/statut/SMART sont ceux renvoyés par l'API.
+// ============================================================================
+const OBJECTIF_FAMILLES = ['QUALITE', 'HYGIENE', 'SECURITE', 'ENVIRONNEMENT', 'TRANSVERSAL'];
+const OBJECTIF_FAMILLE_LABELS = { QUALITE: 'Qualité', HYGIENE: 'Hygiène', SECURITE: 'Sécurité', ENVIRONNEMENT: 'Environnement', TRANSVERSAL: 'Transversal' };
+const OBJECTIF_CLASSIFICATIONS = ['STRATEGIQUE', 'TACTIQUE', 'OPERATIONNEL', 'REGLEMENTAIRE', 'CLIENT', 'AMELIORATION_CONTINUE', 'CONFORMITE', 'PREVENTION'];
+const OBJECTIF_CLASSIFICATION_LABELS = { STRATEGIQUE: 'Stratégique', TACTIQUE: 'Tactique', OPERATIONNEL: 'Opérationnel', REGLEMENTAIRE: 'Réglementaire', CLIENT: 'Client', AMELIORATION_CONTINUE: 'Amélioration continue', CONFORMITE: 'Conformité', PREVENTION: 'Prévention' };
+const OBJECTIF_PRIORITES = ['CRITIQUE', 'HAUTE', 'MOYENNE', 'FAIBLE'];
+const OBJECTIF_FREQUENCES = ['QUOTIDIENNE', 'HEBDOMADAIRE', 'MENSUELLE', 'TRIMESTRIELLE', 'SEMESTRIELLE', 'ANNUELLE'];
+const OBJECTIF_STATUT_LABELS = { ATTEINT: 'Atteint', EN_COURS: 'En cours', EN_RETARD: 'En retard', A_RISQUE: 'À risque', A_SURVEILLER: 'À surveiller', NON_DEMARRE: 'Non démarré', ARCHIVE: 'Archivé', SUSPENDU: 'Suspendu', ABANDONNE: 'Abandonné', CLOTURE: 'Clôturé' };
+const RECETTE_STATUT_LABELS = { NON_TESTE: 'Non testé', EN_COURS: 'En cours', CONFORME: 'Conforme', NON_CONFORME: 'Non conforme', BLOQUE: 'Bloqué' };
+function objectifStatutColor(C, statut) {
+  return { ATTEINT: C.green, EN_COURS: C.blue, EN_RETARD: C.red, A_RISQUE: C.red, A_SURVEILLER: C.amber, NON_DEMARRE: C.textMuted, ARCHIVE: C.textMuted, SUSPENDU: C.amber, ABANDONNE: C.textMuted, CLOTURE: C.green }[statut] || C.textMuted;
+}
+function recetteStatutColor(C, statut) {
+  return { NON_TESTE: C.textMuted, EN_COURS: C.blue, CONFORME: C.green, NON_CONFORME: C.red, BLOQUE: C.red }[statut] || C.textMuted;
+}
+function ObjectifForm({ record, onClose, onCreated }) {
   const C = useTheme();
-  const objectifs = useCollection('/business/objectifs-qhse');
-  const [showForm, setShowForm] = useState(false);
-  const [selected, setSelected] = useState(null);
-  if (objectifs.loading) return <LoadingPanel />;
-  if (objectifs.error) return <ErrorPanel message={objectifs.error} onRetry={objectifs.reload} />;
-  const list = objectifs.data || [];
-
+  const editing = !!(record && record.id);
+  const usersQ = useCollection('/users');
+  const processusQ = useCollection('/business/processus');
+  const workUnitsQ = useCollection('/business/work-units');
+  const [form, setForm] = useState({
+    titre: record?.titre || '', description: record?.description || '',
+    famille: record?.famille || 'TRANSVERSAL', classification: record?.classification || '', categorie: record?.categorie || '',
+    activiteConcernee: record?.activiteConcernee || '', zone: record?.zone || '',
+    valeurInitiale: record?.valeurInitiale ?? '', dateReference: record?.dateReference ? new Date(record.dateReference).toISOString().slice(0, 10) : '',
+    cible: record?.cible ?? '', actuel: record?.actuel ?? 0, sensInverse: !!record?.sensInverse, unite: record?.unite || '',
+    seuilMin: record?.seuilMin ?? '', seuilMax: record?.seuilMax ?? '', frequenceMesure: record?.frequenceMesure || '',
+    dateDebut: record?.dateDebut ? new Date(record.dateDebut).toISOString().slice(0, 10) : '', echeance: record?.echeance ? new Date(record.echeance).toISOString().slice(0, 10) : '',
+    responsableId: record?.responsableId || '', contributeurIds: record?.contributeurIds || [], valideurId: record?.valideurId || '',
+    directionResponsable: record?.directionResponsable || '', budget: record?.budget ?? '',
+    priorite: record?.priorite || '', importanceStrategique: record?.importanceStrategique || '',
+    processusId: record?.processusId || '', workUnitId: record?.workUnitId || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      const payload = {
+        ...form,
+        dateReference: form.dateReference ? new Date(form.dateReference).toISOString() : null,
+        dateDebut: form.dateDebut ? new Date(form.dateDebut).toISOString() : null,
+        echeance: form.echeance ? new Date(form.echeance).toISOString() : null,
+        processusId: form.processusId || null, workUnitId: form.workUnitId || null,
+        responsableId: form.responsableId || null, valideurId: form.valideurId || null,
+        valeurInitiale: form.valeurInitiale === '' ? null : form.valeurInitiale,
+        seuilMin: form.seuilMin === '' ? null : form.seuilMin, seuilMax: form.seuilMax === '' ? null : form.seuilMax,
+        budget: form.budget === '' ? null : form.budget,
+      };
+      if (editing) await api.patch(`/business/objectifs-qhse/${record.id}`, payload);
+      else await api.post('/business/objectifs-qhse', { code: genCode('OBJ'), ...payload });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function del() {
+    setSaving(true);
+    try { await confirmAndDelete(record.titre, `/business/objectifs-qhse/${record.id}`, () => { onCreated(); onClose(); }); }
+    catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  function toggleContributeur(id) {
+    setForm((f) => ({ ...f, contributeurIds: f.contributeurIds.includes(id) ? f.contributeurIds.filter((x) => x !== id) : [...f.contributeurIds, id] }));
+  }
   return (
-    <div className="space-y-4">
-      {(showForm || selected) && <ObjectifForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={objectifs.reload} />}
-      <div className="flex items-center justify-between">
-        <LiveBadge />
+    <Modal title={editing ? "Modifier l'objectif" : 'Nouvel objectif QHSE'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <FormField label="Titre"><input required value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Description"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Famille"><select value={form.famille} onChange={(e) => setForm({ ...form, famille: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>{OBJECTIF_FAMILLES.map((f) => <option key={f} value={f}>{OBJECTIF_FAMILLE_LABELS[f]}</option>)}</select></FormField>
+          <FormField label="Classification"><select value={form.classification} onChange={(e) => setForm({ ...form, classification: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{OBJECTIF_CLASSIFICATIONS.map((c) => <option key={c} value={c}>{OBJECTIF_CLASSIFICATION_LABELS[c]}</option>)}</select></FormField>
+          <FormField label="Priorité"><select value={form.priorite} onChange={(e) => setForm({ ...form, priorite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{OBJECTIF_PRIORITES.map((p) => <option key={p} value={p}>{p}</option>)}</select></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Catégorie"><input value={form.categorie} onChange={(e) => setForm({ ...form, categorie: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Activité concernée"><input value={form.activiteConcernee} onChange={(e) => setForm({ ...form, activiteConcernee: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          <FormField label="Valeur initiale"><input type="number" step="any" value={form.valeurInitiale} onChange={(e) => setForm({ ...form, valeurInitiale: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Cible"><input required type="number" step="any" value={form.cible} onChange={(e) => setForm({ ...form, cible: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Actuel"><input type="number" step="any" value={form.actuel} onChange={(e) => setForm({ ...form, actuel: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Unité"><input value={form.unite} onChange={(e) => setForm({ ...form, unite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="%" /></FormField>
+        </div>
+        <FormField label="Sens de progression">
+          <label className="flex items-center gap-2 text-sm" style={{ color: C.text }}>
+            <input type="checkbox" checked={form.sensInverse} onChange={(e) => setForm({ ...form, sensInverse: e.target.checked })} /> Sens inverse (une valeur plus basse est un progrès — ex. nombre d'accidents, déchets)
+          </label>
+        </FormField>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Seuil min"><input type="number" step="any" value={form.seuilMin} onChange={(e) => setForm({ ...form, seuilMin: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Seuil max"><input type="number" step="any" value={form.seuilMax} onChange={(e) => setForm({ ...form, seuilMax: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Fréquence de mesure"><select value={form.frequenceMesure} onChange={(e) => setForm({ ...form, frequenceMesure: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{OBJECTIF_FREQUENCES.map((f) => <option key={f} value={f}>{f.charAt(0) + f.slice(1).toLowerCase()}</option>)}</select></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Date de début"><input type="date" value={form.dateDebut} onChange={(e) => setForm({ ...form, dateDebut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Échéance"><input type="date" value={form.echeance} onChange={(e) => setForm({ ...form, echeance: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable (pilote)">
+            <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Valideur">
+            <select value={form.valideurId} onChange={(e) => setForm({ ...form, valideurId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Contributeurs">
+          <div className="flex flex-wrap gap-2">
+            {(usersQ.data || []).map((u) => (
+              <button type="button" key={u.id} onClick={() => toggleContributeur(u.id)} className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: form.contributeurIds.includes(u.id) ? C.blue : C.cardAlt, color: form.contributeurIds.includes(u.id) ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{u.firstName} {u.lastName}</button>
+            ))}
+          </div>
+        </FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Direction responsable"><input value={form.directionResponsable} onChange={(e) => setForm({ ...form, directionResponsable: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Budget"><input type="number" step="any" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Importance stratégique"><input value={form.importanceStrategique} onChange={(e) => setForm({ ...form, importanceStrategique: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Processus concerné (optionnel)">
+            <select value={form.processusId} onChange={(e) => setForm({ ...form, processusId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Unité de travail (optionnel)">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function ObjectifKpiRow({ kpi, onChanged }) {
+  const C = useTheme();
+  async function del() {
+    if (!window.confirm(`Supprimer le KPI « ${kpi.nom} » ?`)) return;
+    await api.del(`/business/objectifs-qhse-kpis/${kpi.id}`);
+    onChanged();
+  }
+  return (
+    <div className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+      <div>
+        <div className="text-sm font-medium" style={{ color: C.text }}>{kpi.nom} {kpi.sourceType === 'AUTO' && <span className="text-[10px] ml-1 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>AUTO{kpi.sourceLabel ? ` · ${kpi.sourceLabel}` : ''}</span>}</div>
+        <div className="text-xs" style={{ color: C.textMuted }}>{kpi.valeurActuelle ?? '—'} {kpi.unite || ''} {kpi.cible != null ? `/ cible ${kpi.cible}` : ''} {kpi.avancement != null ? `· ${kpi.avancement}%` : ''}</div>
+      </div>
+      <button onClick={del}><X size={14} color={C.textMuted} /></button>
+    </div>
+  );
+}
+function ObjectifKpiAddForm({ objectifId, onChanged }) {
+  const C = useTheme();
+  const catalogQ = useCollection('/business/objectifs-qhse/kpi-catalog');
+  const [sourceType, setSourceType] = useState('MANUEL');
+  const [form, setForm] = useState({ nom: '', unite: '', cible: '', valeurInitiale: '', valeurActuelle: '', sensInverse: false, sourceKey: '' });
+  const [saving, setSaving] = useState(false);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true);
+    try {
+      const catalogEntry = (catalogQ.data || []).find((c) => c.key === form.sourceKey);
+      const payload = sourceType === 'AUTO'
+        ? { nom: catalogEntry?.nom || form.nom, sourceType: 'AUTO', sourceKey: form.sourceKey, unite: catalogEntry?.unite, sensInverse: catalogEntry?.sensInverse, cible: form.cible === '' ? null : form.cible, valeurInitiale: form.valeurInitiale === '' ? null : form.valeurInitiale }
+        : { nom: form.nom, sourceType: 'MANUEL', unite: form.unite, sensInverse: form.sensInverse, cible: form.cible === '' ? null : form.cible, valeurInitiale: form.valeurInitiale === '' ? null : form.valeurInitiale, valeurActuelle: form.valeurActuelle === '' ? null : form.valeurActuelle };
+      await api.post(`/business/objectifs-qhse/${objectifId}/kpis`, payload);
+      setForm({ nom: '', unite: '', cible: '', valeurInitiale: '', valeurActuelle: '', sensInverse: false, sourceKey: '' });
+      onChanged();
+    } finally { setSaving(false); }
+  }
+  return (
+    <form onSubmit={submit} className="mt-2 space-y-2">
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setSourceType('MANUEL')} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: sourceType === 'MANUEL' ? C.blue : C.cardAlt, color: sourceType === 'MANUEL' ? '#fff' : C.textMuted }}>Manuel</button>
+        <button type="button" onClick={() => setSourceType('AUTO')} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: sourceType === 'AUTO' ? C.blue : C.cardAlt, color: sourceType === 'AUTO' ? '#fff' : C.textMuted }}>Automatique (catalogue)</button>
+      </div>
+      {sourceType === 'AUTO' ? (
+        <select required value={form.sourceKey} onChange={(e) => setForm({ ...form, sourceKey: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+          <option value="">Choisir un indicateur…</option>
+          {(catalogQ.data || []).map((c) => <option key={c.key} value={c.key}>{c.nom} ({c.categorie}) — valeur actuelle : {c.valeur ?? '—'} {c.unite}</option>)}
+        </select>
+      ) : (
+        <input required placeholder="Nom du KPI" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+      )}
+      <div className="grid grid-cols-3 gap-2">
+        <input type="number" step="any" placeholder="Val. initiale" value={form.valeurInitiale} onChange={(e) => setForm({ ...form, valeurInitiale: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        <input type="number" step="any" placeholder="Cible" value={form.cible} onChange={(e) => setForm({ ...form, cible: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        {sourceType === 'MANUEL' && <input type="number" step="any" placeholder="Val. actuelle" value={form.valeurActuelle} onChange={(e) => setForm({ ...form, valeurActuelle: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />}
+      </div>
+      {sourceType === 'MANUEL' && <label className="flex items-center gap-2 text-xs" style={{ color: C.textMuted }}><input type="checkbox" checked={form.sensInverse} onChange={(e) => setForm({ ...form, sensInverse: e.target.checked })} /> Sens inverse</label>}
+      <button type="submit" disabled={saving} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter le KPI</button>
+    </form>
+  );
+}
+function ObjectifRiskAddForm({ objectifId, onChanged }) {
+  const C = useTheme();
+  const risksQ = useCollection('/business/risks');
+  const [riskId, setRiskId] = useState('');
+  const [type, setType] = useState('RISQUE');
+  async function submit(e) {
+    e.preventDefault();
+    if (!riskId) return;
+    await api.post(`/business/objectifs-qhse/${objectifId}/risks`, { riskId, type });
+    setRiskId(''); onChanged();
+  }
+  return (
+    <form onSubmit={submit} className="flex gap-2 mt-2">
+      <select value={riskId} onChange={(e) => setRiskId(e.target.value)} className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+        <option value="">Choisir un risque…</option>{(risksQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.code} — {r.hazard}</option>)}
+      </select>
+      <select value={type} onChange={(e) => setType(e.target.value)} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+        <option value="RISQUE">Risque</option><option value="OPPORTUNITE">Opportunité</option>
+      </select>
+      <button type="submit" className="text-xs px-3 py-2 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Lier</button>
+    </form>
+  );
+}
+function ObjectifActionAddForm({ objectifId, onChanged }) {
+  const C = useTheme();
+  const actionsQ = useCollection('/business/actions');
+  const usersQ = useCollection('/users');
+  const [mode, setMode] = useState('CREATE');
+  const [existingId, setExistingId] = useState('');
+  const [form, setForm] = useState({ title: '', dueDate: '', responsibleId: '', priority: 2 });
+  async function submitCreate(e) {
+    e.preventDefault();
+    await api.post(`/business/objectifs-qhse/${objectifId}/actions`, { ...form, responsibleId: form.responsibleId || null, dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null });
+    setForm({ title: '', dueDate: '', responsibleId: '', priority: 2 }); onChanged();
+  }
+  async function submitLink(e) {
+    e.preventDefault();
+    if (!existingId) return;
+    await api.post(`/business/objectifs-qhse/${objectifId}/actions/${existingId}/link`, {});
+    setExistingId(''); onChanged();
+  }
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setMode('CREATE')} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: mode === 'CREATE' ? C.blue : C.cardAlt, color: mode === 'CREATE' ? '#fff' : C.textMuted }}>Nouvelle action</button>
+        <button type="button" onClick={() => setMode('LINK')} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: mode === 'LINK' ? C.blue : C.cardAlt, color: mode === 'LINK' ? '#fff' : C.textMuted }}>Lier une action existante</button>
+      </div>
+      {mode === 'CREATE' ? (
+        <form onSubmit={submitCreate} className="space-y-2">
+          <input required placeholder="Titre de l'action" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+            <select value={form.responsibleId} onChange={(e) => setForm({ ...form, responsibleId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">Responsable…</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </div>
+          <button type="submit" className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Créer l'action CAPA</button>
+        </form>
+      ) : (
+        <form onSubmit={submitLink} className="flex gap-2">
+          <select value={existingId} onChange={(e) => setExistingId(e.target.value)} className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Choisir une action…</option>{(actionsQ.data || []).filter((a) => !a.objectifQhseId).map((a) => <option key={a.id} value={a.id}>{a.code} — {a.title}</option>)}
+          </select>
+          <button type="submit" className="text-xs px-3 py-2 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Lier</button>
+        </form>
+      )}
+    </div>
+  );
+}
+function ObjectifCommentForm({ objectifId, onChanged }) {
+  const C = useTheme();
+  const [contenu, setContenu] = useState('');
+  async function submit(e) {
+    e.preventDefault();
+    if (!contenu.trim()) return;
+    await api.post(`/business/objectifs-qhse/${objectifId}/comments`, { contenu });
+    setContenu(''); onChanged();
+  }
+  return (
+    <form onSubmit={submit} className="flex gap-2 mt-2">
+      <input value={contenu} onChange={(e) => setContenu(e.target.value)} placeholder="Ajouter un commentaire de suivi…" className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+      <button type="submit" className="text-xs px-3 py-2 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Envoyer</button>
+    </form>
+  );
+}
+function ObjectifReviewForm({ objectifId, cibleActuelle, onChanged }) {
+  const C = useTheme();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ resultats: '', ecarts: '', analyseCauses: '', decision: '', nouvelleCible: '', actionsProposees: '' });
+  async function submit(e) {
+    e.preventDefault();
+    await api.post(`/business/objectifs-qhse/${objectifId}/reviews`, { ...form, nouvelleCible: form.nouvelleCible === '' ? null : form.nouvelleCible });
+    setForm({ resultats: '', ecarts: '', analyseCauses: '', decision: '', nouvelleCible: '', actionsProposees: '' });
+    setOpen(false); onChanged();
+  }
+  if (!open) return <button onClick={() => setOpen(true)} className="text-xs px-3 py-1.5 rounded-lg font-medium mt-2" style={{ backgroundColor: 'transparent', border: '1px solid currentColor' }}>+ Nouvelle revue périodique</button>;
+  return (
+    <form onSubmit={submit} className="mt-2 space-y-2 p-3 rounded-lg" style={{ backgroundColor: 'rgba(128,128,128,0.08)' }}>
+      <textarea rows={2} placeholder="Résultats constatés" value={form.resultats} onChange={(e) => setForm({ ...form, resultats: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+      <textarea rows={2} placeholder="Écarts identifiés" value={form.ecarts} onChange={(e) => setForm({ ...form, ecarts: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+      <textarea rows={2} placeholder="Analyse des causes" value={form.analyseCauses} onChange={(e) => setForm({ ...form, analyseCauses: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+      <select value={form.decision} onChange={(e) => setForm({ ...form, decision: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+        <option value="">Décision…</option>
+        <option value="MAINTIEN">Maintien de l'objectif</option>
+        <option value="REVISION_CIBLE">Révision de la cible</option>
+        <option value="CLOTURE">Clôture</option>
+        <option value="ABANDON">Abandon</option>
+      </select>
+      {form.decision === 'REVISION_CIBLE' && <input type="number" step="any" placeholder={`Nouvelle cible (actuelle : ${cibleActuelle})`} value={form.nouvelleCible} onChange={(e) => setForm({ ...form, nouvelleCible: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />}
+      <textarea rows={2} placeholder="Actions proposées" value={form.actionsProposees} onChange={(e) => setForm({ ...form, actionsProposees: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setOpen(false)} className="px-3 py-2 rounded-lg text-xs" style={{ backgroundColor: 'transparent', border: '1px solid currentColor' }}>Annuler</button>
+        <button type="submit" className="flex-1 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Enregistrer la revue</button>
+      </div>
+    </form>
+  );
+}
+function ObjectifDetailModal({ objectifId, onClose, onChanged }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/objectifs-qhse/${objectifId}`);
+  const [showEdit, setShowEdit] = useState(false);
+  function refresh() { detailQ.reload(); onChanged(); }
+  if (detailQ.loading) return <Modal title="Objectif QHSE" onClose={onClose}><LoadingPanel /></Modal>;
+  if (detailQ.error) return <Modal title="Objectif QHSE" onClose={onClose}><ErrorPanel message={detailQ.error} onRetry={detailQ.reload} /></Modal>;
+  const o = detailQ.data;
+  async function restore() { await api.post(`/business/objectifs-qhse/${o.id}/restore`, {}); refresh(); }
+  async function duplicate() {
+    const annee = window.prompt('Dupliquer pour quelle année ?', `${new Date().getFullYear() + 1}`);
+    if (!annee) return;
+    await api.post(`/business/objectifs-qhse/${o.id}/duplicate`, { annee: Number(annee) });
+    refresh();
+  }
+  async function unlinkAction(actionId) { await api.post(`/business/objectifs-qhse-actions/${actionId}/unlink`, {}); refresh(); }
+  async function unlinkRisk(linkId) { await api.del(`/business/objectifs-qhse-risks/${linkId}`); refresh(); }
+  if (showEdit) return <ObjectifForm record={o} onClose={() => setShowEdit(false)} onCreated={refresh} />;
+  return (
+    <Modal title={o.titre} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {regulatoryBadge(C, OBJECTIF_FAMILLE_LABELS[o.famille] || o.famille, C.blue)}
+          {regulatoryBadge(C, OBJECTIF_STATUT_LABELS[o.statutCalcule] || o.statutCalcule, objectifStatutColor(C, o.statutCalcule))}
+          {o.priorite && regulatoryBadge(C, o.priorite, C.amber)}
+          {!o.smart.conforme && regulatoryBadge(C, 'Non SMART', C.red)}
+          {o.archivedAt && regulatoryBadge(C, 'Archivé', C.textMuted)}
+        </div>
+        {o.description && <p className="text-sm" style={{ color: C.textMuted }}>{o.description}</p>}
+        <div>
+          <div className="flex justify-between text-sm mb-1"><span style={{ color: C.text }}>{o.actuel}{o.unite} → cible {o.cible}{o.unite}</span><span style={{ color: C.text }}>{o.avancement != null ? `${o.avancement}%` : '—'}</span></div>
+          <div className="h-2 rounded-full" style={{ backgroundColor: C.border }}><div className="h-2 rounded-full" style={{ width: `${o.avancement ?? 0}%`, backgroundColor: objectifStatutColor(C, o.statutCalcule) }} /></div>
+        </div>
+        {!o.smart.conforme && (
+          <div className="text-xs p-2 rounded-lg" style={{ backgroundColor: `${C.red}11`, color: C.red }}>
+            Critères SMART manquants : {o.smart.manquants.join(', ')}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3 text-xs" style={{ color: C.textMuted }}>
+          <div>Responsable : <span style={{ color: C.text }}>{o.responsable ? `${o.responsable.firstName} ${o.responsable.lastName}` : '—'}</span></div>
+          <div>Valideur : <span style={{ color: C.text }}>{o.valideur ? `${o.valideur.firstName} ${o.valideur.lastName}` : '—'}</span></div>
+          <div>Échéance : <span style={{ color: C.text }}>{o.echeance ? new Date(o.echeance).toLocaleDateString('fr-FR') : '—'}</span></div>
+          <div>Processus : <span style={{ color: C.text }}>{o.processus?.nom || '—'}</span></div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setShowEdit(true)} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Modifier</button>
+          <button onClick={duplicate} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Dupliquer (année suivante)</button>
+          {o.archivedAt && <button onClick={restore} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.green }}>Restaurer</button>}
+        </div>
+        <Panel title={`Indicateurs KPI (${o.kpis.length})`}>
+          {o.kpis.map((k) => <ObjectifKpiRow key={k.id} kpi={k} onChanged={refresh} />)}
+          <ObjectifKpiAddForm objectifId={o.id} onChanged={refresh} />
+        </Panel>
+        <Panel title={`Actions CAPA liées (${(o.actions || []).length})`}>
+          {(o.actions || []).map((a) => (
+            <div key={a.id} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div><div className="text-sm" style={{ color: C.text }}>{a.code} — {a.title}</div><div className="text-xs" style={{ color: C.textMuted }}>{a.status} {a.dueDate ? `· échéance ${new Date(a.dueDate).toLocaleDateString('fr-FR')}` : ''} {a.responsible ? `· ${a.responsible.firstName} ${a.responsible.lastName}` : ''}</div></div>
+              <button onClick={() => unlinkAction(a.id)}><X size={14} color={C.textMuted} /></button>
+            </div>
+          ))}
+          <ObjectifActionAddForm objectifId={o.id} onChanged={refresh} />
+        </Panel>
+        <Panel title={`Risques & opportunités liés (${(o.objectifRisks || []).length})`}>
+          {(o.objectifRisks || []).map((link) => (
+            <div key={link.id} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div><div className="text-sm" style={{ color: C.text }}>{link.risk?.code} — {link.risk?.hazard}</div><div className="text-xs" style={{ color: C.textMuted }}>{link.type === 'OPPORTUNITE' ? 'Opportunité' : 'Risque'}</div></div>
+              <button onClick={() => unlinkRisk(link.id)}><X size={14} color={C.textMuted} /></button>
+            </div>
+          ))}
+          <ObjectifRiskAddForm objectifId={o.id} onChanged={refresh} />
+        </Panel>
+        <Panel title={`Revues périodiques (${(o.reviews || []).length})`}>
+          {(o.reviews || []).map((r) => (
+            <div key={r.id} className="py-2 text-xs" style={{ borderTop: `1px solid ${C.border}`, color: C.textMuted }}>
+              <div style={{ color: C.text }}>{new Date(r.dateRevue).toLocaleDateString('fr-FR')} {r.decision && `· ${r.decision}`}</div>
+              {r.resultats && <div>Résultats : {r.resultats}</div>}
+              {r.ecarts && <div>Écarts : {r.ecarts}</div>}
+            </div>
+          ))}
+          <ObjectifReviewForm objectifId={o.id} cibleActuelle={o.cible} onChanged={refresh} />
+        </Panel>
+        <Panel title={`Commentaires de suivi (${(o.comments || []).length})`}>
+          {(o.comments || []).map((c) => (
+            <div key={c.id} className="py-2 text-xs" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div style={{ color: C.textMuted }}>{new Date(c.createdAt).toLocaleString('fr-FR')}</div>
+              <div style={{ color: C.text }}>{c.contenu}</div>
+            </div>
+          ))}
+          <ObjectifCommentForm objectifId={o.id} onChanged={refresh} />
+        </Panel>
+      </div>
+    </Modal>
+  );
+}
+function ObjectifsDashboardTab() {
+  const C = useTheme();
+  const dashQ = useCollection('/business/objectifs-qhse/dashboard');
+  if (dashQ.loading) return <LoadingPanel />;
+  if (dashQ.error) return <ErrorPanel message={dashQ.error} onRetry={dashQ.reload} />;
+  const d = dashQ.data;
+  const familleData = Object.entries(d.parFamille || {}).map(([k, v]) => ({ name: OBJECTIF_FAMILLE_LABELS[k] || k, value: v }));
+  const statutData = Object.entries(d.parStatut || {}).map(([k, v]) => ({ name: OBJECTIF_STATUT_LABELS[k] || k, value: v }));
+  const colors = [C.blue, C.green, C.amber, C.red, '#8B5CF6', C.textMuted];
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Objectifs actifs" value={d.total} color={C.blue} icon={Target} />
+        <KpiCard label="Atteints" value={d.atteints} color={C.green} icon={CheckCircle2} />
+        <KpiCard label="En cours" value={d.enCours} color={C.blue} icon={Activity} />
+        <KpiCard label="En retard" value={d.enRetard} color={C.red} icon={AlertTriangle} />
+        <KpiCard label="À risque" value={d.aRisque} color={C.red} icon={FileWarning} />
+        <KpiCard label="Non démarrés" value={d.nonDemarres} color={C.textMuted} icon={ClipboardList} />
+        <KpiCard label="Taux global d'atteinte" value={d.tauxGlobalAtteinte != null ? `${d.tauxGlobalAtteinte}%` : '—'} color={C.green} icon={Target} />
+      </div>
+      <p className="text-xs" style={{ color: C.textMuted }}>{d.methodeCalcul}</p>
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Actions CAPA ouvertes" value={d.actionsOuvertes} color={C.blue} icon={ClipboardList} />
+        <KpiCard label="Actions CAPA en retard" value={d.actionsEnRetard} color={C.red} icon={AlertTriangle} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Panel title="Répartition par famille QHSE">
+          {familleData.length ? <DonutChart data={familleData} colors={colors} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune donnée</p>}
+        </Panel>
+        <Panel title="Répartition par statut">
+          {statutData.length ? <DonutChart data={statutData} colors={colors} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune donnée</p>}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+function ObjectifsMatrixTab() {
+  const C = useTheme();
+  const [famille, setFamille] = useState('TOUS');
+  const [statut, setStatut] = useState('TOUS');
+  const [priorite, setPriorite] = useState('TOUS');
+  const [archived, setArchived] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const params = new URLSearchParams();
+  if (famille !== 'TOUS') params.set('famille', famille);
+  if (statut !== 'TOUS') params.set('statut', statut);
+  if (priorite !== 'TOUS') params.set('priorite', priorite);
+  if (archived) params.set('archived', 'true');
+  const qs = params.toString();
+  const listQ = useCollection(`/business/objectifs-qhse${qs ? `?${qs}` : ''}`);
+  if (listQ.loading) return <LoadingPanel />;
+  if (listQ.error) return <ErrorPanel message={listQ.error} onRetry={listQ.reload} />;
+  const list = (listQ.data || []).filter((o) => !search || normalizeText(`${o.code} ${o.titre}`).includes(normalizeText(search)));
+  return (
+    <div className="space-y-3">
+      {showForm && <ObjectifForm onClose={() => setShowForm(false)} onCreated={listQ.reload} />}
+      {selectedId && <ObjectifDetailModal objectifId={selectedId} onClose={() => setSelectedId(null)} onChanged={listQ.reload} />}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un objectif..." className="px-3 py-1.5 rounded-lg text-xs outline-none w-64" style={inputStyle(C)} />
         <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel objectif</button>
       </div>
-      {list.length === 0 && <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun objectif enregistré pour le moment</p>}
-      {list.map((o) => {
-        const pctRaw = o.cible === 0 ? (o.actuel === 0 ? 100 : 0) : Math.min(100, (o.actuel / o.cible) * 100);
-        return (
-          <Panel key={o.id} className="cursor-pointer" onClick={() => setSelected(o)}>
-            <div className="flex items-center justify-between mb-2">
-              <div><span className="text-sm font-semibold" style={{ color: C.text }}>{o.titre}</span>{o.pilier && <span className="text-xs ml-2" style={{ color: C.textMuted }}>({o.pilier})</span>}</div>
-              <span className="text-sm font-bold" style={{ color: C.text }}>{o.actuel}{o.unite} / {o.cible}{o.unite}</span>
+      <div className="flex flex-wrap gap-2">
+        <select value={famille} onChange={(e) => setFamille(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="TOUS">Toutes familles</option>{OBJECTIF_FAMILLES.map((f) => <option key={f} value={f}>{OBJECTIF_FAMILLE_LABELS[f]}</option>)}
+        </select>
+        <select value={statut} onChange={(e) => setStatut(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="TOUS">Tous statuts</option>{Object.entries(OBJECTIF_STATUT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <select value={priorite} onChange={(e) => setPriorite(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="TOUS">Toutes priorités</option>{OBJECTIF_PRIORITES.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <label className="flex items-center gap-1.5 text-xs px-2" style={{ color: C.textMuted }}>
+          <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Archivés
+        </label>
+      </div>
+      <Panel title="Matrice des objectifs QHSE" subtitle={`${list.length} objectif(s)`}>
+        {list.length
+          ? <DataTable columns={['Code', 'Titre', 'Famille', 'Responsable', 'Avancement', 'Statut']}
+              rows={list.map((o) => [o.code, o.titre.slice(0, 50), OBJECTIF_FAMILLE_LABELS[o.famille] || o.famille,
+                o.responsable ? `${o.responsable.firstName} ${o.responsable.lastName}` : '—',
+                o.avancement != null ? `${o.avancement}%` : '—',
+                regulatoryBadge(C, OBJECTIF_STATUT_LABELS[o.statutCalcule] || o.statutCalcule, objectifStatutColor(C, o.statutCalcule))])}
+              onRowClick={(i) => setSelectedId(list[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun objectif pour ce filtre</p>}
+      </Panel>
+    </div>
+  );
+}
+function ObjectifLibraryTab() {
+  const C = useTheme();
+  const libQ = useCollection('/business/objectifs-qhse/library');
+  const [prefill, setPrefill] = useState(null);
+  if (libQ.loading) return <LoadingPanel />;
+  if (libQ.error) return <ErrorPanel message={libQ.error} onRetry={libQ.reload} />;
+  const list = libQ.data || [];
+  const byFamille = {};
+  list.forEach((t) => { (byFamille[t.famille] = byFamille[t.famille] || []).push(t); });
+  return (
+    <div className="space-y-4">
+      {prefill && <ObjectifForm record={prefill} onClose={() => setPrefill(null)} onCreated={() => setPrefill(null)} />}
+      {OBJECTIF_FAMILLES.map((f) => byFamille[f] && (
+        <Panel key={f} title={OBJECTIF_FAMILLE_LABELS[f]}>
+          <div className="space-y-2">
+            {byFamille[f].map((t, i) => (
+              <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: i ? `1px solid ${C.border}` : 'none' }}>
+                <div className="text-sm" style={{ color: C.text }}>{t.titre} <span className="text-xs" style={{ color: C.textMuted }}>({t.unite}{t.sensInverse ? ', réduction' : ''})</span></div>
+                <button onClick={() => setPrefill(t)} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Utiliser ce modèle</button>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ))}
+    </div>
+  );
+}
+function ObjectifRecetteTab() {
+  const C = useTheme();
+  const recQ = useCollection('/business/objectifs-qhse/recette');
+  const usersQ = useCollection('/users');
+  if (recQ.loading) return <LoadingPanel />;
+  if (recQ.error) return <ErrorPanel message={recQ.error} onRetry={recQ.reload} />;
+  const list = recQ.data || [];
+  async function update(id, patch) { await api.patch(`/business/objectifs-qhse/recette/${id}`, patch); recQ.reload(); }
+  function userLabel(id) { const u = (usersQ.data || []).find((x) => x.id === id); return u ? `${u.firstName} ${u.lastName}` : '—'; }
+  function exportExcel() {
+    const rows = [['Code', 'Catégorie', 'Libellé', 'Statut', 'Date de test', 'Testeur', 'Commentaire', 'Anomalie'],
+      ...list.map((c) => [c.code, c.categorie || '—', c.libelle, RECETTE_STATUT_LABELS[c.statut] || c.statut, c.dateTest ? new Date(c.dateTest).toLocaleDateString('fr-FR') : '—', userLabel(c.testeurId), c.commentaire || '—', c.anomalie || '—'])];
+    downloadWorkbook([['Recette Objectifs QHSE', rows]], `recette_objectifs_qhse_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+  function exportCsv() {
+    const rows = [['Code', 'Catégorie', 'Libellé', 'Statut', 'Date de test', 'Commentaire', 'Anomalie'],
+      ...list.map((c) => [c.code, c.categorie || '—', c.libelle, RECETTE_STATUT_LABELS[c.statut] || c.statut, c.dateTest ? new Date(c.dateTest).toLocaleDateString('fr-FR') : '—', c.commentaire || '—', c.anomalie || '—'])];
+    downloadCsv(rows, `recette_objectifs_qhse_${new Date().toISOString().slice(0, 10)}.csv`);
+  }
+  const counts = list.reduce((acc, c) => { acc[c.statut] = (acc[c.statut] || 0) + 1; return acc; }, {});
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Critères (CA-01 à CA-49)" value={list.length} color={C.blue} icon={ClipboardCheck} />
+        <KpiCard label="Conformes" value={counts.CONFORME || 0} color={C.green} icon={CheckCircle2} />
+        <KpiCard label="Non conformes" value={counts.NON_CONFORME || 0} color={C.red} icon={FileWarning} />
+        <KpiCard label="Non testés" value={counts.NON_TESTE || 0} color={C.textMuted} icon={ClipboardList} />
+      </div>
+      <Panel title="Checklist de recette (plan de tests)" subtitle="CA-01 à CA-49 du cahier des charges" right={
+        <div className="flex gap-2">
+          <button onClick={exportExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+          <button onClick={exportCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+        </div>
+      }>
+        <div className="space-y-2">
+          {list.map((c) => (
+            <div key={c.id} className="p-3 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-sm" style={{ color: C.text }}><span className="font-mono text-xs mr-2" style={{ color: C.textMuted }}>{c.code}</span>{c.libelle}</div>
+                <select value={c.statut} onChange={(e) => update(c.id, { statut: e.target.value })} className="text-xs px-2 py-1 rounded-lg outline-none" style={{ ...inputStyle(C), color: recetteStatutColor(C, c.statut) }}>
+                  {Object.entries(RECETTE_STATUT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                <input type="date" value={c.dateTest ? new Date(c.dateTest).toISOString().slice(0, 10) : ''} onChange={(e) => update(c.id, { dateTest: e.target.value || null })} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)} />
+                <select value={c.testeurId || ''} onChange={(e) => update(c.id, { testeurId: e.target.value || null })} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+                  <option value="">Testeur…</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+                </select>
+                <input placeholder="Anomalie" defaultValue={c.anomalie || ''} onBlur={(e) => update(c.id, { anomalie: e.target.value })} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)} />
+              </div>
+              <input placeholder="Commentaire" defaultValue={c.commentaire || ''} onBlur={(e) => update(c.id, { commentaire: e.target.value })} className="w-full mt-2 px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)} />
             </div>
-            <div className="h-2 rounded-full" style={{ backgroundColor: C.border }}><div className="h-2 rounded-full" style={{ width: `${pctRaw}%`, backgroundColor: pctRaw >= 90 ? C.green : pctRaw >= 60 ? C.amber : C.red }} /></div>
-            {o.echeance && <p className="text-xs mt-1" style={{ color: C.textMuted }}>Échéance : {new Date(o.echeance).toLocaleDateString('fr-FR')}</p>}
-          </Panel>
-        );
-      })}
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+function ObjectifsPage() {
+  const C = useTheme();
+  const [tab, setTab] = useState('dashboard');
+  const tabs = [['dashboard', 'Tableau de bord'], ['matrice', 'Objectifs'], ['bibliotheque', 'Bibliothèque'], ['recette', 'Recette (CA-01 à CA-49)']];
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2"><LiveBadge /></div>
+      <div className="flex flex-wrap gap-2">
+        {tabs.map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
+        ))}
+      </div>
+      {tab === 'dashboard' && <ObjectifsDashboardTab />}
+      {tab === 'matrice' && <ObjectifsMatrixTab />}
+      {tab === 'bibliotheque' && <ObjectifLibraryTab />}
+      {tab === 'recette' && <ObjectifRecetteTab />}
     </div>
   );
 }
