@@ -812,7 +812,6 @@ model NonConformity {
   haccpMonitoringRecordId String?
   // --- Lien Veille réglementaire (additif) ---
   regulatoryRequirementId String?
-  objectifQhseId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   haccpMonitoringRecord HaccpMonitoringRecord? @relation(fields:[haccpMonitoringRecordId], references:[id], onDelete:SetNull)
@@ -834,7 +833,6 @@ model NonConformity {
   equipmentControls EquipmentControl[]
   equipmentCalibrations EquipmentCalibration[]
   regulatoryRequirement RegulatoryRequirement? @relation(fields:[regulatoryRequirementId], references:[id], onDelete:SetNull)
-  objectifQhse ObjectifQhse? @relation(fields:[objectifQhseId], references:[id], onDelete:SetNull)
   @@index([status,occurredAt])
 }
 
@@ -918,6 +916,7 @@ model Action {
   auditFindingId String?
   equipmentId String?
   regulatoryRequirementId String?
+  objectifQhseId String?
   // --- Module Actions CAPA (Phases 1+2), additif ---
   // Distinction volontaire curative/corrective/préventive/amélioration —
   // jamais réduite au seul couple corrective/préventive, pour éviter la
@@ -956,6 +955,7 @@ model Action {
   extensions ActionExtension[]
   links CapaLink[]
   regulatoryRequirement RegulatoryRequirement? @relation(fields:[regulatoryRequirementId], references:[id], onDelete:SetNull)
+  objectifQhse ObjectifQhse? @relation(fields:[objectifQhseId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
@@ -1034,6 +1034,7 @@ model Site {
   haccpStudies HaccpStudy[]
   equipments Equipment[]
   regulatoryRequirements RegulatoryRequirement[]
+  objectifsQhse ObjectifQhse[]
   createdAt DateTime @default(now())
 }
 
@@ -1350,6 +1351,7 @@ model Risk {
   environnementAspects EnvironnementAspect[]
   regulatoryRequirementLinks RegulatoryRequirementRisk[]
   regulatoryReevaluationRequests RegulatoryRiskReevaluationRequest[]
+  objectifLinks ObjectifRisk[]
   @@index([status,score])
 }
 
@@ -1375,6 +1377,7 @@ model WorkUnit {
   safetyTalks SafetyTalk[]
   equipments Equipment[]
   regulatoryRequirements RegulatoryRequirement[]
+  objectifsQhse ObjectifQhse[]
 }
 
 // Bibliothèque de catégories de risques configurable par l'administrateur —
@@ -3138,7 +3141,6 @@ model RegulatoryRequirement {
   nonConformities NonConformity[]
   actions Action[]
   requirementRisks RegulatoryRequirementRisk[]
-  objectifLinks ObjectifRisk[]
   requirementDocuments RegulatoryRequirementDocument[]
   riskReevaluationRequests RegulatoryRiskReevaluationRequest[]
 }
