@@ -10671,10 +10671,11 @@ function ObjectifDetailModal({ objectifId, onClose, onChanged }) {
           <div>Échéance : <span style={{ color: C.text }}>{o.echeance ? new Date(o.echeance).toLocaleDateString('fr-FR') : '—'}</span></div>
           <div>Processus : <span style={{ color: C.text }}>{o.processus?.nom || '—'}</span></div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 no-print">
           <button onClick={() => setShowEdit(true)} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Modifier</button>
           <button onClick={duplicate} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Dupliquer (année suivante)</button>
           {o.archivedAt && <button onClick={restore} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.green }}>Restaurer</button>}
+          <button onClick={() => window.print()} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button>
         </div>
         <Panel title={`Indicateurs KPI (${o.kpis.length})`}>
           {o.kpis.map((k) => <ObjectifKpiRow key={k.id} kpi={k} onChanged={refresh} />)}
@@ -10717,16 +10718,43 @@ function ObjectifDetailModal({ objectifId, onClose, onChanged }) {
           ))}
           <ObjectifCommentForm objectifId={o.id} onChanged={refresh} />
         </Panel>
+        <ObjectifHistoryPanel objectifId={o.id} />
       </div>
     </Modal>
+  );
+}
+function ObjectifHistoryPanel({ objectifId }) {
+  const C = useTheme();
+  const histQ = useCollection(`/business/objectifs-qhse/${objectifId}/history`);
+  if (histQ.loading) return null;
+  if (histQ.error) return null;
+  const entries = histQ.data || [];
+  return (
+    <Panel title={`Historique des révisions (${entries.length})`}>
+      {entries.length
+        ? entries.map((e) => (
+            <div key={e.id} className="py-2 text-xs" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div style={{ color: C.text }}>{e.libelle}{e.auteur ? ` · ${e.auteur}` : ''}</div>
+              <div style={{ color: C.textMuted }}>{new Date(e.date).toLocaleString('fr-FR')}
+                {e.action === 'REVISION_CIBLE' && e.ancienneCible != null && e.nouvelleCible != null
+                  ? ` · cible ${e.ancienneCible} → ${e.nouvelleCible}` : ''}
+              </div>
+            </div>
+          ))
+        : <p className="text-xs text-center py-3" style={{ color: C.textMuted }}>Aucun événement enregistré</p>}
+    </Panel>
   );
 }
 function ObjectifsDashboardTab() {
   const C = useTheme();
   const dashQ = useCollection('/business/objectifs-qhse/dashboard');
+  const alertesQ = useCollection('/business/objectifs-qhse/alertes');
+  const [selectedId, setSelectedId] = useState(null);
   if (dashQ.loading) return <LoadingPanel />;
   if (dashQ.error) return <ErrorPanel message={dashQ.error} onRetry={dashQ.reload} />;
   const d = dashQ.data;
+  const alertes = alertesQ.data || [];
+  const niveauColor = (n) => (n === 'CRITIQUE' ? C.red : n === 'ELEVE' ? C.amber : C.textMuted);
   const familleData = Object.entries(d.parFamille || {}).map(([k, v]) => ({ name: OBJECTIF_FAMILLE_LABELS[k] || k, value: v }));
   const statutData = Object.entries(d.parStatut || {}).map(([k, v]) => ({ name: OBJECTIF_STATUT_LABELS[k] || k, value: v }));
   const colors = [C.blue, C.green, C.amber, C.red, '#8B5CF6', C.textMuted];
@@ -10754,6 +10782,25 @@ function ObjectifsDashboardTab() {
           {statutData.length ? <DonutChart data={statutData} colors={colors} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune donnée</p>}
         </Panel>
       </div>
+      {selectedId && <ObjectifDetailModal objectifId={selectedId} onClose={() => setSelectedId(null)} onChanged={() => { dashQ.reload(); alertesQ.reload(); }} />}
+      <Panel title="Alertes" subtitle={`${alertes.length} objectif(s) en retard, à risque ou à échéance proche (≤30 jours)`}>
+        {alertes.length
+          ? alertes.map((a) => (
+              <div key={a.id} onClick={() => setSelectedId(a.id)} className="flex items-center justify-between py-2 cursor-pointer" style={{ borderTop: `1px solid ${C.border}` }}>
+                <div>
+                  <div className="text-sm" style={{ color: C.text }}>{a.code} — {a.titre}</div>
+                  <div className="text-xs" style={{ color: C.textMuted }}>
+                    {OBJECTIF_FAMILLE_LABELS[a.famille] || a.famille}
+                    {a.responsable ? ` · ${a.responsable}` : ''}
+                    {a.echeance ? ` · échéance ${new Date(a.echeance).toLocaleDateString('fr-FR')}` : ''}
+                    {a.joursRestants != null ? ` (${a.joursRestants >= 0 ? `J-${a.joursRestants}` : `${Math.abs(a.joursRestants)}j de retard`})` : ''}
+                  </div>
+                </div>
+                {regulatoryBadge(C, OBJECTIF_STATUT_LABELS[a.statutCalcule] || a.statutCalcule, niveauColor(a.niveau))}
+              </div>
+            ))
+          : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune alerte : tous les objectifs sont dans les temps</p>}
+      </Panel>
     </div>
   );
 }

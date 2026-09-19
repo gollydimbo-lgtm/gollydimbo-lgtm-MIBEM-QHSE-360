@@ -2851,6 +2851,61 @@ import { writeAudit } from '../common/audit-log.helper';
   };
  }
 
+ // Alertes d'échéance (fonctionnalité avancée) — jamais un second calcul
+ // de statut : on relit statutCalcule tel que produit par objectifList()
+ // et on n'ajoute que le tri par urgence et le nombre de jours restants.
+ async objectifAlertes(filters?:{famille?:string,siteId?:string,responsableId?:string}){
+  const list=await this.objectifList(filters);
+  const now=new Date();
+  const niveauOrdre:Record<string,number>={CRITIQUE:0,ELEVE:1,MOYEN:2};
+  const alertes=(list as any[]).map(o=>{
+   const joursRestants=o.echeance?Math.round((new Date(o.echeance).getTime()-now.getTime())/86400000):null;
+   let niveau:string|null=null;
+   if(o.statutCalcule==='EN_RETARD') niveau='CRITIQUE';
+   else if(o.statutCalcule==='A_RISQUE') niveau='ELEVE';
+   else if(o.statutCalcule==='A_SURVEILLER') niveau='MOYEN';
+   else if(joursRestants!=null&&joursRestants>=0&&joursRestants<=30&&o.statutCalcule!=='ATTEINT') niveau='MOYEN';
+   if(!niveau) return null;
+   return {
+    id:o.id,code:o.code,titre:o.titre,famille:o.famille,statutCalcule:o.statutCalcule,
+    echeance:o.echeance,joursRestants,niveau,
+    responsable:o.responsable?`${o.responsable.firstName||''} ${o.responsable.lastName||''}`.trim():null,
+   };
+  }).filter(Boolean) as any[];
+  alertes.sort((a,b)=>{
+   const n=niveauOrdre[a.niveau]-niveauOrdre[b.niveau];
+   if(n!==0) return n;
+   if(a.joursRestants==null) return 1;
+   if(b.joursRestants==null) return -1;
+   return a.joursRestants-b.joursRestants;
+  });
+  return alertes;
+ }
+
+ // Historique des révisions (fonctionnalité avancée, point 19) — relit le
+ // journal d'audit déjà écrit par writeAudit(), jamais une table dédiée
+ // supplémentaire : une seule source de vérité pour la traçabilité.
+ objectifHistoryLabel(action:string):string{
+  const labels:Record<string,string>={
+   CREATE:'Création de l\'objectif',UPDATE:'Modification',DELETE:'Suppression',
+   ARCHIVE:'Archivage',RESTORE:'Restauration',DUPLICATE:'Duplication (nouvel exercice)',
+   REVISION_CIBLE:'Révision de la cible',LINK_OBJECTIF:'Action liée',UNLINK_OBJECTIF:'Action déliée',
+  };
+  return labels[action]||action;
+ }
+ async objectifHistory(id:string){
+  const entries=await this.db.auditLog.findMany({
+   where:{module:'OBJECTIF_QHSE',entityId:id},
+   orderBy:{createdAt:'desc'},
+   include:{user:true},
+  });
+  return entries.map(e=>({
+   id:e.id,action:e.action,libelle:this.objectifHistoryLabel(e.action),date:e.createdAt,
+   auteur:e.user?`${e.user.firstName||''} ${e.user.lastName||''}`.trim():null,
+   ancienneCible:(e.oldValue as any)?.cible??null,nouvelleCible:(e.newValue as any)?.cible??null,
+  }));
+ }
+
  // Bibliothèque d'objectifs préconfigurés (point 24) — de simples modèles
  // texte servant à préremplir le formulaire de création, jamais des
  // objectifs imposés ni stockés en base tant qu'ils ne sont pas créés.

@@ -119,6 +119,7 @@ class ObjectifsDashboardTab extends StatefulWidget {
 class _ObjectifsDashboardTabState extends State<ObjectifsDashboardTab> {
   final api = Api();
   Map? dash;
+  List alertes = [];
   String? error;
 
   @override
@@ -126,10 +127,15 @@ class _ObjectifsDashboardTabState extends State<ObjectifsDashboardTab> {
 
   Future<void> load() async {
     setState(() => error = null);
-    try { dash = Map.from(await api.get('/business/objectifs-qhse/dashboard')); }
-    catch (e) { error = '$e'; }
+    try {
+      dash = Map.from(await api.get('/business/objectifs-qhse/dashboard'));
+      final a = await api.get('/business/objectifs-qhse/alertes');
+      alertes = a is List ? a : (a['data'] ?? []);
+    } catch (e) { error = '$e'; }
     if (mounted) setState(() {});
   }
+
+  Color niveauColor(String? n) => n == 'CRITIQUE' ? QhseColors.red : n == 'ELEVE' ? QhseColors.amber : QhseColors.textSecondary;
 
   @override
   Widget build(BuildContext c) {
@@ -157,6 +163,22 @@ class _ObjectifsDashboardTabState extends State<ObjectifsDashboardTab> {
         Container(padding: const EdgeInsets.all(12), height: 160, decoration: BoxDecoration(color: QhseColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: QhseColors.border)), child: _ObjDonut(data: parFamille, colors: colors)),
         objSectionTitle('Répartition par statut'),
         Container(padding: const EdgeInsets.all(12), height: 160, decoration: BoxDecoration(color: QhseColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: QhseColors.border)), child: _ObjDonut(data: parStatut, colors: colors)),
+        objSectionTitle('Alertes (${alertes.length})'),
+        if (alertes.isEmpty) objEmpty('Aucune alerte : tous les objectifs sont dans les temps') else ...alertes.map((a) => Card(
+          child: ListTile(
+            leading: CircleAvatar(backgroundColor: niveauColor(a['niveau']), radius: 6, child: const SizedBox.shrink()),
+            title: Text('${a['code'] ?? ''} — ${a['titre'] ?? ''}'),
+            subtitle: Text([
+              if (a['responsable'] != null) a['responsable'],
+              if (a['echeance'] != null) 'échéance ${objFmtDate(a['echeance'])}',
+              if (a['joursRestants'] != null) (a['joursRestants'] >= 0 ? 'J-${a['joursRestants']}' : '${(a['joursRestants'] as int).abs()}j de retard'),
+            ].join(' · ')),
+            onTap: () async {
+              final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => ObjectifDetailPage(objectifId: a['id'])));
+              if (ok == true) load();
+            },
+          ),
+        )),
       ]),
     );
   }
@@ -746,6 +768,7 @@ class ObjectifDetailPage extends StatefulWidget {
 class _ObjectifDetailPageState extends State<ObjectifDetailPage> {
   final api = Api();
   Map? o;
+  List history = [];
   bool loading = true;
   String? error;
 
@@ -754,9 +777,31 @@ class _ObjectifDetailPageState extends State<ObjectifDetailPage> {
 
   Future<void> load() async {
     setState(() { loading = true; error = null; });
-    try { o = Map.from(await api.get('/business/objectifs-qhse/${widget.objectifId}')); }
-    catch (e) { error = '$e'; }
+    try {
+      o = Map.from(await api.get('/business/objectifs-qhse/${widget.objectifId}'));
+      final h = await api.get('/business/objectifs-qhse/${widget.objectifId}/history');
+      history = h is List ? h : (h['data'] ?? []);
+    } catch (e) { error = '$e'; }
     setState(() => loading = false);
+  }
+
+  Future<void> shareFiche() async {
+    final r = o;
+    if (r == null) return;
+    final buf = StringBuffer();
+    buf.writeln('Objectif QHSE — ${r['code'] ?? ''}');
+    buf.writeln(r['titre'] ?? '');
+    buf.writeln('Famille : ${objFamilleLabels[r['famille']] ?? r['famille'] ?? '—'}');
+    buf.writeln('Statut : ${objStatutLabels[r['statutCalcule']] ?? r['statutCalcule'] ?? '—'}');
+    buf.writeln('Avancement : ${r['avancement'] != null ? '${r['avancement']}%' : '—'}');
+    buf.writeln('${r['actuel'] ?? '—'}${r['unite'] ?? ''} → cible ${r['cible'] ?? '—'}${r['unite'] ?? ''}');
+    buf.writeln('Responsable : ${objUserName(r['responsable'])}');
+    buf.writeln('Échéance : ${objFmtDate(r['echeance'])}');
+    try {
+      await Share.share(buf.toString(), subject: 'Objectif QHSE — ${r['code'] ?? ''}');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   Future<void> deleteKpi(String id, String label) async {
@@ -825,6 +870,7 @@ class _ObjectifDetailPageState extends State<ObjectifDetailPage> {
     final avancement = (r['avancement'] as num?)?.toDouble();
     return Scaffold(
       appBar: AppBar(title: Text(r['titre'] ?? '', overflow: TextOverflow.ellipsis), actions: [
+        IconButton(icon: const Icon(Icons.share), tooltip: 'Partager la fiche', onPressed: shareFiche),
         IconButton(icon: const Icon(Icons.edit), onPressed: () async {
           final saved = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => ObjectifFormPage(record: r)));
           if (saved == true) load();
@@ -910,6 +956,11 @@ class _ObjectifDetailPageState extends State<ObjectifDetailPage> {
             subtitle: Text(objFmtDate(cm['createdAt'])),
           ))),
           OutlinedButton.icon(onPressed: addComment, icon: const Icon(Icons.add_comment), label: const Text('Ajouter un commentaire')),
+          objSectionTitle('Historique des révisions (${history.length})'),
+          if (history.isEmpty) objEmpty('Aucun événement enregistré') else ...history.map((e) => Card(child: ListTile(
+            title: Text('${e['libelle'] ?? e['action'] ?? ''}${e['auteur'] != null ? ' · ${e['auteur']}' : ''}'),
+            subtitle: Text('${objFmtDate(e['date'])}${e['action'] == 'REVISION_CIBLE' && e['ancienneCible'] != null && e['nouvelleCible'] != null ? ' · cible ${e['ancienneCible']} → ${e['nouvelleCible']}' : ''}'),
+          ))),
         ]),
       ),
     );

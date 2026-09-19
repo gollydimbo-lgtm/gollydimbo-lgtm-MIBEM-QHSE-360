@@ -120,10 +120,12 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Post('regulatory-requirements/:id/generate-action') regulatoryGenerateAction(@Param('id')id:string,@Body()b:any){return this.s.regulatoryGenerateAction(id,b)}
 @Get('objectifs-qhse') objectifList(@Query('famille')famille?:string,@Query('statut')statut?:string,@Query('responsableId')responsableId?:string,@Query('siteId')siteId?:string,@Query('priorite')priorite?:string,@Query('archived')archived?:string){return this.s.objectifList({famille,statut,responsableId,siteId,priorite,archived})}
 @Get('objectifs-qhse/dashboard') objectifDashboard(@Query('famille')famille?:string,@Query('siteId')siteId?:string,@Query('responsableId')responsableId?:string){return this.s.objectifDashboard({famille,siteId,responsableId})}
+@Get('objectifs-qhse/alertes') objectifAlertes(@Query('famille')famille?:string,@Query('siteId')siteId?:string,@Query('responsableId')responsableId?:string){return this.s.objectifAlertes({famille,siteId,responsableId})}
 @Get('objectifs-qhse/library') objectifLibrary(){return this.s.objectifLibrary()}
 @Get('objectifs-qhse/kpi-catalog') objectifKpiCatalog(){return this.s.objectifKpiCatalog()}
 @Get('objectifs-qhse/recette') objectifRecetteList(){return this.s.objectifRecetteList()} @Patch('objectifs-qhse/recette/:id') objectifRecetteUpdate(@Param('id')id:string,@Body()b:any){return this.s.objectifRecetteUpdate(id,b)}
 @Get('objectifs-qhse/:id') objectifGet(@Param('id')id:string){return this.s.objectifGet(id)}
+@Get('objectifs-qhse/:id/history') objectifHistory(@Param('id')id:string){return this.s.objectifHistory(id)}
 @Post('objectifs-qhse') objectifCreate(@Body()b:any){return this.s.objectifCreate(b)}
 @Patch('objectifs-qhse/:id') objectifUpdate(@Param('id')id:string,@Body()b:any){return this.s.objectifUpdate(id,b)}
 @Delete('objectifs-qhse/:id') objectifDelete(@Param('id')id:string){return this.s.objectifDelete(id)}
