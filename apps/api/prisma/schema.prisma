@@ -180,6 +180,10 @@ model User {
   environnementAspectsResponsable EnvironnementAspect[]
   objectifsQhseResponsable ObjectifQhse[]
   veilleReglementaireResponsable VeilleReglementaire[]
+  regulatoryTextsVerifiees RegulatoryText[] @relation("RegulatoryTextVerifiePar")
+  regulatoryRequirementsResponsable RegulatoryRequirement[] @relation("RegulatoryRequirementResponsable")
+  regulatoryEvaluationsRealisees RegulatoryEvaluation[] @relation("RegulatoryEvaluationEvaluateur")
+  regulatoryEvidencesResponsable RegulatoryEvidence[] @relation("RegulatoryEvidenceResponsable")
   riskMeasuresResponsable RiskMeasure[]
   riskEvaluationsRealisees RiskEvaluation[]
   haccpStudiesResponsable HaccpStudy[]
@@ -340,6 +344,8 @@ model Document {
   approvals DocumentApproval[]
   diffusions DocumentDiffusion[]
   links DocumentLink[]
+  regulatoryEvidences RegulatoryEvidence[]
+  regulatoryRequirementLinks RegulatoryRequirementDocument[]
 }
 
 model DocumentVersion {
@@ -803,6 +809,8 @@ model NonConformity {
   // --- Lien HACCP (additif) : NC générée automatiquement depuis un relevé
   // de surveillance CCP hors limite (voir HaccpService), jamais l'inverse.
   haccpMonitoringRecordId String?
+  // --- Lien Veille réglementaire (additif) ---
+  regulatoryRequirementId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   haccpMonitoringRecord HaccpMonitoringRecord? @relation(fields:[haccpMonitoringRecordId], references:[id], onDelete:SetNull)
@@ -823,6 +831,7 @@ model NonConformity {
   costs NcCost[]
   equipmentControls EquipmentControl[]
   equipmentCalibrations EquipmentCalibration[]
+  regulatoryRequirement RegulatoryRequirement? @relation(fields:[regulatoryRequirementId], references:[id], onDelete:SetNull)
   @@index([status,occurredAt])
 }
 
@@ -905,6 +914,7 @@ model Action {
   riskId String?
   auditFindingId String?
   equipmentId String?
+  regulatoryRequirementId String?
   // --- Module Actions CAPA (Phases 1+2), additif ---
   // Distinction volontaire curative/corrective/préventive/amélioration —
   // jamais réduite au seul couple corrective/préventive, pour éviter la
@@ -942,6 +952,7 @@ model Action {
   causes ActionCause[]
   extensions ActionExtension[]
   links CapaLink[]
+  regulatoryRequirement RegulatoryRequirement? @relation(fields:[regulatoryRequirementId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
@@ -1019,6 +1030,7 @@ model Site {
   safetyTalks SafetyTalk[]
   haccpStudies HaccpStudy[]
   equipments Equipment[]
+  regulatoryRequirements RegulatoryRequirement[]
   createdAt DateTime @default(now())
 }
 
@@ -1333,6 +1345,7 @@ model Risk {
   nonConformities NonConformity[]
   auditFindings AuditFinding[]
   environnementAspects EnvironnementAspect[]
+  regulatoryRequirementLinks RegulatoryRequirementRisk[]
   @@index([status,score])
 }
 
@@ -1357,6 +1370,7 @@ model WorkUnit {
   documents Document[]
   safetyTalks SafetyTalk[]
   equipments Equipment[]
+  regulatoryRequirements RegulatoryRequirement[]
 }
 
 // Bibliothèque de catégories de risques configurable par l'administrateur —
@@ -2035,6 +2049,9 @@ model Equipment {
   criticiteProduction Int?
   criticiteScore Int?
   criticiteNiveau String?
+  // --- QR code (accès rapide terrain : identification, inspection,
+  // déclaration panne/anomalie, historique récent) ---
+  qrToken String? @unique
   // --- Cycle de vie du champ (jamais de suppression définitive, cf. exigence
   // "préférer l'archivage/réforme à la suppression") ---
   archivedAt DateTime?
@@ -2861,4 +2878,185 @@ model ObjectifQhse {
   responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// MODULE VEILLE RÉGLEMENTAIRE — Phase 1 : fondations et chaîne centrale.
+// Additif : le modèle VeilleReglementaire existant (catalogue simple, lié
+// depuis Document) n'est ni modifié ni supprimé. Les modèles ci-dessous
+// construisent la chaîne complète Texte → Exigence → Applicabilité →
+// Évaluation → Preuve → NC → CAPA → Risque, avec des tables de liaison
+// plutôt que des duplications de données ("une donnée = une source").
+// ============================================================================
+
+// Domaines de veille activables/désactivables selon le secteur de
+// l'entreprise (point 3 et 28 du cahier des charges) — configurable plutôt
+// qu'un enum figé dans le code.
+model RegulatoryDomain {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  actif Boolean @default(true)
+  order Int @default(0)
+  texts RegulatoryText[]
+  requirements RegulatoryRequirement[]
+}
+
+// Paramétrage du module — seuils d'alertes et méthode de calcul du taux de
+// conformité, modifiables par l'administrateur sans toucher au code (même
+// principe que EquipmentSettings/NcSettings).
+model RegulatorySettings {
+  id String @id @default(cuid())
+  alerteJ90 Boolean @default(true)
+  alerteJ60 Boolean @default(true)
+  alerteJ30 Boolean @default(true)
+  alerteJ15 Boolean @default(true)
+  alerteJ7 Boolean @default(true)
+  methodeCalculTaux String @default("STANDARD")
+  updatedAt DateTime @updatedAt
+}
+
+// Fiche complète d'un texte réglementaire (point 4). Une exigence
+// (RegulatoryRequirement) est toujours rattachée à un texte : le texte
+// porte les métadonnées de la source, l'exigence porte l'obligation
+// concrète à respecter.
+model RegulatoryText {
+  id String @id @default(cuid())
+  code String @unique
+  reference String?
+  titre String
+  typeTexte String?
+  domainId String?
+  sousDomaine String?
+  pays String?
+  autoriteEmettrice String?
+  datePublication DateTime?
+  dateEntreeVigueur DateTime?
+  dateDerniereModification DateTime?
+  dateAbrogation DateTime?
+  version String?
+  statut String @default("EN_VIGUEUR")
+  sourceOfficielle String?
+  lienSource String?
+  resume String?
+  objet String?
+  articlesApplicables String?
+  entreprisesConcernees String?
+  sitesConcernes String?
+  activitesConcernees String?
+  derniereVerificationSource DateTime?
+  verifieParId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  domain RegulatoryDomain? @relation(fields:[domainId], references:[id], onDelete:SetNull)
+  verifiePar User? @relation("RegulatoryTextVerifiePar", fields:[verifieParId], references:[id], onDelete:SetNull)
+  requirements RegulatoryRequirement[]
+}
+
+// Exigence unique extraite d'un texte (points 2, 5, 6, 21) — objet central
+// de la matrice réglementaire dynamique. Le statut d'applicabilité et de
+// conformité affichés ici sont dénormalisés depuis la dernière évaluation
+// pour permettre des filtres/tris rapides côté matrice, mais la vérité
+// historique reste dans RegulatoryEvaluation.
+model RegulatoryRequirement {
+  id String @id @default(cuid())
+  code String @unique
+  textId String
+  libelle String
+  domainId String?
+  siteId String?
+  workUnitId String?
+  preuveAttendue String?
+  responsableId String?
+  frequenceEvaluationMois Int?
+  dateDerniereEvaluation DateTime?
+  dateProchaineEvaluation DateTime?
+  criticite String?
+  applicabilite String @default("A_ANALYSER")
+  justificatifApplicabilite String?
+  statutConformite String?
+  statutFile String @default("NOUVEAU")
+  commentaire String?
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  text RegulatoryText @relation(fields:[textId], references:[id], onDelete:Cascade)
+  domain RegulatoryDomain? @relation(fields:[domainId], references:[id], onDelete:SetNull)
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  responsable User? @relation("RegulatoryRequirementResponsable", fields:[responsableId], references:[id], onDelete:SetNull)
+  evaluations RegulatoryEvaluation[]
+  evidences RegulatoryEvidence[]
+  nonConformities NonConformity[]
+  actions Action[]
+  requirementRisks RegulatoryRequirementRisk[]
+  requirementDocuments RegulatoryRequirementDocument[]
+}
+
+// Historique des évaluations de conformité (point 7) — une ligne par
+// contrôle réalisé dans le temps, jamais écrasée.
+model RegulatoryEvaluation {
+  id String @id @default(cuid())
+  requirementId String
+  statut String
+  constat String?
+  preuveExaminee String?
+  observation String?
+  personneInterrogee String?
+  dateControle DateTime @default(now())
+  evaluateurId String?
+  criticite String?
+  commentaire String?
+  createdAt DateTime @default(now())
+  requirement RegulatoryRequirement @relation(fields:[requirementId], references:[id], onDelete:Cascade)
+  evaluateur User? @relation("RegulatoryEvaluationEvaluateur", fields:[evaluateurId], references:[id], onDelete:SetNull)
+}
+
+// Preuve de conformité associée à une exigence (point 8) — peut pointer
+// vers un document GED existant (evidence "papier" déjà classée) ou rester
+// autonome (référence/nom libre) quand le document n'est pas encore dans
+// la GED.
+model RegulatoryEvidence {
+  id String @id @default(cuid())
+  requirementId String
+  type String?
+  documentId String?
+  nom String?
+  dateEmission DateTime?
+  dateExpiration DateTime?
+  responsableId String?
+  statut String @default("VALIDE")
+  commentaire String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  requirement RegulatoryRequirement @relation(fields:[requirementId], references:[id], onDelete:Cascade)
+  document Document? @relation(fields:[documentId], references:[id], onDelete:SetNull)
+  responsable User? @relation("RegulatoryEvidenceResponsable", fields:[responsableId], references:[id], onDelete:SetNull)
+}
+
+// Liaison exigence ↔ risque (plusieurs-à-plusieurs, point 10-11 et 36) —
+// table de jointure plutôt que duplication du risque dans la fiche exigence.
+model RegulatoryRequirementRisk {
+  id String @id @default(cuid())
+  requirementId String
+  riskId String
+  note String?
+  createdAt DateTime @default(now())
+  requirement RegulatoryRequirement @relation(fields:[requirementId], references:[id], onDelete:Cascade)
+  risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
+  @@unique([requirementId, riskId])
+}
+
+// Liaison exigence ↔ document GED (plusieurs-à-plusieurs, point 13 et 36) —
+// distincte de RegulatoryEvidence : couvre aussi les procédures/instructions
+// liées sans valeur de preuve d'expiration.
+model RegulatoryRequirementDocument {
+  id String @id @default(cuid())
+  requirementId String
+  documentId String
+  type String?
+  createdAt DateTime @default(now())
+  requirement RegulatoryRequirement @relation(fields:[requirementId], references:[id], onDelete:Cascade)
+  document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
+  @@unique([requirementId, documentId])
 }

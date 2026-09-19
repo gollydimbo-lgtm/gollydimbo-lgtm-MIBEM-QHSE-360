@@ -41,5 +41,13 @@ async function main(){
  ] as const;
  for(const [code,label,groupe] of categoriesEquip) await db.equipmentCategory.upsert({where:{code},update:{label,groupe},create:{code,label,groupe}});
  await db.equipmentSettings.findFirst().then(async(s)=>{ if(!s) await db.equipmentSettings.create({data:{}}); });
+ // Domaines de veille réglementaire — activables/désactivables selon le
+ // secteur via /business/regulatory-domains.
+ const domainesVeille=[
+  ['QUALITE','Qualité',1], ['SST','Santé et sécurité au travail',2], ['HYGIENE','Hygiène / sanitaire',3],
+  ['ENVIRONNEMENT','Environnement',4], ['AUTRES','Autres exigences',5],
+ ] as const;
+ for(const [code,label,order] of domainesVeille) await db.regulatoryDomain.upsert({where:{code},update:{label,order},create:{code,label,order}});
+ await db.regulatorySettings.findFirst().then(async(s)=>{ if(!s) await db.regulatorySettings.create({data:{}}); });
 }
 main().catch(e=>{console.error(e);process.exit(1)}).finally(()=>db.$disconnect());

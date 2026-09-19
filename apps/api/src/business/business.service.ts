@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
@@ -1402,8 +1403,19 @@ import { writeAudit } from '../common/audit-log.helper';
  async equipmentCreate(b:any){
   const hasCriticite=b.criticiteSecurite!=null||b.criticiteQualite!=null||b.criticiteEnvironnement!=null||b.criticiteProduction!=null;
   const calc=hasCriticite?await this.calculerCriticiteEquipement(b):{};
-  const eq=await this.db.equipment.create({data:{...b,...calc}});
+  const eq=await this.db.equipment.create({data:{...b,...calc,qrToken:randomUUID()}});
   await writeAudit(this.db,'EQUIPMENT','CREATE',eq.id,null,eq);
+  return eq;
+ }
+
+ // === QR code — accès terrain rapide (identification, inspection,
+ // déclaration panne/anomalie, historique récent) ==========================
+ regenerateEquipmentQr(id:string){
+  return this.db.equipment.update({where:{id},data:{qrToken:randomUUID()}});
+ }
+ async equipmentByQrToken(token:string){
+  const eq=await this.db.equipment.findUnique({where:{qrToken:token},include:this.equipmentInclude});
+  if(!eq) throw new NotFoundException('Équipement introuvable pour ce code QR');
   return eq;
  }
  async equipmentUpdate(id:string,b:any){
@@ -2105,6 +2117,205 @@ import { writeAudit } from '../common/audit-log.helper';
   return {indice:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
  veilleList(){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
+
+ // === MODULE VEILLE RÉGLEMENTAIRE — Phase 1 : fondations et chaîne centrale
+ // (Texte → Exigence → Applicabilité → Évaluation → Preuve → NC → CAPA →
+ // Risque). Additif : le module veilleList/veilleCreate/... existant
+ // (catalogue simple) reste inchangé, lié depuis Documents. ===================
+
+ async regulatoryDomainList(){return this.db.regulatoryDomain.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
+ regulatoryDomainCreate(b:any){return this.db.regulatoryDomain.create({data:b})}
+ regulatoryDomainUpdate(id:string,b:any){return this.db.regulatoryDomain.update({where:{id},data:b})}
+ regulatoryDomainDelete(id:string){return this.db.regulatoryDomain.delete({where:{id}})}
+
+ async regulatorySettingsGet(){
+  let s=await this.db.regulatorySettings.findFirst();
+  if(!s) s=await this.db.regulatorySettings.create({data:{}});
+  return s;
+ }
+ async regulatorySettingsUpdate(b:any){
+  const current=await this.regulatorySettingsGet();
+  return this.db.regulatorySettings.update({where:{id:current.id},data:b});
+ }
+
+ regulatoryTextInclude={ domain:true, verifiePar:true, requirements:{orderBy:{code:'asc' as const}} };
+ regulatoryTextList(){return this.db.regulatoryText.findMany({include:this.regulatoryTextInclude,orderBy:{createdAt:'desc'}})}
+ regulatoryTextGet(id:string){return this.db.regulatoryText.findUnique({where:{id},include:this.regulatoryTextInclude})}
+ async regulatoryTextCreate(b:any){
+  const text=await this.db.regulatoryText.create({data:b});
+  await writeAudit(this.db,'REGULATORY_TEXT','CREATE',text.id,null,text);
+  return text;
+ }
+ async regulatoryTextUpdate(id:string,b:any){
+  const current=await this.db.regulatoryText.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Texte réglementaire introuvable');
+  const text=await this.db.regulatoryText.update({where:{id},data:b});
+  await writeAudit(this.db,'REGULATORY_TEXT','UPDATE',id,current,text);
+  // Un texte modifié doit déclencher une analyse d'impact — jamais une
+  // conclusion automatique, seulement un signal sur les exigences liées.
+  if(b.statut==='MODIFIE'||b.statut==='ABROGE'){
+   await this.db.regulatoryRequirement.updateMany({where:{textId:id,statutFile:{notIn:['CLOTURE']}},data:{statutFile:'A_ANALYSER'}});
+  }
+  return text;
+ }
+ async regulatoryTextDelete(id:string){
+  const text=await this.db.regulatoryText.findUnique({where:{id},include:{requirements:true}});
+  if(!text) throw new NotFoundException('Texte réglementaire introuvable');
+  if(text.requirements.length) throw new Error('Ce texte porte des exigences enregistrées : supprimez-les d\'abord ou conservez le texte comme archive.');
+  await writeAudit(this.db,'REGULATORY_TEXT','DELETE',id,text,null);
+  return this.db.regulatoryText.delete({where:{id}});
+ }
+
+ regulatoryRequirementInclude={
+  text:{include:{domain:true}}, domain:true, site:true, workUnit:true, responsable:true,
+  evaluations:{orderBy:{dateControle:'desc' as const}, include:{evaluateur:true}},
+  evidences:{orderBy:{dateExpiration:'asc' as const}, include:{document:true,responsable:true}},
+  nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}},
+  requirementRisks:{include:{risk:true}}, requirementDocuments:{include:{document:true}},
+ };
+ regulatoryRequirementList(filters?:{textId?:string,domainId?:string,siteId?:string,applicabilite?:string,statutConformite?:string}){
+  return this.db.regulatoryRequirement.findMany({where:{
+   textId:filters?.textId||undefined, domainId:filters?.domainId||undefined, siteId:filters?.siteId||undefined,
+   applicabilite:filters?.applicabilite||undefined, statutConformite:filters?.statutConformite||undefined,
+  },include:this.regulatoryRequirementInclude,orderBy:{code:'asc'}});
+ }
+ regulatoryRequirementGet(id:string){return this.db.regulatoryRequirement.findUnique({where:{id},include:this.regulatoryRequirementInclude})}
+ async regulatoryRequirementCreate(b:any){
+  const req=await this.db.regulatoryRequirement.create({data:b});
+  await writeAudit(this.db,'REGULATORY_REQUIREMENT','CREATE',req.id,null,req);
+  return req;
+ }
+ async regulatoryRequirementUpdate(id:string,b:any){
+  const current=await this.db.regulatoryRequirement.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Exigence réglementaire introuvable');
+  const req=await this.db.regulatoryRequirement.update({where:{id},data:b});
+  await writeAudit(this.db,'REGULATORY_REQUIREMENT','UPDATE',id,current,req);
+  return req;
+ }
+ async regulatoryRequirementDelete(id:string){
+  const req=await this.db.regulatoryRequirement.findUnique({where:{id},include:{nonConformities:true,actions:true,evaluations:true}});
+  if(!req) throw new NotFoundException('Exigence réglementaire introuvable');
+  if(req.nonConformities.length||req.actions.length||req.evaluations.length){
+   const archived=await this.db.regulatoryRequirement.update({where:{id},data:{archivedAt:new Date(),statutFile:'CLOTURE'}});
+   await writeAudit(this.db,'REGULATORY_REQUIREMENT','UPDATE',id,req,archived);
+   return archived;
+  }
+  await writeAudit(this.db,'REGULATORY_REQUIREMENT','DELETE',id,req,null);
+  return this.db.regulatoryRequirement.delete({where:{id}});
+ }
+
+ // Décision d'applicabilité (point 6) — justification obligatoire dès que la
+ // réponse n'est pas "Oui", historisée via le journal d'audit générique.
+ async regulatoryRequirementSetApplicabilite(id:string,b:{applicabilite:string,justificatif?:string}){
+  if(['NON','PARTIELLEMENT'].includes(b.applicabilite) && !b.justificatif){
+   throw new Error('Une justification est obligatoire pour une exigence non applicable ou partiellement applicable.');
+  }
+  const current=await this.db.regulatoryRequirement.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Exigence réglementaire introuvable');
+  const statutFile=b.applicabilite==='OUI'?'EVALUATION_A_REALISER':b.applicabilite==='A_ANALYSER'?'APPLICABILITE_A_DETERMINER':'CLOTURE';
+  const req=await this.db.regulatoryRequirement.update({where:{id},data:{applicabilite:b.applicabilite,justificatifApplicabilite:b.justificatif||null,statutFile}});
+  await writeAudit(this.db,'REGULATORY_REQUIREMENT','UPDATE',id,current,req);
+  return req;
+ }
+
+ // Évaluation de conformité (point 7) — chaque évaluation est conservée
+ // (historique), le statut/dates de l'exigence sont dénormalisés pour la
+ // matrice mais ne remplacent jamais l'historique.
+ async regulatoryEvaluationCreate(requirementId:string,b:any){
+  const req=await this.db.regulatoryRequirement.findUnique({where:{id:requirementId}});
+  if(!req) throw new NotFoundException('Exigence réglementaire introuvable');
+  const evaluation=await this.db.regulatoryEvaluation.create({data:{...b,requirementId}});
+  const dateProchaine=req.frequenceEvaluationMois?new Date(evaluation.dateControle.getFullYear(),evaluation.dateControle.getMonth()+req.frequenceEvaluationMois,evaluation.dateControle.getDate()):null;
+  await this.db.regulatoryRequirement.update({where:{id:requirementId},data:{
+   statutConformite:evaluation.statut, dateDerniereEvaluation:evaluation.dateControle, dateProchaineEvaluation:dateProchaine,
+   statutFile:evaluation.statut==='NON_CONFORME'?'ACTIONS_NECESSAIRES':evaluation.statut==='CONFORME'?'CLOTURE':'VERIFICATION',
+  }});
+  await writeAudit(this.db,'REGULATORY_EVALUATION','CREATE',evaluation.id,null,evaluation);
+  return evaluation;
+ }
+
+ regulatoryEvidenceList(requirementId?:string){return this.db.regulatoryEvidence.findMany({where:requirementId?{requirementId}:undefined,include:{document:true,responsable:true},orderBy:{dateExpiration:'asc'}})}
+ regulatoryEvidenceCreate(requirementId:string,b:any){return this.db.regulatoryEvidence.create({data:{...b,requirementId}})}
+ regulatoryEvidenceUpdate(id:string,b:any){return this.db.regulatoryEvidence.update({where:{id},data:b})}
+ regulatoryEvidenceDelete(id:string){return this.db.regulatoryEvidence.delete({where:{id}})}
+
+ // Liaison exigence ↔ risque et ↔ document GED — tables de jointure,
+ // jamais de duplication de la fiche risque/document.
+ async regulatoryLinkRisk(requirementId:string,b:{riskId:string,note?:string}){
+  return this.db.regulatoryRequirementRisk.upsert({
+   where:{requirementId_riskId:{requirementId,riskId:b.riskId}},
+   update:{note:b.note||undefined}, create:{requirementId,riskId:b.riskId,note:b.note||undefined},
+   include:{risk:true},
+  });
+ }
+ regulatoryUnlinkRisk(id:string){return this.db.regulatoryRequirementRisk.delete({where:{id}})}
+ async regulatoryLinkDocument(requirementId:string,b:{documentId:string,type?:string}){
+  return this.db.regulatoryRequirementDocument.upsert({
+   where:{requirementId_documentId:{requirementId,documentId:b.documentId}},
+   update:{type:b.type||undefined}, create:{requirementId,documentId:b.documentId,type:b.type||undefined},
+   include:{document:true},
+  });
+ }
+ regulatoryUnlinkDocument(id:string){return this.db.regulatoryRequirementDocument.delete({where:{id}})}
+
+ // Une exigence non conforme ne doit jamais rester isolée — mêmes pattern
+ // generate-nc/generate-action que pour Équipements, avec anti-duplication
+ // (point 29) : on signale plutôt que de dupliquer silencieusement.
+ async regulatoryGenerateNc(requirementId:string,b?:any){
+  const req=await this.db.regulatoryRequirement.findUnique({where:{id:requirementId},include:{text:true}});
+  if(!req) throw new NotFoundException('Exigence réglementaire introuvable');
+  const existing=await this.db.nonConformity.findFirst({where:{regulatoryRequirementId:requirementId,status:{not:'CLOSED'}}});
+  if(existing && !b?.force) throw new Error(`Une non-conformité réglementaire (${existing.code}) est déjà ouverte pour cette exigence.`);
+  return this.db.$transaction(async(tx)=>{
+   const nc=await tx.nonConformity.create({data:{
+    code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+    title:b?.title||`Non-conformité réglementaire — ${req.libelle.slice(0,80)}`,
+    description:b?.description||`Exigence non respectée : ${req.text.titre} — ${req.libelle}`,
+    severity:b?.severity||(req.criticite==='CRITIQUE'?3:req.criticite==='HAUTE'?2:1),
+    classification:b?.classification||(req.criticite==='CRITIQUE'?'NC_CRITIQUE':'NC_MINEURE'),
+    source:'VEILLE_REGLEMENTAIRE', regulatoryRequirementId:req.id, workUnitId:req.workUnitId,
+   }});
+   await tx.action.create({data:{
+    code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+    title:`Mettre en conformité — ${req.libelle.slice(0,60)}`, description:`Action de mise en conformité pour ${nc.code}`,
+    priority:req.criticite==='CRITIQUE'?1:2, actionType:'MISE_EN_CONFORMITE',
+    nonConformityId:nc.id, regulatoryRequirementId:req.id, workUnitId:req.workUnitId, responsibleId:req.responsableId,
+   }});
+   await tx.regulatoryRequirement.update({where:{id:req.id},data:{statutFile:'ACTIONS_NECESSAIRES'}});
+   return nc;
+  });
+ }
+ async regulatoryGenerateAction(requirementId:string,b:any){
+  const req=await this.db.regulatoryRequirement.findUnique({where:{id:requirementId}});
+  if(!req) throw new NotFoundException('Exigence réglementaire introuvable');
+  return this.db.action.create({data:{
+   code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   title:b?.title||`Action réglementaire — ${req.libelle.slice(0,60)}`, description:b?.description,
+   priority:b?.priority||(req.criticite==='CRITIQUE'?1:2), actionType:b?.actionType||'CORRECTIVE',
+   regulatoryRequirementId:req.id, workUnitId:req.workUnitId,
+   responsibleId:b?.responsibleId||req.responsableId||null, dueDate:b?.dueDate||null,
+  }});
+ }
+
+ // Tableau de bord (points 16-17) — le taux de conformité exclut toujours
+ // les exigences non applicables ou non évaluées du dénominateur.
+ async regulatoryDashboard(){
+  const list=await this.db.regulatoryRequirement.findMany({where:{archivedAt:null},select:{applicabilite:true,statutConformite:true,statutFile:true,domainId:true}});
+  const applicables=list.filter(r=>r.applicabilite==='OUI'||r.applicabilite==='PARTIELLEMENT');
+  const evaluees=applicables.filter(r=>r.statutConformite);
+  const conformes=evaluees.filter(r=>r.statutConformite==='CONFORME');
+  const partielles=evaluees.filter(r=>r.statutConformite==='PARTIEL');
+  const nonConformes=evaluees.filter(r=>r.statutConformite==='NON_CONFORME');
+  const aAnalyser=list.filter(r=>r.applicabilite==='A_ANALYSER');
+  const nonEvaluees=applicables.filter(r=>!r.statutConformite);
+  const tauxConformite=evaluees.length?Math.round((conformes.length/evaluees.length)*1000)/10:null;
+  return {
+   total:list.length, applicables:applicables.length, conformes:conformes.length, partielles:partielles.length,
+   nonConformes:nonConformes.length, aAnalyser:aAnalyser.length, nonEvaluees:nonEvaluees.length, tauxConformite,
+   methodeCalcul:'Exigences conformes / Exigences applicables évaluées × 100 (exclut non applicables et non évaluées)',
+  };
+ }
+
  objectifList(){
   return this.db.objectifQhse.findMany({include:{processus:true,responsable:true},orderBy:{createdAt:'desc'}}).then(list=>list.map(o=>{
    let progression=null;

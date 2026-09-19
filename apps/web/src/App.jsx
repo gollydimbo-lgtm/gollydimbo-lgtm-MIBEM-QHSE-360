@@ -9,8 +9,10 @@ import {
   FlaskConical, Users, Sun, Moon, Search, ClipboardCheck,
   FileWarning, Target, BookOpen, FolderOpen, Wrench, Menu, X, RefreshCw, LogOut, ChevronDown,
   Shield, UtensilsCrossed, Cog, Link2, Send, Copy, CheckCircle2, RotateCcw,
+  QrCode, Download, Printer,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import QRCode from 'qrcode';
 import mammoth from 'mammoth';
 import { api, getStoredUser, logout as apiLogout, getBaseUrl } from './api';
 import LoginPage from './LoginPage';
@@ -3948,6 +3950,19 @@ function downloadWorkbook(sheets, filename) {
   const wb = XLSX.utils.book_new();
   sheets.forEach(([name, rows]) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name.slice(0, 31)));
   XLSX.writeFile(wb, filename);
+}
+// Export CSV générique — même principe que downloadWorkbook mais pour un
+// seul tableau de lignes (utilisé quand un tableur complet n'est pas requis).
+function downloadCsv(rows, filename) {
+  const csv = rows.map((row) => row.map((cell) => {
+    const v = cell == null ? '' : String(cell);
+    return /[",;\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  }).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 function reportDefinitions(real) {
   const { dashboardData, audits, risks, actions, environment, safetyEvents, epi, assignments, employees, epcList, renewalBuckets, qualityControls, processus, indicateursAutoCompare, indicateursQualite, indiceGlobal, reclamations, reclamationsStats, reclamationsScore, safetyEventsStats, safetyEventsRecidives, fournisseurs, fournisseursClassement, fournisseursAlertes, fournisseursMatriceRisque, visitesMedicales, risquesSanitaires, analysesErgonomiques, tmsSignalements, hygieneIndiceGlobal, hygieneAlertes } = real;
@@ -10792,6 +10807,47 @@ function EquipmentHistoryTab({ equipment }) {
   );
 }
 
+function EquipmentQrTab({ equipment, onChanged }) {
+  const C = useTheme();
+  const [dataUrl, setDataUrl] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const scanUrl = `${getBaseUrl()}/business/equipment/qr/${equipment.qrToken || ''}`;
+  useEffect(() => {
+    let cancelled = false;
+    if (equipment.qrToken) {
+      QRCode.toDataURL(scanUrl, { width: 260, margin: 1 }).then((url) => { if (!cancelled) setDataUrl(url); });
+    } else {
+      setDataUrl(null);
+    }
+    return () => { cancelled = true; };
+  }, [equipment.qrToken]);
+  async function regenerate() {
+    setBusy(true);
+    try { await api.post(`/business/equipment/${equipment.id}/regenerate-qr`, {}); onChanged(); } catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  function download() {
+    if (!dataUrl) return;
+    const a = document.createElement('a');
+    a.href = dataUrl; a.download = `QR_${equipment.code}.png`; a.click();
+  }
+  return (
+    <div className="flex flex-col items-center gap-4 py-4">
+      {dataUrl
+        ? <img src={dataUrl} alt="QR code équipement" className="rounded-lg" style={{ border: `1px solid ${C.border}` }} />
+        : <p className="text-sm" style={{ color: C.textMuted }}>Aucun code QR généré pour cet équipement.</p>}
+      <p className="text-xs text-center max-w-xs" style={{ color: C.textMuted }}>
+        Scanner ce code ouvre la fiche de l'équipement {equipment.code} (identification, maintenance, contrôles, historique récent).
+      </p>
+      <div className="flex gap-2 flex-wrap justify-center">
+        <button onClick={download} disabled={!dataUrl} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: dataUrl ? 1 : 0.5 }}><Download size={14} /> Télécharger PNG</button>
+        <button onClick={() => window.print()} disabled={!dataUrl} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f', opacity: dataUrl ? 1 : 0.5 }}><Printer size={14} /> Imprimer</button>
+        <button onClick={regenerate} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{busy ? '…' : 'Régénérer le code'}</button>
+      </div>
+    </div>
+  );
+}
+
 function EquipmentDetailModal({ equipmentId, onClose, onChanged }) {
   const C = useTheme();
   const detailQ = useCollection(`/business/equipment/${equipmentId}`);
@@ -10813,9 +10869,10 @@ function EquipmentDetailModal({ equipmentId, onClose, onChanged }) {
       </div>
       <div className="flex gap-2 flex-wrap mb-4">
         <button onClick={() => setEditing(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+        <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Printer size={14} /> Imprimer / PDF</button>
       </div>
       <div className="flex flex-wrap gap-2 mb-4">
-        {[['identification', 'Identification'], ['maintenance', 'Maintenance'], ['controles', 'Contrôles'], ['etalonnage', 'Étalonnage'], ['consignation', 'Consignation'], ['liens', 'Risques / NC / CAPA'], ['historique', 'Historique']].map(([id, label]) => (
+        {[['identification', 'Identification'], ['maintenance', 'Maintenance'], ['controles', 'Contrôles'], ['etalonnage', 'Étalonnage'], ['consignation', 'Consignation'], ['liens', 'Risques / NC / CAPA'], ['qr', 'QR code'], ['historique', 'Historique']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -10846,9 +10903,27 @@ function EquipmentDetailModal({ equipmentId, onClose, onChanged }) {
       {tab === 'etalonnage' && <EquipmentCalibrationsTab equipment={eq} onChanged={reload} />}
       {tab === 'consignation' && <EquipmentConsignationsTab equipment={eq} onChanged={reload} />}
       {tab === 'liens' && <EquipmentLinksTab equipment={eq} onChanged={reload} />}
+      {tab === 'qr' && <EquipmentQrTab equipment={eq} onChanged={reload} />}
       {tab === 'historique' && <EquipmentHistoryTab equipment={eq} />}
     </Modal>
   );
+}
+
+function equipmentExportRows(list) {
+  const header = ['Code', 'Nom', 'Catégorie', 'Site', 'Service/Unité', 'Responsable', 'État', 'Criticité', 'Score criticité', 'N° de série', 'Marque', 'Modèle', 'Prochaine échéance'];
+  const rows = list.map((e) => [
+    e.code, e.name, e.categoryEq?.label || e.category || '', e.site?.name || '', e.workUnit?.name || '',
+    e.responsable ? `${e.responsable.firstName} ${e.responsable.lastName}` : '', EQUIPMENT_ETAT_LABELS[e.etat] || e.etat || '',
+    e.criticiteNiveau ? EQUIPMENT_CRITICITE_LABELS[e.criticiteNiveau] : '', e.criticiteScore ?? '', e.numeroSerie || '', e.marque || '', e.modele || '',
+    equipmentNextDueDate(e) ? equipmentNextDueDate(e).toLocaleDateString('fr-FR') : '',
+  ]);
+  return [header, ...rows];
+}
+function exportEquipmentExcel(list) {
+  downloadWorkbook([['Registre équipements', equipmentExportRows(list)]], `registre_equipements_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+function exportEquipmentCsv(list) {
+  downloadCsv(equipmentExportRows(list), `registre_equipements_${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
 function EquipmentPage() {
@@ -10892,7 +10967,13 @@ function EquipmentPage() {
           <button key={id} onClick={() => setFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: filter === id ? C.blue : C.cardAlt, color: filter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
         ))}
       </div>
-      <Panel title="Registre des équipements" subtitle={`${filtered.length} équipement(s)`}>
+      <Panel title="Registre des équipements" subtitle={`${filtered.length} équipement(s)`} right={
+        <div className="flex gap-2">
+          <button onClick={() => exportEquipmentExcel(filtered)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+          <button onClick={() => exportEquipmentCsv(filtered)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}><Printer size={14} /> Imprimer / PDF</button>
+        </div>
+      }>
         {filtered.length
           ? <DataTable columns={['Code', 'Équipement', 'Catégorie', 'Site', 'Responsable', 'État', 'Criticité', 'Prochaine échéance']}
               rows={filtered.map((e) => [
