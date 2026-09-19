@@ -53,6 +53,12 @@ par ordre de priorité croissante :
   - Risques (DUERP), matrice gravité×probabilité×maîtrise
   - Audits QHSE
   - Quart d'heure sécurité (stub, à développer)
+- **Équipements** — registre consultable hors-ligne (mise en cache locale),
+  identification par scan de QR code (caméra, Android/iOS uniquement —
+  non disponible sur Windows), fiche détaillée (identification, plans de
+  maintenance, contrôles, étalonnages, NC liées) et déclaration de contrôles
+  réglementaires sur le terrain, synchronisée automatiquement au retour du
+  réseau via la même file d'attente que les autres déclarations terrain
 - **Réglages** — adresse du serveur QHSE
 
 ## Lancement local (si vous disposez du SDK Flutter)

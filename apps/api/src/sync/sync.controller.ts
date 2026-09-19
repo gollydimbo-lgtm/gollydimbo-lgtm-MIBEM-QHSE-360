@@ -22,6 +22,11 @@ const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessServic
   // Non-conformité fonctionne aussi pour un relevé saisi hors ligne, comme
   // "risk" le fait déjà pour son propre moteur.
   haccpMonitoring: (db, business, haccp, p) => haccp.monitoringCreate(p.ccpId, p),
+  // Contrôle réglementaire équipement saisi sur le terrain (Phase 4B) —
+  // create Prisma direct, comme "action" : pas de moteur dédié à réutiliser
+  // ici (générer une NC depuis un contrôle non conforme reste une action
+  // manuelle explicite côté back-office, jamais automatique).
+  equipmentControl: (db, business, haccp, p) => db.equipmentControl.create({ data: p }),
 };
 
 const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, haccp: HaccpService, id: string, payload: any) => Promise<any>> = {

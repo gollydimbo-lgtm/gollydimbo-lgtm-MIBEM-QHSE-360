@@ -1450,16 +1450,46 @@ import { writeAudit } from '../common/audit-log.helper';
  equipmentCategoryCreate(b:any){return this.db.equipmentCategory.create({data:b})}
  equipmentCategoryUpdate(id:string,b:any){return this.db.equipmentCategory.update({where:{id},data:b})}
  equipmentCategoryDelete(id:string){return this.db.equipmentCategory.delete({where:{id}})}
- equipmentDashboard(){
-  return this.db.equipment.findMany({select:{etat:true,criticiteNiveau:true,categoryId:true,siteId:true}}).then((list)=>{
-   const parEtat:Record<string,number>={}, parCriticite:Record<string,number>={};
-   for(const e of list){
-    parEtat[e.etat]=(parEtat[e.etat]||0)+1;
-    const niv=e.criticiteNiveau||'NON_EVALUE';
-    parCriticite[niv]=(parCriticite[niv]||0)+1;
-   }
-   return {total:list.length,parEtat,parCriticite};
-  });
+ // Phase 4C — analytics avancées : répartitions, indice de conformité
+ // (même calcul que dans la bibliothèque indicateursAuto(), jamais un
+ // second calcul divergent), coûts de maintenance/étalonnage/contrôle et
+ // équipements critiques nécessitant une attention immédiate.
+ async equipmentDashboard(){
+  const [list,autoIndicateurs]=await Promise.all([
+   this.db.equipment.findMany({where:{archivedAt:null},select:{id:true,code:true,name:true,etat:true,criticiteNiveau:true,categoryId:true,siteId:true,
+    maintenancePlans:{where:{actif:true},select:{dateProchaine:true}}, controls:{select:{dateProchainControle:true}}, calibrations:{select:{dateProchaineEtalonnage:true}},
+    maintenanceRecords:{select:{cout:true}}, nonConformities:{select:{status:true}},
+   }}),
+   this.indicateursAuto(),
+  ]);
+  const calibrationsCouts=await this.db.equipmentCalibration.aggregate({_sum:{cout:true}});
+  const controlsCouts=await this.db.equipmentControl.aggregate({_sum:{cout:true}});
+  const parEtat:Record<string,number>={}, parCriticite:Record<string,number>={};
+  const now=Date.now();
+  let coutTotalMaintenance=0, enRetard=0, critiquesNonTraites=0;
+  const couts:{code:string,name:string,total:number}[]=[];
+  for(const e of list){
+   parEtat[e.etat]=(parEtat[e.etat]||0)+1;
+   const niv=e.criticiteNiveau||'NON_EVALUE';
+   parCriticite[niv]=(parCriticite[niv]||0)+1;
+   const dates=[...e.maintenancePlans.map(p=>p.dateProchaine),...e.controls.map(c=>c.dateProchainControle),...e.calibrations.map(c=>c.dateProchaineEtalonnage)].filter(Boolean).map(d=>new Date(d as Date).getTime());
+   if(dates.length>0 && Math.min(...dates)<now) enRetard++;
+   const ncOuvertes=e.nonConformities.some(n=>n.status!=='CLOSED');
+   if(e.criticiteNiveau==='CRITIQUE' && ncOuvertes) critiquesNonTraites++;
+   const totalEquip=e.maintenanceRecords.reduce((s,r)=>s+(r.cout||0),0);
+   coutTotalMaintenance+=totalEquip;
+   if(totalEquip>0) couts.push({code:e.code,name:e.name,total:Math.round(totalEquip*100)/100});
+  }
+  const indiceDisponibilite=autoIndicateurs.find(i=>i.key==='taux_disponibilite_equipements')?.valeur??null;
+  const indiceConformite=autoIndicateurs.find(i=>i.key==='indice_conformite_equipements')?.valeur??null;
+  return {
+   total:list.length, parEtat, parCriticite, enRetard, critiquesNonTraites,
+   tauxDisponibilite:indiceDisponibilite, indiceConformite:indiceConformite,
+   coutTotalMaintenance:Math.round(coutTotalMaintenance*100)/100,
+   coutTotalEtalonnage:Math.round((calibrationsCouts._sum.cout||0)*100)/100,
+   coutTotalControles:Math.round((controlsCouts._sum.cout||0)*100)/100,
+   topCouts:couts.sort((a,b)=>b.total-a.total).slice(0,5),
+  };
  }
  // Un équipement défaillant/dégradé ne doit jamais rester isolé — ces trois
  // endpoints répliquent exactement le pattern generate-risk/generate-nc/
@@ -1742,19 +1772,34 @@ import { writeAudit } from '../common/audit-log.helper';
  // remplies par les autres écrans.
  async indicateursAuto(range?:{from:Date,to:Date}){
   const dateFilter=(field:string)=>range?{[field]:{gte:range.from,lt:range.to}}:{};
-  const [controls,nc,actions,reclamations,fournisseurControls,audits]=await Promise.all([
+  const [controls,nc,actions,reclamations,fournisseurControls,audits,equipmentList]=await Promise.all([
    this.db.qualityControl.groupBy({by:['status'],_count:true,where:{status:{in:['COMPLIANT','NON_COMPLIANT']},...dateFilter('controlDate')}}),
    this.db.nonConformity.groupBy({by:['status'],_count:true,where:{...dateFilter('occurredAt')}}),
    this.db.action.groupBy({by:['status'],_count:true,where:{...dateFilter('createdAt')}}),
    this.db.reclamation.groupBy({by:['statut'],_count:true,where:{...dateFilter('date')}}),
    this.db.qualityControl.groupBy({by:['status'],_count:true,where:{fournisseurId:{not:null},status:{in:['COMPLIANT','NON_COMPLIANT']},...dateFilter('controlDate')}}),
    this.db.qhseAudit.groupBy({by:['status'],_count:true,where:{...dateFilter('auditDate')}}),
+   this.db.equipment.findMany({where:{archivedAt:null},select:{etat:true,
+    maintenancePlans:{where:{actif:true},select:{dateProchaine:true}}, controls:{select:{dateProchainControle:true}}, calibrations:{select:{dateProchaineEtalonnage:true}},
+   }}),
   ]);
   const pct=(list:any[],key:string,matchValues:string[],totalValues?:string[])=>{
    const total=totalValues?list.filter(x=>totalValues.includes(x[key])).reduce((s,x)=>s+x._count,0):list.reduce((s,x)=>s+x._count,0);
    const match=list.filter(x=>matchValues.includes(x[key])).reduce((s,x)=>s+x._count,0);
    return total>0?Math.round((match/total)*1000)/10:null;
   };
+  // Un équipement est "en retard" si l'une de ses échéances programmées
+  // (maintenance, contrôle réglementaire, étalonnage) est dépassée — même
+  // règle que equipmentIsOverdue() côté web, pour ne jamais afficher deux
+  // chiffres différents pour la même réalité.
+  const now=Date.now();
+  const equipmentOverdue=(e:any)=>{
+   const dates=[...e.maintenancePlans.map((p:any)=>p.dateProchaine),...e.controls.map((c:any)=>c.dateProchainControle),...e.calibrations.map((c:any)=>c.dateProchaineEtalonnage)].filter(Boolean).map((d:any)=>new Date(d).getTime());
+   return dates.length>0 && Math.min(...dates)<now;
+  };
+  const totalEquipements=equipmentList.length;
+  const equipementsActifs=equipmentList.filter((e:any)=>e.etat==='ACTIF').length;
+  const equipementsAJour=equipmentList.filter((e:any)=>!equipmentOverdue(e)).length;
   return [
    {key:'taux_conformite_controles',nom:'Taux de conformité des contrôles',categorie:'Contrôle qualité',formule:'Contrôles conformes / Contrôles réalisés × 100',unite:'%',sensInverse:false,valeur:pct(controls,'status',['COMPLIANT'])},
    {key:'taux_nc_ouvertes',nom:'Taux de non-conformités ouvertes',categorie:'Non-conformités',formule:'NC ouvertes / NC totales × 100',unite:'%',sensInverse:true,valeur:pct(nc,'status',['OPEN'])},
@@ -1762,6 +1807,8 @@ import { writeAudit } from '../common/audit-log.helper';
    {key:'taux_reclamations_cloturees',nom:'Taux de réclamations clôturées',categorie:'Satisfaction client',formule:'Réclamations clôturées / Réclamations totales × 100',unite:'%',sensInverse:false,valeur:pct(reclamations,'statut',['CLOSED'])},
    {key:'taux_conformite_fournisseur',nom:'Taux de conformité fournisseur',categorie:'Fournisseurs',formule:'Contrôles fournisseur conformes / Contrôles fournisseur réalisés × 100',unite:'%',sensInverse:false,valeur:pct(fournisseurControls,'status',['COMPLIANT'])},
    {key:'taux_realisation_audits',nom:'Taux de réalisation des audits',categorie:'Audits',formule:'Audits réalisés / Audits planifiés × 100',unite:'%',sensInverse:false,valeur:pct(audits,'status',['COMPLETED'],['PLANNED','IN_PROGRESS','COMPLETED'])},
+   {key:'taux_disponibilite_equipements',nom:'Taux de disponibilité des équipements',categorie:'Équipements',formule:'Équipements actifs / Équipements totaux × 100',unite:'%',sensInverse:false,valeur:totalEquipements>0?Math.round((equipementsActifs/totalEquipements)*1000)/10:null},
+   {key:'indice_conformite_equipements',nom:'Indice de conformité des équipements',categorie:'Équipements',formule:'Équipements à jour (maintenance/contrôle/étalonnage) / Équipements totaux × 100',unite:'%',sensInverse:false,valeur:totalEquipements>0?Math.round((equipementsAJour/totalEquipements)*1000)/10:null},
   ];
  }
 

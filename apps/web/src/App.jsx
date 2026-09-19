@@ -11895,13 +11895,17 @@ function EquipmentPage() {
     return true;
   });
   const dash = dashboardQ.data;
+  const [showAnalytics, setShowAnalytics] = useState(false);
   return (
     <div className="space-y-6">
       {showForm && <EquipmentForm onClose={() => setShowForm(false)} onCreated={() => { equipment.reload(); dashboardQ.reload(); }} />}
       {detailId && <EquipmentDetailModal equipmentId={detailId} onClose={() => setDetailId(null)} onChanged={() => { equipment.reload(); dashboardQ.reload(); }} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel équipement</button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowAnalytics((v) => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: showAnalytics ? C.blue : C.cardAlt, color: showAnalytics ? '#fff' : C.text, border: `1px solid ${C.border}` }}>{showAnalytics ? 'Masquer les analytics' : 'Analytics avancées'}</button>
+          <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel équipement</button>
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         <KpiCard label="Équipements" value={list.length} color={C.blue} icon={Cog} />
@@ -11910,6 +11914,31 @@ function EquipmentPage() {
         <KpiCard label="Critiques" value={list.filter((e) => e.criticiteNiveau === 'CRITIQUE').length} color={C.red} icon={Shield} />
         <KpiCard label="Hors service" value={list.filter((e) => ['HORS_SERVICE', 'CONSIGNE', 'REFORME', 'MIS_AU_REBUT'].includes(e.etat)).length} color={C.textMuted} icon={Wrench} />
       </div>
+      {showAnalytics && dash && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <KpiCard label="Taux de disponibilité" value={dash.tauxDisponibilite != null ? `${dash.tauxDisponibilite}%` : '—'} color={C.green} icon={CheckCircle2} />
+            <KpiCard label="Indice de conformité" value={dash.indiceConformite != null ? `${dash.indiceConformite}%` : '—'} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label="Échéances en retard" value={dash.enRetard} color={C.red} icon={AlertTriangle} />
+            <KpiCard label="Critiques avec NC ouverte" value={dash.critiquesNonTraites} color={C.red} icon={FileWarning} />
+            <KpiCard label="Coût maintenance" value={`${dash.coutTotalMaintenance.toLocaleString('fr-FR')} FCFA`} color={C.amber} icon={Wrench} />
+            <KpiCard label="Coût étalonnage + contrôles" value={`${(dash.coutTotalEtalonnage + dash.coutTotalControles).toLocaleString('fr-FR')} FCFA`} color={C.amber} icon={ClipboardCheck} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Panel title="Répartition par état">
+              <DonutChart data={Object.entries(dash.parEtat).map(([k, v]) => ({ name: EQUIPMENT_ETAT_LABELS[k] || k, value: v }))} colors={[C.green, C.blue, C.amber, C.red, C.textMuted, C.red, C.textMuted, C.textMuted]} />
+            </Panel>
+            <Panel title="Répartition par criticité">
+              <DonutChart data={Object.entries(dash.parCriticite).map(([k, v]) => ({ name: EQUIPMENT_CRITICITE_LABELS[k] || k, value: v }))} colors={[C.textMuted, C.blue, C.amber, C.red]} />
+            </Panel>
+          </div>
+          <Panel title="Top 5 des coûts de maintenance">
+            {dash.topCouts.length
+              ? <DataTable columns={['Équipement', 'Coût cumulé']} rows={dash.topCouts.map((t) => [`${t.code} — ${t.name}`, `${t.total.toLocaleString('fr-FR')} FCFA`])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun coût de maintenance enregistré</p>}
+          </Panel>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {[['TOUS', 'Tous'], ['A_JOUR', 'À jour'], ['EN_RETARD', 'En retard'], ['NON_CONFORMES', 'Non conformes'], ['MAINTENANCE', 'Maintenance'], ['HORS_SERVICE', 'Hors service'], ['CRITIQUES', 'Critiques']].map(([id, label]) => (
           <button key={id} onClick={() => setFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: filter === id ? C.blue : C.cardAlt, color: filter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
