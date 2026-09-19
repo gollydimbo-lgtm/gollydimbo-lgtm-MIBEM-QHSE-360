@@ -333,6 +333,8 @@ function StatusChip({ statut }) {
     Conforme: C.green, 'Partiellement conforme': C.amber, 'Non conforme': C.red, 'Sous surveillance': C.blue,
     Homologué: C.green, 'À traiter': C.red, Intégrée: C.green, Valide: C.green, 'Expire bientôt': C.amber, Expirée: C.red,
     OPEN: C.red, CLOSED: C.green, ACTIVE: C.amber, PLANNED: C.blue,
+    Expiré: C.red, 'À renouveler': C.amber, Applicable: C.green, 'Non applicable': C.textMuted, 'Partiellement applicable': C.amber,
+    Nouveau: C.blue, CRITIQUE: C.red, ATTENTION: C.amber, INFORMATION: C.blue, 'Échéance proche': C.amber,
   };
   const color = map[statut] || C.textMuted;
   return <span className="text-xs px-2 py-1 rounded-md font-medium" style={{ backgroundColor: `${color}22`, color }}>{statut}</span>;
@@ -9051,6 +9053,821 @@ function VeillePage() {
     </div>
   );
 }
+
+// ============================================================================
+// VEILLE RÉGLEMENTAIRE — Phase 3 : UI complète de la chaîne Texte → Exigence
+// → Applicabilité → Conformité → Preuve → NC → CAPA → Vérification.
+// ============================================================================
+const REGULATORY_APPLICABILITE_LABELS = { OUI: 'Applicable', NON: 'Non applicable', PARTIELLEMENT: 'Partiellement applicable', A_ANALYSER: 'À analyser' };
+const REGULATORY_STATUT_CONFORMITE_LABELS = { CONFORME: 'Conforme', PARTIEL: 'Partiellement conforme', NON_CONFORME: 'Non conforme' };
+const REGULATORY_STATUT_FILE_LABELS = { NOUVEAU: 'Nouveau', A_ANALYSER: 'À analyser', APPLICABILITE_A_DETERMINER: 'Applicabilité à déterminer', EVALUATION_A_REALISER: 'Évaluation à réaliser', VERIFICATION: 'Vérification', ACTIONS_NECESSAIRES: 'Actions nécessaires', CLOTURE: 'Clôturé' };
+const REGULATORY_EVIDENCE_STATUT_LABELS = { VALIDE: 'Valide', EXPIRE_BIENTOT: 'Expire bientôt', A_RENOUVELER: 'À renouveler', EXPIRE: 'Expiré' };
+function regulatoryApplicabiliteColor(C, v) { return { OUI: C.green, NON: C.textMuted, PARTIELLEMENT: C.amber, A_ANALYSER: C.blue }[v] || C.textMuted; }
+function regulatoryConformiteColor(C, v) { return { CONFORME: C.green, PARTIEL: C.amber, NON_CONFORME: C.red }[v] || C.textMuted; }
+function regulatoryEvidenceColor(C, v) { return { VALIDE: C.green, EXPIRE_BIENTOT: C.amber, A_RENOUVELER: C.amber, EXPIRE: C.red }[v] || C.textMuted; }
+function regulatoryBadge(C, label, color) { return <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${color}22`, color }}>{label}</span>; }
+
+function RegulatoryDomainForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const [form, setForm] = useState({ code: record?.code || '', label: record?.label || '', actif: record?.actif ?? true, order: record?.order ?? 0 });
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      if (editing) await api.patch(`/business/regulatory-domains/${record.id}`, form);
+      else await api.post('/business/regulatory-domains', form);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title={editing ? 'Modifier le domaine' : 'Nouveau domaine'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Code"><input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Libellé"><input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Ordre d'affichage"><input type="number" value={form.order} onChange={(e) => setForm({ ...form, order: Number(e.target.value) })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <label className="flex items-center gap-2 text-sm mb-3" style={{ color: C.text }}><input type="checkbox" checked={form.actif} onChange={(e) => setForm({ ...form, actif: e.target.checked })} /> Actif</label>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Enregistrer</button>
+      </form>
+    </Modal>
+  );
+}
+function RegulatoryDomainsTab() {
+  const C = useTheme();
+  const domainsQ = useCollection('/business/regulatory-domains');
+  const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState(null);
+  if (domainsQ.loading) return <LoadingPanel />;
+  if (domainsQ.error) return <ErrorPanel message={domainsQ.error} onRetry={domainsQ.reload} />;
+  const list = domainsQ.data || [];
+  return (
+    <div className="space-y-3">
+      {(showForm || selected) && <RegulatoryDomainForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={domainsQ.reload} />}
+      <div className="flex justify-end"><button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau domaine</button></div>
+      <Panel title="Domaines réglementaires">
+        {list.length
+          ? <DataTable columns={['Code', 'Libellé', 'Statut']} rows={list.map((d) => [d.code, d.label, regulatoryBadge(C, d.actif ? 'Actif' : 'Inactif', d.actif ? C.green : C.textMuted)])} onRowClick={(i) => setSelected(list[i])} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun domaine défini</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function RegulatoryTextForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const domainsQ = useCollection('/business/regulatory-domains');
+  const [form, setForm] = useState({
+    code: record?.code || genCode('REG'), reference: record?.reference || '', titre: record?.titre || '', typeTexte: record?.typeTexte || '',
+    domainId: record?.domainId || '', sousDomaine: record?.sousDomaine || '', pays: record?.pays || "Côte d'Ivoire", autoriteEmettrice: record?.autoriteEmettrice || '',
+    datePublication: record?.datePublication ? record.datePublication.slice(0, 10) : '', dateEntreeVigueur: record?.dateEntreeVigueur ? record.dateEntreeVigueur.slice(0, 10) : '',
+    statut: record?.statut || 'EN_VIGUEUR', sourceOfficielle: record?.sourceOfficielle || '', lienSource: record?.lienSource || '',
+    resume: record?.resume || '', objet: record?.objet || '',
+  });
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const payload = { ...form, domainId: form.domainId || null, datePublication: form.datePublication || null, dateEntreeVigueur: form.dateEntreeVigueur || null };
+      if (editing) await api.patch(`/business/regulatory-texts/${record.id}`, payload);
+      else await api.post('/business/regulatory-texts', payload);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title={editing ? 'Modifier le texte réglementaire' : 'Nouveau texte réglementaire'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Référence"><input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. Loi n°... du ..." /></FormField>
+          <FormField label="Type de texte"><input value={form.typeTexte} onChange={(e) => setForm({ ...form, typeTexte: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Loi, décret, arrêté, norme..." /></FormField>
+        </div>
+        <FormField label="Titre"><input required value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Domaine">
+            <select value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(domainsQ.data || []).map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Sous-domaine"><input value={form.sousDomaine} onChange={(e) => setForm({ ...form, sousDomaine: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Pays"><input value={form.pays} onChange={(e) => setForm({ ...form, pays: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Autorité émettrice"><input value={form.autoriteEmettrice} onChange={(e) => setForm({ ...form, autoriteEmettrice: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Date de publication"><input type="date" value={form.datePublication} onChange={(e) => setForm({ ...form, datePublication: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Date d'entrée en vigueur"><input type="date" value={form.dateEntreeVigueur} onChange={(e) => setForm({ ...form, dateEntreeVigueur: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Statut">
+          <select value={form.statut} onChange={(e) => setForm({ ...form, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="EN_VIGUEUR">En vigueur</option><option value="MODIFIE">Modifié</option><option value="ABROGE">Abrogé</option>
+          </select>
+        </FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Source officielle"><input value={form.sourceOfficielle} onChange={(e) => setForm({ ...form, sourceOfficielle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Lien vers la source"><input value={form.lienSource} onChange={(e) => setForm({ ...form, lienSource: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="https://..." /></FormField>
+        </div>
+        <FormField label="Objet"><textarea value={form.objet} onChange={(e) => setForm({ ...form, objet: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Résumé"><textarea value={form.resume} onChange={(e) => setForm({ ...form, resume: e.target.value })} rows={3} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Enregistrer</button>
+      </form>
+    </Modal>
+  );
+}
+
+function RegulatoryRequirementForm({ record, textId, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const domainsQ = useCollection('/business/regulatory-domains');
+  const sitesQ = useCollection('/quality/catalog/sites');
+  const workUnitsQ = useCollection('/business/work-units');
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({
+    code: record?.code || genCode('REQ'), textId: record?.textId || textId || '', libelle: record?.libelle || '', domainId: record?.domainId || '',
+    siteId: record?.siteId || '', workUnitId: record?.workUnitId || '', preuveAttendue: record?.preuveAttendue || '', responsableId: record?.responsableId || '',
+    frequenceEvaluationMois: record?.frequenceEvaluationMois ?? '', criticite: record?.criticite || '', commentaire: record?.commentaire || '',
+  });
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...form, domainId: form.domainId || null, siteId: form.siteId || null, workUnitId: form.workUnitId || null, responsableId: form.responsableId || null,
+        frequenceEvaluationMois: form.frequenceEvaluationMois === '' ? null : Number(form.frequenceEvaluationMois), criticite: form.criticite || null,
+      };
+      if (editing) await api.patch(`/business/regulatory-requirements/${record.id}`, payload);
+      else await api.post('/business/regulatory-requirements', payload);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title={editing ? "Modifier l'exigence" : 'Nouvelle exigence'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <FormField label="Libellé de l'exigence"><textarea required value={form.libelle} onChange={(e) => setForm({ ...form, libelle: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Domaine">
+            <select value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(domainsQ.data || []).map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Criticité">
+            <select value={form.criticite} onChange={(e) => setForm({ ...form, criticite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option><option value="CRITIQUE">Critique</option><option value="HAUTE">Haute</option><option value="MOYENNE">Moyenne</option><option value="FAIBLE">Faible</option>
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Site">
+            <select value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(sitesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Service / unité">
+            <select value={form.workUnitId} onChange={(e) => setForm({ ...form, workUnitId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(workUnitsQ.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable">
+            <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Fréquence de réévaluation (mois)"><input type="number" min="0" value={form.frequenceEvaluationMois} onChange={(e) => setForm({ ...form, frequenceEvaluationMois: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Preuve de conformité attendue"><input value={form.preuveAttendue} onChange={(e) => setForm({ ...form, preuveAttendue: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ex. registre de contrôle, certificat, permis..." /></FormField>
+        <FormField label="Commentaire"><textarea value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Enregistrer</button>
+      </form>
+    </Modal>
+  );
+}
+
+function RegulatoryApplicabiliteForm({ requirement, onClose, onCreated }) {
+  const C = useTheme();
+  const [applicabilite, setApplicabilite] = useState(requirement.applicabilite || 'A_ANALYSER');
+  const [justificatif, setJustificatif] = useState(requirement.justificatifApplicabilite || '');
+  const [error, setError] = useState(null);
+  const requiresJustification = applicabilite === 'NON' || applicabilite === 'PARTIELLEMENT';
+  async function submit(e) {
+    e.preventDefault();
+    try { await api.post(`/business/regulatory-requirements/${requirement.id}/applicability`, { applicabilite, justificatif: justificatif || undefined }); onCreated(); onClose(); }
+    catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title="Statuer sur l'applicabilité" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Applicabilité">
+          <select value={applicabilite} onChange={(e) => setApplicabilite(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            {Object.entries(REGULATORY_APPLICABILITE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </FormField>
+        <FormField label={`Justification${requiresJustification ? ' (obligatoire)' : ' (facultative)'}`}>
+          <textarea required={requiresJustification} value={justificatif} onChange={(e) => setJustificatif(e.target.value)} rows={3} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Jamais de conclusion automatique : expliquez le raisonnement." />
+        </FormField>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Valider</button>
+      </form>
+    </Modal>
+  );
+}
+
+function RegulatoryEvaluationForm({ requirement, onClose, onCreated }) {
+  const C = useTheme();
+  const [form, setForm] = useState({ statut: 'CONFORME', constat: '', preuveExaminee: '', observation: '', personneInterrogee: '', dateControle: new Date().toISOString().slice(0, 10), commentaire: '' });
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try { await api.post(`/business/regulatory-requirements/${requirement.id}/evaluations`, form); onCreated(); onClose(); }
+    catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title="Nouvelle évaluation de conformité" onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Statut">
+            <select value={form.statut} onChange={(e) => setForm({ ...form, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              {Object.entries(REGULATORY_STATUT_CONFORMITE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Date du contrôle"><input type="date" value={form.dateControle} onChange={(e) => setForm({ ...form, dateControle: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Constat"><textarea value={form.constat} onChange={(e) => setForm({ ...form, constat: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Preuve examinée"><input value={form.preuveExaminee} onChange={(e) => setForm({ ...form, preuveExaminee: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Personne interrogée"><input value={form.personneInterrogee} onChange={(e) => setForm({ ...form, personneInterrogee: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Observation"><textarea value={form.observation} onChange={(e) => setForm({ ...form, observation: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Enregistrer l'évaluation</button>
+      </form>
+    </Modal>
+  );
+}
+
+function RegulatoryEvidenceForm({ requirement, record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const usersQ = useCollection('/users');
+  const documentsQ = useCollection('/documents');
+  const [form, setForm] = useState({
+    type: record?.type || '', documentId: record?.documentId || '', nom: record?.nom || '', dateEmission: record?.dateEmission ? record.dateEmission.slice(0, 10) : '',
+    dateExpiration: record?.dateExpiration ? record.dateExpiration.slice(0, 10) : '', responsableId: record?.responsableId || '', commentaire: record?.commentaire || '',
+  });
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const payload = { ...form, documentId: form.documentId || null, dateEmission: form.dateEmission || null, dateExpiration: form.dateExpiration || null, responsableId: form.responsableId || null };
+      if (editing) await api.patch(`/business/regulatory-evidences/${record.id}`, payload);
+      else await api.post(`/business/regulatory-requirements/${requirement.id}/evidences`, payload);
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title={editing ? 'Modifier la preuve' : 'Nouvelle preuve de conformité'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type"><input value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Certificat, registre, permis..." /></FormField>
+          <FormField label="Nom / référence"><input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Document lié (GED)">
+          <select value={form.documentId} onChange={(e) => setForm({ ...form, documentId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(documentsQ.data || []).map((d) => <option key={d.id} value={d.id}>{d.title || d.name}</option>)}
+          </select>
+        </FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Date d'émission"><input type="date" value={form.dateEmission} onChange={(e) => setForm({ ...form, dateEmission: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Date d'expiration"><input type="date" value={form.dateExpiration} onChange={(e) => setForm({ ...form, dateExpiration: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Responsable">
+          <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Commentaire"><textarea value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <div className="flex gap-2">
+          <button type="submit" className="flex-1 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Enregistrer</button>
+          {editing && <button type="button" onClick={() => confirmAndDelete(record.nom || 'cette preuve', `/business/regulatory-evidences/${record.id}`, () => { onCreated(); onClose(); })} className="px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RegulatoryLinkRiskForm({ requirement, onClose, onCreated }) {
+  const C = useTheme();
+  const risksQ = useCollection('/business/risks');
+  const [riskId, setRiskId] = useState('');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try { await api.post(`/business/regulatory-requirements/${requirement.id}/link-risk`, { riskId, note: note || undefined }); onCreated(); onClose(); }
+    catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title="Lier un risque existant" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Risque">
+          <select required value={riskId} onChange={(e) => setRiskId(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Choisir...</option>{(risksQ.data || []).map((r) => <option key={r.id} value={r.id}>{r.code} — {r.hazard}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Note"><input value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Lier</button>
+      </form>
+    </Modal>
+  );
+}
+function RegulatoryLinkDocumentForm({ requirement, onClose, onCreated }) {
+  const C = useTheme();
+  const documentsQ = useCollection('/documents');
+  const [documentId, setDocumentId] = useState('');
+  const [type, setType] = useState('');
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try { await api.post(`/business/regulatory-requirements/${requirement.id}/link-document`, { documentId, type: type || undefined }); onCreated(); onClose(); }
+    catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title="Lier un document (GED)" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Document">
+          <select required value={documentId} onChange={(e) => setDocumentId(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Choisir...</option>{(documentsQ.data || []).map((d) => <option key={d.id} value={d.id}>{d.title || d.name}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Type de lien"><input value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Procédure, preuve, référence..." /></FormField>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Lier</button>
+      </form>
+    </Modal>
+  );
+}
+function RegulatoryGenerateActionForm({ requirement, onClose, onCreated }) {
+  const C = useTheme();
+  const usersQ = useCollection('/users');
+  const [form, setForm] = useState({ title: '', description: '', priority: 2, actionType: 'CORRECTIVE', responsibleId: requirement.responsableId || '', dueDate: '' });
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try { await api.post(`/business/regulatory-requirements/${requirement.id}/generate-action`, { ...form, responsibleId: form.responsibleId || null, dueDate: form.dueDate || null }); onCreated(); onClose(); }
+    catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title="Créer une action CAPA" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Titre"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder={`Action réglementaire — ${requirement.libelle.slice(0, 40)}`} /></FormField>
+        <FormField label="Description"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable">
+            <select value={form.responsibleId} onChange={(e) => setForm({ ...form, responsibleId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Échéance"><input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Créer l'action</button>
+      </form>
+    </Modal>
+  );
+}
+function RegulatoryRiskReevalForm({ requirement, onClose, onCreated }) {
+  const C = useTheme();
+  const usersQ = useCollection('/users');
+  const risks = requirement.requirementRisks || [];
+  const [form, setForm] = useState({ riskId: risks[0]?.riskId || '', raison: '', responsableId: requirement.responsableId || '', dateLimite: '' });
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try { await api.post(`/business/regulatory-requirements/${requirement.id}/request-risk-reevaluation`, { ...form, responsableId: form.responsableId || null, dateLimite: form.dateLimite || null }); onCreated(); onClose(); }
+    catch (err) { setError(err.message); }
+  }
+  return (
+    <Modal title="Demander une réévaluation du risque" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Risque concerné">
+          <select required value={form.riskId} onChange={(e) => setForm({ ...form, riskId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Choisir...</option>{risks.map((rr) => <option key={rr.id} value={rr.riskId}>{rr.risk.code} — {rr.risk.hazard}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Raison"><textarea value={form.raison} onChange={(e) => setForm({ ...form, raison: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Ceci ne modifie pas la cotation : c'est une demande à traiter." /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Responsable">
+            <select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(usersQ.data || []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Date limite"><input type="date" value={form.dateLimite} onChange={(e) => setForm({ ...form, dateLimite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Envoyer la demande</button>
+      </form>
+    </Modal>
+  );
+}
+
+function RegulatoryRequirementDetailModal({ requirementId, onClose, onChanged }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/regulatory-requirements/${requirementId}`);
+  const historyQ = useCollection(`/audit-logs?module=REGULATORY_REQUIREMENT&entityId=${requirementId}`);
+  const [tab, setTab] = useState('exigence');
+  const [editing, setEditing] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [busy, setBusy] = useState(false);
+  if (detailQ.loading) return <Modal title="Exigence" onClose={onClose} wide><LoadingPanel /></Modal>;
+  if (detailQ.error || !detailQ.data) return <Modal title="Exigence" onClose={onClose} wide><ErrorPanel message={detailQ.error} onRetry={detailQ.reload} /></Modal>;
+  const req = detailQ.data;
+  function reload() { detailQ.reload(); onChanged(); }
+  if (editing) return <RegulatoryRequirementForm record={req} onClose={() => setEditing(false)} onCreated={() => { setEditing(false); reload(); }} />;
+  async function run(action, body) {
+    setBusy(true);
+    try { await api.post(`/business/regulatory-requirements/${requirementId}/${action}`, body || {}); reload(); }
+    catch (err) { alert(err.message); }
+    setBusy(false);
+  }
+  return (
+    <Modal title={`${req.code} — ${req.libelle.slice(0, 60)}`} onClose={onClose} wide>
+      {modal === 'applicabilite' && <RegulatoryApplicabiliteForm requirement={req} onClose={() => setModal(null)} onCreated={reload} />}
+      {modal === 'evaluation' && <RegulatoryEvaluationForm requirement={req} onClose={() => setModal(null)} onCreated={reload} />}
+      {modal === 'evidence' && <RegulatoryEvidenceForm requirement={req} onClose={() => setModal(null)} onCreated={reload} />}
+      {modal && modal.evidence && <RegulatoryEvidenceForm requirement={req} record={modal.evidence} onClose={() => setModal(null)} onCreated={reload} />}
+      {modal === 'link-risk' && <RegulatoryLinkRiskForm requirement={req} onClose={() => setModal(null)} onCreated={reload} />}
+      {modal === 'link-document' && <RegulatoryLinkDocumentForm requirement={req} onClose={() => setModal(null)} onCreated={reload} />}
+      {modal === 'generate-action' && <RegulatoryGenerateActionForm requirement={req} onClose={() => setModal(null)} onCreated={reload} />}
+      {modal === 'reevaluation' && <RegulatoryRiskReevalForm requirement={req} onClose={() => setModal(null)} onCreated={reload} />}
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p className="text-xs" style={{ color: C.textMuted }}>{req.text?.titre} {req.domain ? `· ${req.domain.label}` : ''} {req.site ? `· ${req.site.name}` : ''}</p>
+        <div className="flex gap-2 flex-wrap">
+          {regulatoryBadge(C, REGULATORY_APPLICABILITE_LABELS[req.applicabilite] || req.applicabilite, regulatoryApplicabiliteColor(C, req.applicabilite))}
+          {req.statutConformite && regulatoryBadge(C, REGULATORY_STATUT_CONFORMITE_LABELS[req.statutConformite] || req.statutConformite, regulatoryConformiteColor(C, req.statutConformite))}
+          {regulatoryBadge(C, REGULATORY_STATUT_FILE_LABELS[req.statutFile] || req.statutFile, C.blue)}
+        </div>
+      </div>
+      <div className="flex gap-2 flex-wrap mb-4">
+        <button onClick={() => setEditing(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+        <button onClick={() => setModal('applicabilite')} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>Statuer applicabilité</button>
+        <button onClick={() => setModal('evaluation')} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${C.green}22`, color: C.green }}>Nouvelle évaluation</button>
+        <button onClick={() => run('generate-nc')} disabled={busy} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Créer une NC</button>
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[['exigence', 'Texte source'], ['applicabilite', 'Applicabilité'], ['evaluation', 'Évaluation'], ['preuves', 'Preuves'], ['liens', 'NC / CAPA / Risques'], ['historique', 'Historique']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
+        ))}
+      </div>
+      {tab === 'exigence' && (
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Texte source</p><p style={{ color: C.text }}>{req.text?.reference ? `${req.text.reference} — ` : ''}{req.text?.titre}</p></div>
+          <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Libellé de l'exigence</p><p style={{ color: C.text }}>{req.libelle}</p></div>
+          {req.preuveAttendue && <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Preuve attendue</p><p style={{ color: C.text }}>{req.preuveAttendue}</p></div>}
+          {req.responsable && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Responsable</p><p style={{ color: C.text }}>{req.responsable.firstName} {req.responsable.lastName}</p></div>}
+          {req.workUnit && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Service / unité</p><p style={{ color: C.text }}>{req.workUnit.name}</p></div>}
+          {req.frequenceEvaluationMois && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Fréquence de réévaluation</p><p style={{ color: C.text }}>Tous les {req.frequenceEvaluationMois} mois</p></div>}
+          {req.dateProchaineEvaluation && <div><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Prochaine évaluation</p><p style={{ color: C.text }}>{new Date(req.dateProchaineEvaluation).toLocaleDateString('fr-FR')}</p></div>}
+          {req.commentaire && <div className="col-span-2"><p className="text-xs font-semibold" style={{ color: C.textMuted }}>Commentaire</p><p style={{ color: C.text }}>{req.commentaire}</p></div>}
+        </div>
+      )}
+      {tab === 'applicabilite' && (
+        <div className="text-sm space-y-2">
+          <p style={{ color: C.text }}>Statut : {regulatoryBadge(C, REGULATORY_APPLICABILITE_LABELS[req.applicabilite] || req.applicabilite, regulatoryApplicabiliteColor(C, req.applicabilite))}</p>
+          <p style={{ color: C.textMuted }}>{req.justificatifApplicabilite || "Aucune justification enregistrée — jamais de conclusion automatique sans motif pour une exigence non ou partiellement applicable."}</p>
+        </div>
+      )}
+      {tab === 'evaluation' && (
+        <Panel title={`Historique des évaluations (${(req.evaluations || []).length})`}>
+          {(req.evaluations || []).length
+            ? <DataTable columns={['Date', 'Statut', 'Constat', 'Évaluateur']} rows={req.evaluations.map((ev) => [new Date(ev.dateControle).toLocaleDateString('fr-FR'), regulatoryBadge(C, REGULATORY_STATUT_CONFORMITE_LABELS[ev.statut] || ev.statut, regulatoryConformiteColor(C, ev.statut)), ev.constat || '—', ev.evaluateur ? `${ev.evaluateur.firstName} ${ev.evaluateur.lastName}` : '—'])} />
+            : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune évaluation enregistrée</p>}
+        </Panel>
+      )}
+      {tab === 'preuves' && (
+        <div className="space-y-3">
+          <div className="flex justify-end"><button onClick={() => setModal('evidence')} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle preuve</button></div>
+          <Panel title={`Preuves de conformité (${(req.evidences || []).length})`}>
+            {(req.evidences || []).length
+              ? <DataTable columns={['Nom', 'Type', 'Expiration', 'Statut', 'Responsable']} rows={req.evidences.map((ev) => [ev.nom || '—', ev.type || '—', ev.dateExpiration ? new Date(ev.dateExpiration).toLocaleDateString('fr-FR') : '—', regulatoryBadge(C, REGULATORY_EVIDENCE_STATUT_LABELS[ev.statut] || ev.statut, regulatoryEvidenceColor(C, ev.statut)), ev.responsable ? `${ev.responsable.firstName} ${ev.responsable.lastName}` : '—'])}
+                  onRowClick={(i) => setModal({ evidence: req.evidences[i] })} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune preuve enregistrée</p>}
+          </Panel>
+        </div>
+      )}
+      {tab === 'liens' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setModal('link-risk')} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Lier un risque</button>
+            <button onClick={() => setModal('link-document')} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>Lier un document</button>
+            <button onClick={() => setModal('generate-action')} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>Créer une action CAPA</button>
+            {(req.requirementRisks || []).length > 0 && <button onClick={() => setModal('reevaluation')} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Demander réévaluation du risque</button>}
+          </div>
+          <Panel title={`Risques liés (${(req.requirementRisks || []).length})`}>
+            {(req.requirementRisks || []).length
+              ? <DataTable columns={['Code', 'Danger', 'Niveau', '']} rows={req.requirementRisks.map((rr) => [rr.risk.code, rr.risk.hazard, rr.risk.grossLevel || '—', <button onClick={() => confirmAndDelete(rr.risk.hazard, `/business/regulatory-requirement-risks/${rr.id}`, reload)} className="text-xs" style={{ color: C.red }}>Délier</button>])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun risque lié</p>}
+          </Panel>
+          <Panel title={`Documents liés (${(req.requirementDocuments || []).length})`}>
+            {(req.requirementDocuments || []).length
+              ? <DataTable columns={['Document', 'Type', '']} rows={req.requirementDocuments.map((rd) => [rd.document.title || rd.document.name, rd.type || '—', <button onClick={() => confirmAndDelete(rd.document.title || rd.document.name, `/business/regulatory-requirement-documents/${rd.id}`, reload)} className="text-xs" style={{ color: C.red }}>Délier</button>])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun document lié</p>}
+          </Panel>
+          <Panel title={`Non-conformités liées (${(req.nonConformities || []).length})`}>
+            {(req.nonConformities || []).length
+              ? <DataTable columns={['Code', 'Titre', 'Statut']} rows={req.nonConformities.map((n) => [n.code, n.title, <StatusChip statut={n.status} />])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune non-conformité liée</p>}
+          </Panel>
+          <Panel title={`Actions CAPA liées (${(req.actions || []).length})`}>
+            {(req.actions || []).length
+              ? <DataTable columns={['Code', 'Titre', 'Statut', 'Échéance']} rows={req.actions.map((a) => [a.code, a.title, <StatusChip statut={a.status} />, a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—'])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune action CAPA liée</p>}
+          </Panel>
+        </div>
+      )}
+      {tab === 'historique' && (
+        <Panel title="Historique de l'exigence">
+          {historyQ.loading ? <LoadingPanel /> : (historyQ.data || []).length
+            ? <DataTable columns={['Date', 'Utilisateur', 'Action']} rows={historyQ.data.map((l) => [new Date(l.createdAt).toLocaleString('fr-FR'), l.user ? `${l.user.firstName} ${l.user.lastName}` : 'Système', l.action === 'CREATE' ? 'Création' : l.action === 'UPDATE' ? 'Modification' : 'Suppression'])} />
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
+        </Panel>
+      )}
+    </Modal>
+  );
+}
+
+function RegulatoryTextDetailModal({ textId, onClose, onChanged }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/regulatory-texts/${textId}`);
+  const [editing, setEditing] = useState(false);
+  const [showReqForm, setShowReqForm] = useState(false);
+  const [impact, setImpact] = useState(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  if (detailQ.loading) return <Modal title="Texte réglementaire" onClose={onClose} wide><LoadingPanel /></Modal>;
+  if (detailQ.error || !detailQ.data) return <Modal title="Texte réglementaire" onClose={onClose} wide><ErrorPanel message={detailQ.error} onRetry={detailQ.reload} /></Modal>;
+  const text = detailQ.data;
+  function reload() { detailQ.reload(); onChanged(); }
+  if (editing) return <RegulatoryTextForm record={text} onClose={() => setEditing(false)} onCreated={() => { setEditing(false); reload(); }} />;
+  async function analyzeImpact() {
+    setImpactLoading(true);
+    try { setImpact(await api.get(`/business/regulatory-texts/${textId}/impact-analysis`)); }
+    catch (err) { alert(err.message); }
+    setImpactLoading(false);
+  }
+  return (
+    <Modal title={text.titre} onClose={onClose} wide>
+      {detailId && <RegulatoryRequirementDetailModal requirementId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />}
+      {showReqForm && <RegulatoryRequirementForm textId={textId} onClose={() => setShowReqForm(false)} onCreated={reload} />}
+      <p className="text-xs mb-3" style={{ color: C.textMuted }}>{text.reference ? `${text.reference} · ` : ''}{text.typeTexte || ''} {text.domain ? `· ${text.domain.label}` : ''} · {text.statut}</p>
+      <div className="flex gap-2 flex-wrap mb-4">
+        <button onClick={() => setEditing(true)} className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+        <button onClick={() => setShowReqForm(true)} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle exigence</button>
+        <button onClick={analyzeImpact} disabled={impactLoading} className="text-xs px-2 py-1.5 rounded-lg font-medium" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Analyser l'impact d'une évolution</button>
+        {text.lienSource && <a href={text.lienSource} target="_blank" rel="noreferrer" className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.blue }}>Source officielle</a>}
+      </div>
+      {text.objet && <p className="text-sm mb-2" style={{ color: C.text }}>{text.objet}</p>}
+      {text.resume && <p className="text-sm mb-4" style={{ color: C.textMuted }}>{text.resume}</p>}
+      {impact && (
+        <Panel title="Analyse d'impact — jamais une conclusion automatique" className="mb-4">
+          <p className="text-sm mb-2" style={{ color: C.text }}>{impact.exigencesImpactees} exigence(s) rattachée(s) à ce texte, statut : <b>impact à analyser</b>.</p>
+          <div className="grid grid-cols-2 gap-3 text-xs" style={{ color: C.textMuted }}>
+            <p>Sites impactés : {impact.sitesImpactes.length ? impact.sitesImpactes.join(', ') : '—'}</p>
+            <p>Risques impactés : {impact.risquesImpactes.length}</p>
+            <p>Documents impactés : {impact.documentsImpactes.length}</p>
+            <p>NC ouvertes : {impact.nonConformitesOuvertes.length} · Actions ouvertes : {impact.actionsOuvertes.length}</p>
+          </div>
+        </Panel>
+      )}
+      <Panel title={`Exigences rattachées (${(text.requirements || []).length})`}>
+        {(text.requirements || []).length
+          ? <DataTable columns={['Code', 'Libellé', 'Applicabilité', 'Conformité']}
+              rows={text.requirements.map((r) => [r.code, r.libelle.slice(0, 60), regulatoryBadge(C, REGULATORY_APPLICABILITE_LABELS[r.applicabilite] || r.applicabilite, regulatoryApplicabiliteColor(C, r.applicabilite)), r.statutConformite ? regulatoryBadge(C, REGULATORY_STATUT_CONFORMITE_LABELS[r.statutConformite] || r.statutConformite, regulatoryConformiteColor(C, r.statutConformite)) : '—'])}
+              onRowClick={(i) => setDetailId(text.requirements[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune exigence rattachée à ce texte</p>}
+      </Panel>
+    </Modal>
+  );
+}
+
+function RegulatoryDashboardTab({ onNavigate }) {
+  const C = useTheme();
+  const dashQ = useCollection('/business/regulatory-requirements-dashboard');
+  const alertsQ = useCollection('/business/regulatory-alerts');
+  if (dashQ.loading || alertsQ.loading) return <LoadingPanel />;
+  if (dashQ.error) return <ErrorPanel message={dashQ.error} onRetry={dashQ.reload} />;
+  const d = dashQ.data, a = alertsQ.data || {};
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Exigences" value={d.total} color={C.blue} icon={BookOpen} />
+        <KpiCard label="Applicables" value={d.applicables} color={C.blue} icon={CheckCircle2} />
+        <KpiCard label="Conformes" value={d.conformes} color={C.green} icon={ShieldCheck} />
+        <KpiCard label="Non conformes" value={d.nonConformes} color={C.red} icon={FileWarning} />
+        <KpiCard label="À analyser" value={d.aAnalyser} color={C.amber} icon={AlertTriangle} />
+        <KpiCard label="Taux de conformité" value={d.tauxConformite != null ? `${d.tauxConformite}%` : '—'} color={C.green} icon={Target} />
+      </div>
+      <p className="text-xs" style={{ color: C.textMuted }}>{d.methodeCalcul}</p>
+      <div className="grid grid-cols-2 gap-4">
+        <Panel title="Échéances d'évaluation à venir" right={<button onClick={() => onNavigate('alertes')} className="text-xs" style={{ color: C.blue }}>Voir tout</button>}>
+          {(a.echeancesEvaluation || []).slice(0, 5).length
+            ? <DataTable columns={['Exigence', 'Échéance', 'Niveau']} rows={a.echeancesEvaluation.slice(0, 5).map((e) => [e.code, new Date(e.date).toLocaleDateString('fr-FR'), regulatoryBadge(C, e.jours < 0 ? 'En retard' : `J-${e.jours}`, e.jours < 0 ? C.red : e.jours <= 15 ? C.amber : C.blue)])} />
+            : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune échéance proche</p>}
+        </Panel>
+        <Panel title="Preuves arrivant à expiration" right={<button onClick={() => onNavigate('alertes')} className="text-xs" style={{ color: C.blue }}>Voir tout</button>}>
+          {(a.echeancesPreuves || []).slice(0, 5).length
+            ? <DataTable columns={['Exigence', 'Échéance', 'Niveau']} rows={a.echeancesPreuves.slice(0, 5).map((e) => [e.code, new Date(e.date).toLocaleDateString('fr-FR'), regulatoryBadge(C, e.jours < 0 ? 'Expirée' : `J-${e.jours}`, e.jours < 0 ? C.red : e.jours <= 15 ? C.amber : C.blue)])} />
+            : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune preuve proche de l'expiration</p>}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function RegulatorySettingsPanel() {
+  const C = useTheme();
+  const settingsQ = useCollection('/business/regulatory-settings');
+  if (settingsQ.loading) return <LoadingPanel />;
+  const s = settingsQ.data;
+  async function toggle(key) {
+    await api.patch('/business/regulatory-settings', { [key]: !s[key] });
+    settingsQ.reload();
+  }
+  return (
+    <Panel title="Seuils d'alerte" subtitle="Échéances signalées avant l'expiration">
+      <div className="flex flex-wrap gap-3">
+        {[['alerteJ90', '90 jours'], ['alerteJ60', '60 jours'], ['alerteJ30', '30 jours'], ['alerteJ15', '15 jours'], ['alerteJ7', '7 jours']].map(([key, label]) => (
+          <label key={key} className="flex items-center gap-2 text-sm" style={{ color: C.text }}>
+            <input type="checkbox" checked={!!s[key]} onChange={() => toggle(key)} /> {label}
+          </label>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function RegulatoryAlertsTab() {
+  const C = useTheme();
+  const alertsQ = useCollection('/business/regulatory-alerts');
+  const [detailId, setDetailId] = useState(null);
+  if (alertsQ.loading) return <LoadingPanel />;
+  if (alertsQ.error) return <ErrorPanel message={alertsQ.error} onRetry={alertsQ.reload} />;
+  const a = alertsQ.data;
+  return (
+    <div className="space-y-4">
+      {detailId && <RegulatoryRequirementDetailModal requirementId={detailId} onClose={() => setDetailId(null)} onChanged={alertsQ.reload} />}
+      <RegulatorySettingsPanel />
+      <Panel title={`Échéances d'évaluation (${a.echeancesEvaluation.length})`}>
+        {a.echeancesEvaluation.length
+          ? <DataTable columns={['Exigence', 'Texte', 'Responsable', 'Échéance', 'Niveau']}
+              rows={a.echeancesEvaluation.map((e) => [e.code, e.texte, e.responsable ? `${e.responsable.firstName} ${e.responsable.lastName}` : '—', new Date(e.date).toLocaleDateString('fr-FR'), regulatoryBadge(C, e.jours < 0 ? 'En retard' : `J-${e.jours}`, e.jours < 0 ? C.red : e.jours <= 15 ? C.amber : C.blue)])}
+              onRowClick={(i) => setDetailId(a.echeancesEvaluation[i].requirementId)} />
+          : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune échéance</p>}
+      </Panel>
+      <Panel title={`Preuves arrivant à expiration (${a.echeancesPreuves.length})`}>
+        {a.echeancesPreuves.length
+          ? <DataTable columns={['Exigence', 'Preuve', 'Responsable', 'Échéance', 'Niveau']}
+              rows={a.echeancesPreuves.map((e) => [e.code, e.nom || '—', e.responsable ? `${e.responsable.firstName} ${e.responsable.lastName}` : '—', new Date(e.date).toLocaleDateString('fr-FR'), regulatoryBadge(C, e.jours < 0 ? 'Expirée' : `J-${e.jours}`, e.jours < 0 ? C.red : e.jours <= 15 ? C.amber : C.blue)])}
+              onRowClick={(i) => setDetailId(a.echeancesPreuves[i].requirementId)} />
+          : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune preuve proche de l'expiration</p>}
+      </Panel>
+      <Panel title={`Nouvelles exigences à analyser (${a.nouvellesExigences.length})`}>
+        {a.nouvellesExigences.length
+          ? <DataTable columns={['Code', 'Libellé', 'Statut']} rows={a.nouvellesExigences.map((r) => [r.code, r.libelle.slice(0, 60), regulatoryBadge(C, REGULATORY_STATUT_FILE_LABELS[r.statutFile] || r.statutFile, C.blue)])} onRowClick={(i) => setDetailId(a.nouvellesExigences[i].id)} />
+          : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune nouvelle exigence en attente</p>}
+      </Panel>
+      <Panel title={`Actions réglementaires en retard (${a.actionsEnRetard.length})`}>
+        {a.actionsEnRetard.length
+          ? <DataTable columns={['Code', 'Titre', 'Échéance', 'Responsable']} rows={a.actionsEnRetard.map((act) => [act.code, act.title, new Date(act.dueDate).toLocaleDateString('fr-FR'), act.responsible ? `${act.responsible.firstName} ${act.responsible.lastName}` : '—'])} />
+          : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune action en retard</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function RegulatoryReevaluationsTab() {
+  const C = useTheme();
+  const listQ = useCollection('/business/regulatory-risk-reevaluations');
+  if (listQ.loading) return <LoadingPanel />;
+  if (listQ.error) return <ErrorPanel message={listQ.error} onRetry={listQ.reload} />;
+  const list = listQ.data || [];
+  async function updateStatut(id, statut) { await api.patch(`/business/regulatory-risk-reevaluations/${id}`, { statut }); listQ.reload(); }
+  return (
+    <Panel title={`Demandes de réévaluation des risques (${list.length})`} subtitle="Une tâche à traiter — jamais une modification directe de la cotation">
+      {list.length
+        ? <DataTable columns={['Exigence', 'Risque', 'Raison', 'Responsable', 'Date limite', 'Statut']}
+            rows={list.map((r) => [r.requirement?.code || '—', r.risk?.code || '—', r.raison || '—', r.responsable ? `${r.responsable.firstName} ${r.responsable.lastName}` : '—', r.dateLimite ? new Date(r.dateLimite).toLocaleDateString('fr-FR') : '—',
+              <select value={r.statut} onChange={(e) => updateStatut(r.id, e.target.value)} className="text-xs px-2 py-1 rounded-lg outline-none" style={inputStyle(C)}>
+                <option value="A_PLANIFIER">À planifier</option><option value="EN_COURS">En cours</option><option value="REALISEE">Réalisée</option>
+              </select>])} />
+        : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune demande de réévaluation en cours</p>}
+    </Panel>
+  );
+}
+
+function RegulatoryTextsTab() {
+  const C = useTheme();
+  const textsQ = useCollection('/business/regulatory-texts');
+  const [showForm, setShowForm] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  if (textsQ.loading) return <LoadingPanel />;
+  if (textsQ.error) return <ErrorPanel message={textsQ.error} onRetry={textsQ.reload} />;
+  const list = textsQ.data || [];
+  return (
+    <div className="space-y-3">
+      {showForm && <RegulatoryTextForm onClose={() => setShowForm(false)} onCreated={textsQ.reload} />}
+      {detailId && <RegulatoryTextDetailModal textId={detailId} onClose={() => setDetailId(null)} onChanged={textsQ.reload} />}
+      <div className="flex justify-end"><button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau texte</button></div>
+      <Panel title="Bibliothèque des textes réglementaires" subtitle={`${list.length} texte(s)`}>
+        {list.length
+          ? <DataTable columns={['Référence', 'Titre', 'Domaine', "Entrée en vigueur", 'Statut']}
+              rows={list.map((t) => [t.reference || '—', t.titre, t.domain?.label || '—', t.dateEntreeVigueur ? new Date(t.dateEntreeVigueur).toLocaleDateString('fr-FR') : '—', regulatoryBadge(C, t.statut === 'EN_VIGUEUR' ? 'En vigueur' : t.statut === 'ABROGE' ? 'Abrogé' : 'Modifié', t.statut === 'EN_VIGUEUR' ? C.green : t.statut === 'ABROGE' ? C.textMuted : C.amber)])}
+              onRowClick={(i) => setDetailId(list[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun texte réglementaire enregistré</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function RegulatoryRequirementsTab() {
+  const C = useTheme();
+  const reqQ = useCollection('/business/regulatory-requirements');
+  const domainsQ = useCollection('/business/regulatory-domains');
+  const [showForm, setShowForm] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  const [domainFilter, setDomainFilter] = useState('TOUS');
+  const [applicabiliteFilter, setApplicabiliteFilter] = useState('TOUS');
+  const [search, setSearch] = useState('');
+  if (reqQ.loading) return <LoadingPanel />;
+  if (reqQ.error) return <ErrorPanel message={reqQ.error} onRetry={reqQ.reload} />;
+  const list = reqQ.data || [];
+  const filtered = list.filter((r) => {
+    if (domainFilter !== 'TOUS' && r.domainId !== domainFilter) return false;
+    if (applicabiliteFilter !== 'TOUS' && r.applicabilite !== applicabiliteFilter) return false;
+    if (search && !normalizeText(`${r.code} ${r.libelle}`).includes(normalizeText(search))) return false;
+    return true;
+  });
+  return (
+    <div className="space-y-3">
+      {showForm && <RegulatoryRequirementForm onClose={() => setShowForm(false)} onCreated={reqQ.reload} />}
+      {detailId && <RegulatoryRequirementDetailModal requirementId={detailId} onClose={() => setDetailId(null)} onChanged={reqQ.reload} />}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une exigence..." className="px-3 py-1.5 rounded-lg text-xs outline-none w-64" style={inputStyle(C)} />
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle exigence</button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <select value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="TOUS">Tous les domaines</option>{(domainsQ.data || []).map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+        </select>
+        <select value={applicabiliteFilter} onChange={(e) => setApplicabiliteFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="TOUS">Toutes les applicabilités</option>{Object.entries(REGULATORY_APPLICABILITE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+      <Panel title="Matrice des exigences réglementaires" subtitle={`${filtered.length} exigence(s)`}>
+        {filtered.length
+          ? <DataTable columns={['Code', 'Libellé', 'Domaine', 'Applicabilité', 'Conformité', 'Statut']}
+              rows={filtered.map((r) => [r.code, r.libelle.slice(0, 60), r.domain?.label || '—',
+                regulatoryBadge(C, REGULATORY_APPLICABILITE_LABELS[r.applicabilite] || r.applicabilite, regulatoryApplicabiliteColor(C, r.applicabilite)),
+                r.statutConformite ? regulatoryBadge(C, REGULATORY_STATUT_CONFORMITE_LABELS[r.statutConformite] || r.statutConformite, regulatoryConformiteColor(C, r.statutConformite)) : '—',
+                regulatoryBadge(C, REGULATORY_STATUT_FILE_LABELS[r.statutFile] || r.statutFile, C.blue)])}
+              onRowClick={(i) => setDetailId(filtered[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune exigence pour ce filtre</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function VeilleReglementairePage() {
+  const C = useTheme();
+  const [tab, setTab] = useState('dashboard');
+  const tabs = [
+    ['dashboard', 'Tableau de bord'], ['textes', 'Textes'], ['exigences', 'Exigences'], ['alertes', 'Alertes & échéances'],
+    ['reevaluations', 'Réévaluations risques'], ['domaines', 'Domaines'], ['catalogue', 'Catalogue simple (ancien)'],
+  ];
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <LiveBadge />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {tabs.map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
+        ))}
+      </div>
+      {tab === 'dashboard' && <RegulatoryDashboardTab onNavigate={setTab} />}
+      {tab === 'textes' && <RegulatoryTextsTab />}
+      {tab === 'exigences' && <RegulatoryRequirementsTab />}
+      {tab === 'alertes' && <RegulatoryAlertsTab />}
+      {tab === 'reevaluations' && <RegulatoryReevaluationsTab />}
+      {tab === 'domaines' && <RegulatoryDomainsTab />}
+      {tab === 'catalogue' && <VeillePage />}
+    </div>
+  );
+}
+
 function normalizeText(s) { return `${s}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 
 function DocumentFolder({ label, icon: Icon, docs, defaultOpen, onOpenDoc }) {
@@ -11678,7 +12495,7 @@ const PAGES = {
   pilotage: PilotagePage, 'qualite-controles': QualiteControlesPage, 'qualite-processus': QualiteProcessusPage, 'qualite-indicateurs': IndicateursQualitePage, 'qualite-reclamations': QualiteReclamationsPage, 'qualite-fournisseurs': QualiteFournisseursPage,
   'securite-accidents': SecuriteAccidentsPage, 'securite-epi': SecuriteEpiPage, 'securite-hygiene': SecuriteHygienePage,
   environnement: EnvironnementPage, risques: RisquesPage, audits: AuditsPage, 'non-conformites': NonConformitesPage, capa: CapaPage,
-  documentation: DocumentationPage, 'quart-heure-securite': SafetyTalkPage, haccp: HaccpPage, equipements: EquipmentPage, veille: VeillePage, objectifs: ObjectifsPage, rapports: RapportsPage, utilisateurs: UtilisateursPage,
+  documentation: DocumentationPage, 'quart-heure-securite': SafetyTalkPage, haccp: HaccpPage, equipements: EquipmentPage, veille: VeilleReglementairePage, objectifs: ObjectifsPage, rapports: RapportsPage, utilisateurs: UtilisateursPage,
 };
 
 // ============================================================================
