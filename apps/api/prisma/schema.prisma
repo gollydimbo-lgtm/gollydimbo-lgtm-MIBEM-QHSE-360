@@ -3235,3 +3235,25 @@ model RegulatoryRiskReevaluationRequest {
   risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
   responsable User? @relation("RegulatoryReevalResponsable", fields:[responsableId], references:[id], onDelete:SetNull)
 }
+
+// Rapports QHSE — identite de l'entreprise reutilisee automatiquement dans
+// les rapports generes (page de garde, en-tete). Table singleton : une seule
+// ligne, jamais une base parallele aux modules metier.
+model CompanyIdentity {
+  id String @id @default(cuid())
+  nomOfficiel String?
+  nomCommercial String?
+  sigle String?
+  slogan String?
+  logoUrl String?
+  adresse String?
+  telephone String?
+  email String?
+  siteInternet String?
+  pays String?
+  responsableQhseId String?
+  directeurId String?
+  responsableRapportId String?
+  updatedById String?
+  updatedAt DateTime @updatedAt
+}

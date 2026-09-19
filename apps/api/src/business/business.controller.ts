@@ -138,4 +138,8 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Post('objectifs-qhse/:id/risks') objectifRiskLink(@Param('id')id:string,@Body()b:any){return this.s.objectifRiskLink(id,b)} @Delete('objectifs-qhse-risks/:id') objectifRiskUnlink(@Param('id')id:string){return this.s.objectifRiskUnlink(id)}
 @Get('objectifs-qhse/:id/comments') objectifCommentList(@Param('id')id:string){return this.s.objectifCommentList(id)} @Post('objectifs-qhse/:id/comments') objectifCommentCreate(@Param('id')id:string,@Body()b:any){return this.s.objectifCommentCreate(id,b)}
 @Get('objectifs-qhse/:id/reviews') objectifReviewList(@Param('id')id:string){return this.s.objectifReviewList(id)} @Post('objectifs-qhse/:id/reviews') objectifReviewCreate(@Param('id')id:string,@Body()b:any){return this.s.objectifReviewCreate(id,b)}
-@Get('worked-hours') workedHoursList(){return this.s.workedHoursList()} @Post('worked-hours') workedHoursCreate(@Body()b:any){return this.s.workedHoursCreate(b)} @Patch('worked-hours/:id') workedHoursUpdate(@Param('id')id:string,@Body()b:any){return this.s.workedHoursUpdate(id,b)} @Delete('worked-hours/:id') workedHoursDelete(@Param('id')id:string){return this.s.workedHoursDelete(id)} }
+@Get('worked-hours') workedHoursList(){return this.s.workedHoursList()} @Post('worked-hours') workedHoursCreate(@Body()b:any){return this.s.workedHoursCreate(b)} @Patch('worked-hours/:id') workedHoursUpdate(@Param('id')id:string,@Body()b:any){return this.s.workedHoursUpdate(id,b)} @Delete('worked-hours/:id') workedHoursDelete(@Param('id')id:string){return this.s.workedHoursDelete(id)}
+@Get('company-identity') companyIdentityGet(){return this.s.companyIdentityGet()}
+@Patch('company-identity') companyIdentityUpdate(@Body()b:any){return this.s.companyIdentityUpdate(b)}
+@Get('rapports/consolide') rapportConsolide(@Query('from')from?:string,@Query('to')to?:string,@Query('siteId')siteId?:string){return this.s.rapportConsolide({from,to,siteId})}
+}

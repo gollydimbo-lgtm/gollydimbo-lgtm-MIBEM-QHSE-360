@@ -10964,6 +10964,7 @@ function ObjectifsPage() {
 }
 function RapportsPage() {
   const C = useTheme();
+  const [tab, setTab] = useState('generateur');
   const [derniers, setDerniers] = useState([]);
   const dashboardQ = useCollection('/dashboard');
   const auditsQ = useCollection('/business/audits');
@@ -11020,24 +11021,122 @@ function RapportsPage() {
   }
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between"><LiveBadge /></div>
-      <div className="grid grid-cols-3 gap-4">
-        {reports.map((r) => (
-          <Panel key={r.id} title={r.titre} subtitle={r.description}>
-            <div className="flex gap-2">
-              <button onClick={() => generer(r, 'pdf')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Générer PDF</button>
-              <button onClick={() => generer(r, 'excel')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Générer Excel</button>
-            </div>
-          </Panel>
-        ))}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <LiveBadge />
+        <div className="flex flex-wrap gap-2">
+          {[['generateur', 'Générateur'], ['identite', "Identité de l'entreprise"], ['consolidation', 'Aperçu consolidation']].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
+          ))}
+        </div>
       </div>
-      <Panel title="Derniers rapports générés">
-        {derniers.length === 0
-          ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun rapport généré pour le moment</p>
-          : <DataTable columns={['Rapport', 'Format', 'Généré le']} rows={derniers.map((d) => [d.titre, d.format.toUpperCase(), d.date])} />}
-        <p className="text-xs mt-3" style={{ color: C.textMuted }}>
-          « Générer PDF » ouvre un aperçu imprimable (Ctrl+P puis « Enregistrer en PDF » depuis votre navigateur) — la génération PDF directe n'est pas disponible dans cet environnement d'aperçu. « Générer Excel » télécharge un classeur réel, construit à partir de vos données actuelles.
-        </p>
+      {tab === 'generateur' && (
+        <>
+          <div className="grid grid-cols-3 gap-4">
+            {reports.map((r) => (
+              <Panel key={r.id} title={r.titre} subtitle={r.description}>
+                <div className="flex gap-2">
+                  <button onClick={() => generer(r, 'pdf')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Générer PDF</button>
+                  <button onClick={() => generer(r, 'excel')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Générer Excel</button>
+                </div>
+              </Panel>
+            ))}
+          </div>
+          <Panel title="Derniers rapports générés">
+            {derniers.length === 0
+              ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun rapport généré pour le moment</p>
+              : <DataTable columns={['Rapport', 'Format', 'Généré le']} rows={derniers.map((d) => [d.titre, d.format.toUpperCase(), d.date])} />}
+            <p className="text-xs mt-3" style={{ color: C.textMuted }}>
+              « Générer PDF » ouvre un aperçu imprimable (Ctrl+P puis « Enregistrer en PDF » depuis votre navigateur) — la génération PDF directe n'est pas disponible dans cet environnement d'aperçu. « Générer Excel » télécharge un classeur réel, construit à partir de vos données actuelles.
+            </p>
+          </Panel>
+        </>
+      )}
+      {tab === 'identite' && <RapportsIdentitePanel />}
+      {tab === 'consolidation' && <RapportsConsolidationPanel />}
+    </div>
+  );
+}
+function RapportsIdentitePanel() {
+  const C = useTheme();
+  const identiteQ = useCollection('/business/company-identity');
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (!form && identiteQ.data) setForm(identiteQ.data); }, [identiteQ.data]);
+  if (identiteQ.loading || !form) return <LoadingPanel />;
+  if (identiteQ.error) return <ErrorPanel message={identiteQ.error} onRetry={identiteQ.reload} />;
+  function set(k, v) { setForm({ ...form, [k]: v }); }
+  function onLogoFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => set('logoUrl', reader.result);
+    reader.readAsDataURL(file);
+  }
+  async function save() {
+    setSaving(true);
+    try { await api.patch('/business/company-identity', form); identiteQ.reload(); }
+    finally { setSaving(false); }
+  }
+  return (
+    <div className="space-y-4">
+      <Panel title="Identité de l'entreprise" subtitle="Réutilisée automatiquement sur la page de garde et l'en-tête des rapports">
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Nom officiel"><input value={form.nomOfficiel || ''} onChange={(e) => set('nomOfficiel', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Nom commercial"><input value={form.nomCommercial || ''} onChange={(e) => set('nomCommercial', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Sigle"><input value={form.sigle || ''} onChange={(e) => set('sigle', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Slogan"><input value={form.slogan || ''} onChange={(e) => set('slogan', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Adresse"><input value={form.adresse || ''} onChange={(e) => set('adresse', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Pays"><input value={form.pays || ''} onChange={(e) => set('pays', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Téléphone"><input value={form.telephone || ''} onChange={(e) => set('telephone', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Email"><input value={form.email || ''} onChange={(e) => set('email', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Site internet"><input value={form.siteInternet || ''} onChange={(e) => set('siteInternet', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="mt-3">
+          <FormField label="Logo">
+            <div className="flex items-center gap-3">
+              {form.logoUrl && <img src={form.logoUrl} alt="Logo" className="h-12 rounded" style={{ border: `1px solid ${C.border}` }} />}
+              <input type="file" accept="image/*" onChange={onLogoFile} className="text-xs" style={{ color: C.textMuted }} />
+            </div>
+          </FormField>
+        </div>
+        <button onClick={save} disabled={saving} className="mt-4 px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{saving ? '…' : 'Enregistrer'}</button>
+      </Panel>
+    </div>
+  );
+}
+function RapportsConsolidationPanel() {
+  const C = useTheme();
+  const now = new Date();
+  const [from, setFrom] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10));
+  const [to, setTo] = useState(now.toISOString().slice(0, 10));
+  const params = new URLSearchParams({ from, to });
+  const consolideQ = useCollection(`/business/rapports/consolide?${params.toString()}`);
+  const SECTION_LABELS = {
+    controles: 'Contrôles qualité', nonConformites: 'Non-conformités', reclamations: 'Réclamations clients',
+    accidents: 'Accidents', incidents: 'Incidents', risques: 'Risques', audits: 'Audits',
+    actionsCapa: 'Actions CAPA', formations: 'Formations', environnement: 'Environnement', veilleReglementaire: 'Veille réglementaire',
+  };
+  return (
+    <div className="space-y-4">
+      <Panel title="Aperçu du moteur de consolidation" subtitle="Ce que le rapport de la période récupérerait automatiquement — aucune section n'est inventée">
+        <div className="flex flex-wrap gap-2 items-end mb-4">
+          <FormField label="Du"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Au"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} /></FormField>
+          <button onClick={consolideQ.reload} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Actualiser</button>
+        </div>
+        {consolideQ.loading ? <LoadingPanel /> : consolideQ.error ? <ErrorPanel message={consolideQ.error} onRetry={consolideQ.reload} /> : (() => {
+          const d = consolideQ.data;
+          const flat = { ...d.sections.qualite, ...d.sections.securite, risques: d.sections.risques, audits: d.sections.audits, actionsCapa: d.sections.actionsCapa, formations: d.sections.formations, environnement: d.sections.environnement, veilleReglementaire: d.sections.veilleReglementaire };
+          return (
+            <DataTable columns={['Rubrique', 'Données sur la période', 'Nombre']}
+              rows={Object.entries(flat).map(([key, sec]) => [
+                SECTION_LABELS[key] || key,
+                sec.hasData ? regulatoryBadge(C, 'Alimentée', C.green) : regulatoryBadge(C, 'Aucune donnée', C.textMuted),
+                sec.count,
+              ])} />
+          );
+        })()}
+        <p className="text-xs mt-3" style={{ color: C.textMuted }}>Objectifs QHSE actifs sur cette sélection : {consolideQ.data?.sections?.objectifsQhse?.resume?.total ?? '—'}</p>
       </Panel>
     </div>
   );

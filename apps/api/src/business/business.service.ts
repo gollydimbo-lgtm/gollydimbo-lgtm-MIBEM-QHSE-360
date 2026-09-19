@@ -2972,4 +2972,88 @@ import { writeAudit } from '../common/audit-log.helper';
   return updated;
  }
  workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} workedHoursDelete(id:string){return this.db.workedHours.delete({where:{id}})}
+
+ // ============================================================================
+ // RAPPORTS QHSE — Phase 1 : identite de l'entreprise + moteur de
+ // consolidation. Regle absolue : une seule source de verite. Le moteur ne
+ // recalcule jamais un chiffre different de celui des modules d'origine, il
+ // se contente de les lire, filtres par periode/site, et de signaler quelles
+ // rubriques ont reellement des donnees (jamais de section vide inventee).
+ // ============================================================================
+
+ // Identite de l'entreprise (point 7) — table singleton, jamais une deuxieme
+ // base parallele : uniquement des informations de presentation reutilisees
+ // automatiquement sur la page de garde et l'en-tete des rapports.
+ async companyIdentityGet(){
+  const existing=await this.db.companyIdentity.findFirst();
+  if(existing) return existing;
+  return this.db.companyIdentity.create({data:{}});
+ }
+ async companyIdentityUpdate(b:any){
+  const current=await this.companyIdentityGet();
+  const updated=await this.db.companyIdentity.update({where:{id:current.id},data:{
+   nomOfficiel:b.nomOfficiel??current.nomOfficiel,nomCommercial:b.nomCommercial??current.nomCommercial,
+   sigle:b.sigle??current.sigle,slogan:b.slogan??current.slogan,logoUrl:b.logoUrl??current.logoUrl,
+   adresse:b.adresse??current.adresse,telephone:b.telephone??current.telephone,email:b.email??current.email,
+   siteInternet:b.siteInternet??current.siteInternet,pays:b.pays??current.pays,
+   responsableQhseId:b.responsableQhseId??current.responsableQhseId,directeurId:b.directeurId??current.directeurId,
+   responsableRapportId:b.responsableRapportId??current.responsableRapportId,updatedById:b.updatedById??current.updatedById,
+  }});
+  await writeAudit(this.db,'COMPANY_IDENTITY','UPDATE',updated.id,current,updated);
+  return updated;
+ }
+
+ // Moteur de consolidation (points 2 et 3, AC01..AC14) — scanne les modules
+ // pour la periode/site demandes et retourne, pour chaque rubrique,
+ // hasData + un resume + une liste (capee) d'elements tracables jusqu'a leur
+ // module d'origine. Une rubrique sans donnee reste presente dans la reponse
+ // (hasData:false) mais ne doit jamais etre affichee comme une page vide par
+ // le client — c'est au client de la masquer.
+ async rapportConsolide(filters?:{from?:string,to?:string,siteId?:string}){
+  const now=new Date();
+  const from=filters?.from?new Date(filters.from):new Date(now.getFullYear(),now.getMonth(),1);
+  const to=filters?.to?new Date(filters.to):now;
+  const periode={gte:from,lte:to};
+  const siteId=filters?.siteId;
+
+  const section=(rows:any[], map:(r:any)=>any)=>({hasData:rows.length>0,count:rows.length,items:rows.map(map)});
+
+  const [controles,nc,accidents,incidents,risques,audits,actions,formations,environnement,reclamations,veille] = await Promise.all([
+   this.db.qualityControl.findMany({where:{controlDate:periode,...(siteId?{siteId}:{})},orderBy:{controlDate:'desc'},take:200}),
+   this.db.nonConformity.findMany({where:{occurredAt:periode},orderBy:{occurredAt:'desc'},take:200}),
+   this.db.safetyEvent.findMany({where:{occurredAt:periode,type:'ACCIDENT',...(siteId?{siteId}:{})},orderBy:{occurredAt:'desc'},take:200}),
+   this.db.safetyEvent.findMany({where:{occurredAt:periode,type:{not:'ACCIDENT'},...(siteId?{siteId}:{})},orderBy:{occurredAt:'desc'},take:200}),
+   this.db.risk.findMany({where:{createdAt:periode},orderBy:{createdAt:'desc'},take:200}),
+   this.db.qhseAudit.findMany({where:{auditDate:periode},orderBy:{auditDate:'desc'},take:200}),
+   this.db.action.findMany({where:{createdAt:periode},orderBy:{createdAt:'desc'},take:200}),
+   this.db.training.findMany({where:{scheduledAt:periode},orderBy:{scheduledAt:'desc'},take:200}),
+   this.db.environmentRecord.findMany({where:{recordedAt:periode},orderBy:{recordedAt:'desc'},take:200}),
+   this.db.reclamation.findMany({where:{date:periode,...(siteId?{siteId}:{})},orderBy:{date:'desc'},take:200}),
+   this.db.veilleReglementaire.findMany({where:{createdAt:periode},orderBy:{createdAt:'desc'},take:200}),
+  ]);
+
+  const objectifsQhse=await this.objectifDashboard({siteId});
+
+  return {
+   periode:{from,to},siteId:siteId||null,genereLe:new Date(),
+   sections:{
+    qualite:{
+     controles:section(controles,c=>({id:c.id,code:c.code,date:c.controlDate,statut:c.status})),
+     nonConformites:section(nc,n=>({id:n.id,code:n.code,titre:n.title,date:n.occurredAt,statut:n.status})),
+     reclamations:section(reclamations,r=>({id:r.id,code:r.code,date:r.date,statut:r.dateCloture?'CLOTUREE':'EN_COURS'})),
+    },
+    securite:{
+     accidents:section(accidents,e=>({id:e.id,titre:e.title,date:e.occurredAt})),
+     incidents:section(incidents,e=>({id:e.id,titre:e.title,date:e.occurredAt,type:e.type})),
+    },
+    risques:section(risques,r=>({id:r.id,code:r.code,libelle:r.hazard,statut:r.status})),
+    audits:section(audits,a=>({id:a.id,code:a.code,titre:a.title,date:a.auditDate,statut:a.status})),
+    actionsCapa:section(actions,a=>({id:a.id,code:a.code,titre:a.title,statut:a.status,echeance:a.dueDate})),
+    formations:section(formations,f=>({id:f.id,code:f.code,titre:f.title,date:f.scheduledAt,statut:f.status})),
+    environnement:section(environnement,e=>({id:e.id,code:e.code,type:e.type,date:e.recordedAt})),
+    veilleReglementaire:section(veille,v=>({id:v.id,code:v.code,dateApplication:v.dateApplication})),
+    objectifsQhse:{hasData:objectifsQhse.total>0,resume:objectifsQhse},
+   },
+  };
+ }
 }
