@@ -6,7 +6,7 @@ import { currentAuditUserId } from './audit-context';
 export async function writeAudit(
   db: PrismaService,
   module: string,
-  action: 'CREATE' | 'UPDATE' | 'DELETE',
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | (string & {}),
   entityId: string | null,
   oldValue: unknown,
   newValue: unknown,
