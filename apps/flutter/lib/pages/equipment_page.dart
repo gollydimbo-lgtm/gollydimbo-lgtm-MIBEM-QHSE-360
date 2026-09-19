@@ -120,7 +120,7 @@ class _EquipmentPageState extends State<EquipmentPage> {
 
   List get filtered {
     var list = items;
-    if (filter == 'EN_RETARD') list = list.where(equipmentIsOverdue).toList();
+    if (filter == 'EN_RETARD') list = list.where((e) => equipmentIsOverdue(e)).toList();
     else if (filter == 'CRITIQUES') list = list.where((e) => e['criticiteNiveau'] == 'CRITIQUE').toList();
     else if (filter == 'NON_CONFORMES') list = list.where((e) => List.from(e['nonConformities'] ?? []).any((n) => n['status'] != 'CLOSED')).toList();
     if (search.trim().isNotEmpty) {
