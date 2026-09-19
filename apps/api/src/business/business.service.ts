@@ -2490,16 +2490,431 @@ import { writeAudit } from '../common/audit-log.helper';
   return demande;
  }
 
- objectifList(){
-  return this.db.objectifQhse.findMany({include:{processus:true,responsable:true},orderBy:{createdAt:'desc'}}).then(list=>list.map(o=>{
-   let progression=null;
-   if(o.valeurInitiale!=null){
-    const denom=o.cible-o.valeurInitiale;
-    if(denom!==0){const p=((o.actuel-o.valeurInitiale)/denom)*100;progression=Math.max(0,Math.min(100,Math.round(p*10)/10));}
-   }
-   return {...o,progression};
-  }));
+ // ============================================================================
+ // MODULE OBJECTIFS QHSE — Phase 1 : pilotage de la performance QHSE.
+ // Principes repris de la Veille réglementaire et des Équipements : aucun
+ // second calcul divergent (statut/avancement/KPI « AUTO » toujours
+ // recalculés à la lecture depuis les données déjà enregistrées dans les
+ // autres modules), jamais de suppression destructive quand des données
+ // liées existent (archivage à la place), traçabilité via writeAudit.
+ // ============================================================================
+
+ // Avancement % borné 0-100, sens de progression pris en compte (l'ancien
+ // calcul supposait toujours "plus est mieux", ce qui faussait les
+ // objectifs de réduction — corrigé ici).
+ private objectifAvancement(valeurInitiale:number|null|undefined, actuel:number|null|undefined, cible:number|null|undefined, sensInverse?:boolean):number|null{
+  if(valeurInitiale==null||cible==null||actuel==null) return null;
+  const denom=sensInverse?(valeurInitiale-cible):(cible-valeurInitiale);
+  if(denom===0) return null;
+  const p=sensInverse?((valeurInitiale-actuel)/denom)*100:((actuel-valeurInitiale)/denom)*100;
+  return Math.max(0,Math.min(100,Math.round(p*10)/10));
  }
- objectifCreate(b:any){return this.db.objectifQhse.create({data:{...b,cible:Number(b.cible),actuel:b.actuel!==undefined?Number(b.actuel):0,valeurInitiale:b.valeurInitiale!==undefined?Number(b.valeurInitiale):undefined,budget:b.budget!==undefined?Number(b.budget):undefined}})} objectifUpdate(id:string,b:any){return this.db.objectifQhse.update({where:{id},data:{...b,...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.valeurInitiale!==undefined?{valeurInitiale:Number(b.valeurInitiale)}:{}),...(b.budget!==undefined?{budget:Number(b.budget)}:{})}})} objectifDelete(id:string){return this.db.objectifQhse.delete({where:{id}})}
+
+ // Conformité SMART (point 5, CA-03) — vérification déterministe et
+ // explicable, jamais une appréciation subjective.
+ private objectifSmartCheck(o:any, kpiCount:number){
+  const manquants:string[]=[];
+  if(!o.titre||!o.description) manquants.push('Spécifique (intitulé et description détaillée)');
+  if(o.cible==null||!o.unite) manquants.push('Mesurable (cible chiffrée et unité)');
+  if(!o.responsableId) manquants.push('Atteignable (responsable désigné)');
+  if(kpiCount===0) manquants.push('Pertinent (au moins un indicateur KPI lié)');
+  if(!o.echeance) manquants.push('Temporellement défini (échéance)');
+  return {conforme:manquants.length===0, manquants};
+ }
+
+ // Statut automatique (point 12, CA-13..16) — jamais figé manuellement,
+ // sauf choix explicite (SUSPENDU/ABANDONNE/CLOTURE via statutManuel,
+ // renseigné par une revue ou par l'utilisateur).
+ private objectifStatutCalcule(o:any, avancement:number|null, actionsEnRetard:number):string{
+  if(o.statutManuel) return o.statutManuel;
+  if(o.archivedAt) return 'ARCHIVE';
+  const now=new Date();
+  const echeanceDepassee=o.echeance?new Date(o.echeance)<now:false;
+  if(avancement!=null&&avancement>=100) return 'ATTEINT';
+  if(echeanceDepassee) return 'EN_RETARD';
+  if(actionsEnRetard>0) return 'A_RISQUE';
+  if(o.echeance&&o.dateDebut&&avancement!=null){
+   const total=new Date(o.echeance).getTime()-new Date(o.dateDebut).getTime();
+   const ecoule=now.getTime()-new Date(o.dateDebut).getTime();
+   if(total>0){
+    const tempsEcoulePct=Math.max(0,Math.min(100,(ecoule/total)*100));
+    if(tempsEcoulePct>75&&avancement<50) return 'A_RISQUE';
+    if(tempsEcoulePct>50&&avancement<25) return 'A_SURVEILLER';
+   }
+  }
+  if(avancement==null||avancement===0) return 'NON_DEMARRE';
+  return 'EN_COURS';
+ }
+
+ private objectifValidateDates(b:any){
+  if(b.dateDebut&&b.echeance&&new Date(b.echeance)<=new Date(b.dateDebut)){
+   throw new Error('La date cible doit être postérieure à la date de début.');
+  }
+ }
+
+ // Catalogue unifié des KPI "AUTO" (points 8 et 30 du cahier des charges)
+ // — assemble les moteurs d'indicateurs déjà existants dans l'application
+ // (indicateursAuto, reclamationsScoreGlobal, hygieneIndiceGlobal,
+ // environnementDashboard) plus les indicateurs sécurité (accidents,
+ // incidents, taux de fréquence/gravité) qui n'existaient dans aucun
+ // moteur. Jamais de nouvelle table de faits : uniquement de la lecture
+ // sur les données déjà enregistrées par les autres modules.
+ async objectifKpiCatalog(){
+  const [auto,reclam,hygiene,env,safetyEvents,workedHours]=await Promise.all([
+   this.indicateursAuto(),
+   this.reclamationsScoreGlobal().catch(()=>({detail:[] as any[]})),
+   this.hygieneIndiceGlobal().catch(()=>({detail:[] as any[]})),
+   this.environnementDashboard().catch(()=>({scoreDetail:[] as any[]})),
+   this.db.safetyEvent.findMany(),
+   this.db.workedHours.findMany(),
+  ]);
+  const heuresTravaillees=workedHours.reduce((s,w)=>s+w.hours,0);
+  const accidents=safetyEvents.filter(e=>e.type==='ACCIDENT');
+  const accidentsAvecArret=accidents.filter(e=>e.withLostTime);
+  const joursPerdus=accidents.reduce((s,e)=>s+(e.lostDays||0),0);
+  const incidents=safetyEvents.filter(e=>e.type!=='ACCIDENT');
+  const tauxFrequence=heuresTravaillees>0?Math.round((accidentsAvecArret.length*1000000/heuresTravaillees)*100)/100:null;
+  const tauxGravite=heuresTravaillees>0?Math.round((joursPerdus*1000/heuresTravaillees)*100)/100:null;
+  const safetyCatalog=[
+   {key:'nb_accidents',nom:"Nombre d'accidents",categorie:'Sécurité',formule:'Compte des événements de type Accident',unite:'nombre',sensInverse:true,valeur:accidents.length},
+   {key:'nb_incidents',nom:"Nombre d'incidents / presque-accidents",categorie:'Sécurité',formule:'Compte des événements hors Accident',unite:'nombre',sensInverse:true,valeur:incidents.length},
+   {key:'taux_frequence',nom:'Taux de fréquence (TF)',categorie:'Sécurité',formule:'Accidents avec arrêt × 1 000 000 / Heures travaillées',unite:'fréquence',sensInverse:true,valeur:tauxFrequence},
+   {key:'taux_gravite',nom:'Taux de gravité (TG)',categorie:'Sécurité',formule:'Jours perdus × 1 000 / Heures travaillées',unite:'gravité',sensInverse:true,valeur:tauxGravite},
+  ];
+  const withMeta=(list:any[],categorieParDefaut:string,uniteParDefaut:string)=>list.map((c:any)=>({key:c.key,nom:c.nom,categorie:c.categorie||categorieParDefaut,formule:c.formule||null,unite:c.unite||uniteParDefaut,sensInverse:c.sensInverse??false,valeur:c.valeur}));
+  return [
+   ...withMeta(auto,'Qualité','%'),
+   ...withMeta((reclam as any).detail||[],'Satisfaction client','%'),
+   ...withMeta((hygiene as any).detail||[],'Hygiène','%'),
+   ...withMeta((env as any).scoreDetail||[],'Environnement','%'),
+   ...safetyCatalog,
+  ];
+ }
+
+ // Décore un objectif brut avec l'avancement, le statut calculé, la
+ // conformité SMART et les KPI résolus (valeur AUTO recalculée depuis le
+ // catalogue, jamais depuis une colonne stockée qui pourrait diverger).
+ private objectifDecorate(o:any, catalog:any[]){
+  const kpisResolved=(o.kpis||[]).map((k:any)=>{
+   let valeurActuelle=k.valeurActuelle;
+   let source:any=null;
+   if(k.sourceType==='AUTO'&&k.sourceKey){
+    source=catalog.find(c=>c.key===k.sourceKey)||null;
+    valeurActuelle=source?source.valeur:null;
+   }
+   const avancement=this.objectifAvancement(k.valeurInitiale,valeurActuelle,k.cible,k.sensInverse);
+   return {...k,valeurActuelle,avancement,sourceLabel:source?source.nom:null};
+  });
+  const actions=o.actions||[];
+  const actionsOuvertes=actions.filter((a:any)=>a.status!=='CLOSED');
+  const actionsEnRetard=actionsOuvertes.filter((a:any)=>a.dueDate&&new Date(a.dueDate)<new Date());
+  const avancement=this.objectifAvancement(o.valeurInitiale,o.actuel,o.cible,o.sensInverse);
+  const statutCalcule=this.objectifStatutCalcule(o,avancement,actionsEnRetard.length);
+  const smart=this.objectifSmartCheck(o,kpisResolved.length);
+  return {...o,kpis:kpisResolved,avancement,statutCalcule,smart,actionsOuvertesCount:actionsOuvertes.length,actionsEnRetardCount:actionsEnRetard.length};
+ }
+
+ async objectifList(filters?:{famille?:string,statut?:string,responsableId?:string,siteId?:string,priorite?:string,archived?:string}){
+  const where:any={archivedAt:filters?.archived==='true'?{not:null}:null};
+  if(filters?.famille) where.famille=filters.famille;
+  if(filters?.responsableId) where.responsableId=filters.responsableId;
+  if(filters?.siteId) where.siteId=filters.siteId;
+  if(filters?.priorite) where.priorite=filters.priorite;
+  const list=await this.db.objectifQhse.findMany({where,include:{processus:true,responsable:true,site:true,workUnit:true,kpis:true,actions:true},orderBy:{createdAt:'desc'}});
+  const catalog=await this.objectifKpiCatalog();
+  const decorated=list.map(o=>this.objectifDecorate(o,catalog));
+  return filters?.statut?decorated.filter((o:any)=>o.statutCalcule===filters.statut):decorated;
+ }
+
+ async objectifGet(id:string){
+  const o=await this.db.objectifQhse.findUnique({where:{id},include:{
+   processus:true,responsable:true,site:true,workUnit:true,
+   kpis:{orderBy:{createdAt:'asc'}},
+   objectifRisks:{include:{risk:true}},
+   comments:{orderBy:{createdAt:'desc'}},
+   reviews:{orderBy:{dateRevue:'desc'}},
+   actions:{include:{responsible:true}},
+  }});
+  if(!o) throw new NotFoundException('Objectif QHSE introuvable');
+  const catalog=await this.objectifKpiCatalog();
+  const decorated=this.objectifDecorate(o,catalog);
+  const userIds=[o.valideurId,...(o.contributeurIds||[])].filter(Boolean) as string[];
+  const users=userIds.length?await this.db.user.findMany({where:{id:{in:userIds}}}):[];
+  return {...decorated, valideur:users.find(u=>u.id===o.valideurId)||null, contributeurs:users.filter(u=>(o.contributeurIds||[]).includes(u.id))};
+ }
+
+ async objectifCreate(b:any){
+  if(!b.titre) throw new Error("L'intitulé de l'objectif est obligatoire.");
+  if(b.cible===undefined||b.cible===null||b.cible==='') throw new Error("La cible de l'objectif est obligatoire.");
+  this.objectifValidateDates(b);
+  const {contributeurIds,...rest}=b;
+  const data:any={
+   ...rest,
+   cible:Number(b.cible),
+   actuel:b.actuel!==undefined&&b.actuel!==''?Number(b.actuel):0,
+   valeurInitiale:b.valeurInitiale!==undefined&&b.valeurInitiale!==''?Number(b.valeurInitiale):null,
+   seuilMin:b.seuilMin!==undefined&&b.seuilMin!==''?Number(b.seuilMin):null,
+   seuilMax:b.seuilMax!==undefined&&b.seuilMax!==''?Number(b.seuilMax):null,
+   budget:b.budget!==undefined&&b.budget!==''?Number(b.budget):null,
+   contributeurIds:Array.isArray(contributeurIds)?contributeurIds:[],
+  };
+  const o=await this.db.objectifQhse.create({data});
+  await writeAudit(this.db,'OBJECTIF_QHSE','CREATE',o.id,null,o);
+  return o;
+ }
+
+ async objectifUpdate(id:string,b:any){
+  const current=await this.db.objectifQhse.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Objectif QHSE introuvable');
+  this.objectifValidateDates({dateDebut:b.dateDebut??current.dateDebut,echeance:b.echeance??current.echeance});
+  const {contributeurIds,...rest}=b;
+  const data:any={
+   ...rest,
+   ...(b.cible!==undefined?{cible:Number(b.cible)}:{}),
+   ...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),
+   ...(b.valeurInitiale!==undefined?{valeurInitiale:b.valeurInitiale===''?null:Number(b.valeurInitiale)}:{}),
+   ...(b.seuilMin!==undefined?{seuilMin:b.seuilMin===''?null:Number(b.seuilMin)}:{}),
+   ...(b.seuilMax!==undefined?{seuilMax:b.seuilMax===''?null:Number(b.seuilMax)}:{}),
+   ...(b.budget!==undefined?{budget:b.budget===''?null:Number(b.budget)}:{}),
+   ...(contributeurIds!==undefined?{contributeurIds:Array.isArray(contributeurIds)?contributeurIds:[]}:{}),
+  };
+  const o=await this.db.objectifQhse.update({where:{id},data});
+  await writeAudit(this.db,'OBJECTIF_QHSE','UPDATE',id,current,o);
+  return o;
+ }
+
+ // Jamais de suppression définitive tant que l'objectif porte des
+ // données historiques (CA-36) : on archive à la place, ce qui conserve
+ // toute la traçabilité tout en le retirant des vues actives.
+ async objectifDelete(id:string){
+  const current=await this.db.objectifQhse.findUnique({where:{id},include:{_count:{select:{kpis:true,actions:true,reviews:true}}}});
+  if(!current) throw new NotFoundException('Objectif QHSE introuvable');
+  const hasLinkedData=current._count.kpis>0||current._count.actions>0||current._count.reviews>0;
+  if(hasLinkedData){
+   const o=await this.db.objectifQhse.update({where:{id},data:{archivedAt:new Date()}});
+   await writeAudit(this.db,'OBJECTIF_QHSE','ARCHIVE',id,current,o);
+   return o;
+  }
+  await writeAudit(this.db,'OBJECTIF_QHSE','DELETE',id,current,null);
+  return this.db.objectifQhse.delete({where:{id}});
+ }
+
+ async objectifRestore(id:string){
+  const current=await this.db.objectifQhse.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Objectif QHSE introuvable');
+  const o=await this.db.objectifQhse.update({where:{id},data:{archivedAt:null}});
+  await writeAudit(this.db,'OBJECTIF_QHSE','RESTORE',id,current,o);
+  return o;
+ }
+
+ async objectifKpiCreate(objectifId:string,b:any){
+  const o=await this.db.objectifQhse.findUnique({where:{id:objectifId}});
+  if(!o) throw new NotFoundException('Objectif QHSE introuvable');
+  if(!b.nom) throw new Error('Le nom du KPI est obligatoire.');
+  const kpi=await this.db.objectifKpi.create({data:{
+   objectifId,nom:b.nom,definition:b.definition||null,formule:b.formule||null,unite:b.unite||null,frequence:b.frequence||null,
+   sourceType:b.sourceType||'MANUEL',sourceKey:b.sourceKey||null,sourceModule:b.sourceModule||null,responsableId:b.responsableId||null,
+   valeurInitiale:b.valeurInitiale!==undefined&&b.valeurInitiale!==''?Number(b.valeurInitiale):null,
+   cible:b.cible!==undefined&&b.cible!==''?Number(b.cible):null,
+   valeurActuelle:b.valeurActuelle!==undefined&&b.valeurActuelle!==''?Number(b.valeurActuelle):null,
+   sensInverse:!!b.sensInverse,
+  }});
+  await writeAudit(this.db,'OBJECTIF_KPI','CREATE',kpi.id,null,kpi);
+  return kpi;
+ }
+ async objectifKpiUpdate(id:string,b:any){
+  const current=await this.db.objectifKpi.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('KPI introuvable');
+  const data:any={...b};
+  for(const f of ['valeurInitiale','cible','valeurActuelle']) if(data[f]!==undefined) data[f]=data[f]===''?null:Number(data[f]);
+  const kpi=await this.db.objectifKpi.update({where:{id},data});
+  await writeAudit(this.db,'OBJECTIF_KPI','UPDATE',id,current,kpi);
+  return kpi;
+ }
+ async objectifKpiDelete(id:string){
+  const current=await this.db.objectifKpi.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('KPI introuvable');
+  await writeAudit(this.db,'OBJECTIF_KPI','DELETE',id,current,null);
+  return this.db.objectifKpi.delete({where:{id}});
+ }
+
+ // Action CAPA créée directement depuis un objectif (CA-17) — c'est la
+ // même table Action que le module Actions CAPA : elle y apparaît donc
+ // immédiatement, sans duplication.
+ async objectifActionCreate(objectifId:string,b:any){
+  const o=await this.db.objectifQhse.findUnique({where:{id:objectifId}});
+  if(!o) throw new NotFoundException('Objectif QHSE introuvable');
+  const code=b.code||`ACT-OBJ-${Date.now().toString().slice(-8)}`;
+  const action=await this.db.action.create({data:{
+   code,title:b.title||`Action — ${o.titre}`.slice(0,180),description:b.description||null,
+   priority:b.priority!==undefined?Number(b.priority):2,dueDate:b.dueDate?new Date(b.dueDate):null,
+   responsibleId:b.responsibleId||null,objectifQhseId:objectifId,actionType:b.actionType||'CORRECTIVE',
+   criticite:b.criticite||null,source:'OBJECTIF_QHSE',
+  }});
+  await writeAudit(this.db,'ACTION','CREATE',action.id,null,action);
+  return action;
+ }
+ // Rattachement d'une action CAPA déjà existante (CA-18) — sans doublon :
+ // on pose simplement la clé étrangère sur l'action existante.
+ async objectifActionLink(objectifId:string,actionId:string){
+  const action=await this.db.action.findUnique({where:{id:actionId}});
+  if(!action) throw new NotFoundException('Action introuvable');
+  const updated=await this.db.action.update({where:{id:actionId},data:{objectifQhseId:objectifId}});
+  await writeAudit(this.db,'ACTION','LINK_OBJECTIF',actionId,action,updated);
+  return updated;
+ }
+ async objectifActionUnlink(actionId:string){
+  const action=await this.db.action.findUnique({where:{id:actionId}});
+  if(!action) throw new NotFoundException('Action introuvable');
+  const updated=await this.db.action.update({where:{id:actionId},data:{objectifQhseId:null}});
+  await writeAudit(this.db,'ACTION','UNLINK_OBJECTIF',actionId,action,updated);
+  return updated;
+ }
+
+ async objectifRiskLink(objectifId:string,b:{riskId:string,type?:string,niveauRisque?:string,mesuresMaitrise?:string}){
+  const o=await this.db.objectifQhse.findUnique({where:{id:objectifId}});
+  if(!o) throw new NotFoundException('Objectif QHSE introuvable');
+  const link=await this.db.objectifRisk.create({data:{objectifId,riskId:b.riskId,type:b.type||'RISQUE',niveauRisque:b.niveauRisque||null,mesuresMaitrise:b.mesuresMaitrise||null}});
+  await writeAudit(this.db,'OBJECTIF_RISK','CREATE',link.id,null,link);
+  return link;
+ }
+ async objectifRiskUnlink(id:string){
+  const current=await this.db.objectifRisk.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Lien introuvable');
+  await writeAudit(this.db,'OBJECTIF_RISK','DELETE',id,current,null);
+  return this.db.objectifRisk.delete({where:{id}});
+ }
+
+ // Commentaires de suivi (point 18) — jamais modifiés ni supprimés,
+ // l'historique complet reste consultable dans l'ordre chronologique.
+ objectifCommentList(objectifId:string){return this.db.objectifComment.findMany({where:{objectifId},orderBy:{createdAt:'desc'}})}
+ async objectifCommentCreate(objectifId:string,b:{type?:string,contenu:string,auteurId?:string}){
+  const o=await this.db.objectifQhse.findUnique({where:{id:objectifId}});
+  if(!o) throw new NotFoundException('Objectif QHSE introuvable');
+  if(!b.contenu) throw new Error('Le commentaire ne peut pas être vide.');
+  const c=await this.db.objectifComment.create({data:{objectifId,type:b.type||'SUIVI',contenu:b.contenu,auteurId:b.auteurId||null}});
+  await writeAudit(this.db,'OBJECTIF_COMMENT','CREATE',c.id,null,c);
+  return c;
+ }
+
+ // Revue périodique (point 19, CA-37/38) — jamais écrasée ; une décision
+ // "Révision de cible" met à jour la cible courante en conservant l'ancien
+ // historique (audit), jamais un remplacement silencieux.
+ objectifReviewList(objectifId:string){return this.db.objectifReview.findMany({where:{objectifId},orderBy:{dateRevue:'desc'}})}
+ async objectifReviewCreate(objectifId:string,b:any){
+  const o=await this.db.objectifQhse.findUnique({where:{id:objectifId}});
+  if(!o) throw new NotFoundException('Objectif QHSE introuvable');
+  const review=await this.db.objectifReview.create({data:{
+   objectifId,periodicite:b.periodicite||null,dateRevue:b.dateRevue?new Date(b.dateRevue):new Date(),
+   resultats:b.resultats||null,ecarts:b.ecarts||null,analyseCauses:b.analyseCauses||null,decision:b.decision||null,
+   nouvelleCible:b.nouvelleCible!==undefined&&b.nouvelleCible!==''?Number(b.nouvelleCible):null,
+   actionsProposees:b.actionsProposees||null,commentaire:b.commentaire||null,createdById:b.createdById||null,
+  }});
+  if(b.decision==='REVISION_CIBLE'&&review.nouvelleCible!=null){
+   const currentObjectif=await this.db.objectifQhse.findUnique({where:{id:objectifId}});
+   const updated=await this.db.objectifQhse.update({where:{id:objectifId},data:{cible:review.nouvelleCible}});
+   await writeAudit(this.db,'OBJECTIF_QHSE','REVISION_CIBLE',objectifId,currentObjectif,updated);
+  } else if(b.decision==='CLOTURE'){
+   await this.db.objectifQhse.update({where:{id:objectifId},data:{statutManuel:'CLOTURE'}});
+  } else if(b.decision==='ABANDON'){
+   await this.db.objectifQhse.update({where:{id:objectifId},data:{statutManuel:'ABANDONNE'}});
+  }
+  await writeAudit(this.db,'OBJECTIF_REVIEW','CREATE',review.id,null,review);
+  return review;
+ }
+
+ // Tableau de bord de la section (point 13) — recalculé à la demande à
+ // partir d'objectifList(), jamais un second calcul divergent.
+ async objectifDashboard(filters?:{famille?:string,siteId?:string,responsableId?:string}){
+  const list=await this.objectifList(filters);
+  const parFamille:Record<string,number>={};
+  const parStatut:Record<string,number>={};
+  let actionsOuvertes=0,actionsEnRetard=0;
+  for(const o of list as any[]){
+   parFamille[o.famille]=(parFamille[o.famille]||0)+1;
+   parStatut[o.statutCalcule]=(parStatut[o.statutCalcule]||0)+1;
+   actionsOuvertes+=o.actionsOuvertesCount; actionsEnRetard+=o.actionsEnRetardCount;
+  }
+  const evalues=(list as any[]).filter(o=>o.avancement!=null);
+  const tauxGlobalAtteinte=evalues.length?Math.round(((list as any[]).filter(o=>o.statutCalcule==='ATTEINT').length/evalues.length)*1000)/10:null;
+  return {
+   total:(list as any[]).length,
+   atteints:(list as any[]).filter(o=>o.statutCalcule==='ATTEINT').length,
+   enCours:(list as any[]).filter(o=>o.statutCalcule==='EN_COURS').length,
+   enRetard:(list as any[]).filter(o=>o.statutCalcule==='EN_RETARD').length,
+   aRisque:(list as any[]).filter(o=>o.statutCalcule==='A_RISQUE').length,
+   nonDemarres:(list as any[]).filter(o=>o.statutCalcule==='NON_DEMARRE').length,
+   tauxGlobalAtteinte,
+   methodeCalcul:'Objectifs atteints / Objectifs évalués (avec avancement calculable) × 100',
+   actionsOuvertes,actionsEnRetard,
+   parFamille,parStatut,
+  };
+ }
+
+ // Bibliothèque d'objectifs préconfigurés (point 24) — de simples modèles
+ // texte servant à préremplir le formulaire de création, jamais des
+ // objectifs imposés ni stockés en base tant qu'ils ne sont pas créés.
+ objectifLibrary(){
+  return [
+   {famille:'QUALITE',titre:'Améliorer la satisfaction client',unite:'%',sensInverse:false},
+   {famille:'QUALITE',titre:'Réduire les réclamations clients',unite:'nombre',sensInverse:true},
+   {famille:'QUALITE',titre:'Réduire les non-conformités',unite:'nombre',sensInverse:true},
+   {famille:'QUALITE',titre:'Améliorer le taux de conformité produit/service',unite:'%',sensInverse:false},
+   {famille:'QUALITE',titre:'Réduire les coûts de non-qualité',unite:'montant financier',sensInverse:true},
+   {famille:'HYGIENE',titre:"Améliorer le niveau d'hygiène des locaux",unite:'%',sensInverse:false},
+   {famille:'HYGIENE',titre:"Réduire les écarts d'hygiène",unite:'nombre',sensInverse:true},
+   {famille:'HYGIENE',titre:'Améliorer la conformité des inspections',unite:'%',sensInverse:false},
+   {famille:'SECURITE',titre:'Réduire les accidents du travail',unite:'nombre',sensInverse:true},
+   {famille:'SECURITE',titre:'Réduire les incidents et presque-accidents',unite:'nombre',sensInverse:true},
+   {famille:'SECURITE',titre:'Réduire les situations dangereuses',unite:'nombre',sensInverse:true},
+   {famille:'SECURITE',titre:'Améliorer le taux de réalisation des inspections sécurité',unite:'%',sensInverse:false},
+   {famille:'SECURITE',titre:'Améliorer la réalisation des formations sécurité',unite:'%',sensInverse:false},
+   {famille:'ENVIRONNEMENT',titre:'Réduire la production de déchets',unite:'kg',sensInverse:true},
+   {famille:'ENVIRONNEMENT',titre:'Augmenter le taux de valorisation des déchets',unite:'%',sensInverse:false},
+   {famille:'ENVIRONNEMENT',titre:"Réduire la consommation d'eau",unite:'m³',sensInverse:true},
+   {famille:'ENVIRONNEMENT',titre:'Réduire la consommation énergétique',unite:'kWh',sensInverse:true},
+   {famille:'ENVIRONNEMENT',titre:'Améliorer le tri des déchets',unite:'%',sensInverse:false},
+   {famille:'ENVIRONNEMENT',titre:'Réduire les risques de pollution',unite:'nombre',sensInverse:true},
+  ];
+ }
+
+ // Préparation des objectifs de l'année suivante (point 20) — duplique
+ // l'objectif et ses KPI, sans jamais écraser l'objectif source : la
+ // valeur atteinte devient la nouvelle valeur de référence.
+ async objectifDuplicate(id:string,b:{annee?:number,cible?:number,dateDebut?:string,echeance?:string}){
+  const source=await this.db.objectifQhse.findUnique({where:{id},include:{kpis:true}});
+  if(!source) throw new NotFoundException('Objectif QHSE introuvable');
+  const {id:_id,createdAt:_createdAt,updatedAt:_updatedAt,kpis:kpisSource,...rest}=source as any;
+  const annee=b.annee||(new Date().getFullYear()+1);
+  const created=await this.db.objectifQhse.create({data:{
+   ...rest,code:`${source.code}-${annee}`,actuel:0,valeurInitiale:source.actuel,
+   cible:b.cible!=null?Number(b.cible):source.cible,
+   dateDebut:b.dateDebut?new Date(b.dateDebut):null,echeance:b.echeance?new Date(b.echeance):null,
+   annee,dupliqueDeId:id,statutManuel:null,archivedAt:null,
+  }});
+  for(const k of kpisSource){
+   await this.db.objectifKpi.create({data:{
+    objectifId:created.id,nom:k.nom,definition:k.definition,formule:k.formule,unite:k.unite,frequence:k.frequence,
+    sourceType:k.sourceType,sourceKey:k.sourceKey,sourceModule:k.sourceModule,responsableId:k.responsableId,
+    valeurInitiale:k.valeurActuelle,cible:k.cible,sensInverse:k.sensInverse,
+   }});
+  }
+  await writeAudit(this.db,'OBJECTIF_QHSE','DUPLICATE',created.id,null,created);
+  return created;
+ }
+
+ // Checklist de recette intégrée (point 38, CA-01 à CA-49) — seedée par
+ // la migration, mise à jour ici par le développeur/administrateur.
+ objectifRecetteList(){return this.db.objectifRecetteCriterion.findMany({orderBy:{code:'asc'}})}
+ async objectifRecetteUpdate(id:string,b:any){
+  const current=await this.db.objectifRecetteCriterion.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Critère de recette introuvable');
+  const data:any={...b};
+  if(data.dateTest) data.dateTest=new Date(data.dateTest);
+  if(data.dateCorrection) data.dateCorrection=new Date(data.dateCorrection);
+  const updated=await this.db.objectifRecetteCriterion.update({where:{id},data});
+  await writeAudit(this.db,'OBJECTIF_RECETTE','UPDATE',id,current,updated);
+  return updated;
+ }
  workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} workedHoursDelete(id:string){return this.db.workedHours.delete({where:{id}})}
 }

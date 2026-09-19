@@ -812,6 +812,7 @@ model NonConformity {
   haccpMonitoringRecordId String?
   // --- Lien Veille réglementaire (additif) ---
   regulatoryRequirementId String?
+  objectifQhseId String?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   haccpMonitoringRecord HaccpMonitoringRecord? @relation(fields:[haccpMonitoringRecordId], references:[id], onDelete:SetNull)
@@ -833,6 +834,7 @@ model NonConformity {
   equipmentControls EquipmentControl[]
   equipmentCalibrations EquipmentCalibration[]
   regulatoryRequirement RegulatoryRequirement? @relation(fields:[regulatoryRequirementId], references:[id], onDelete:SetNull)
+  objectifQhse ObjectifQhse? @relation(fields:[objectifQhseId], references:[id], onDelete:SetNull)
   @@index([status,occurredAt])
 }
 
@@ -2862,23 +2864,167 @@ model VeilleReglementaire {
   documents Document[]
 }
 
+// ============================================================================
+// MODULE OBJECTIFS QHSE — Phase 1 : fondations, classification SMART,
+// cibles, KPI (manuels ou auto-alimentés depuis les moteurs d'indicateurs
+// déjà existants — indicateursAuto(), reclamationsScoreGlobal(),
+// hygieneIndiceGlobal(), environnementDashboard() — jamais un second calcul
+// divergent), actions CAPA liées (Action.objectifQhseId), risques/
+// opportunités liés, commentaires de suivi, revues périodiques et
+// checklist de recette CA-01..CA-49. Les champs existants (pilier,
+// valeurInitiale, cible, actuel, sensInverse, unite, echeance,
+// responsableId, budget, processusId) sont conservés tels quels : aucune
+// donnée existante n'est perdue.
 model ObjectifQhse {
   id String @id @default(cuid())
   code String @unique
   titre String
+  description String?
   pilier String?
+  // Famille QHSE (point 3 du cahier des charges) — distincte de `pilier`
+  // (libre, historique) : valeurs attendues QUALITE|HYGIENE|SECURITE|
+  // ENVIRONNEMENT|TRANSVERSAL.
+  famille String @default("TRANSVERSAL")
+  // Classification (point 4.2) — STRATEGIQUE|TACTIQUE|OPERATIONNEL|
+  // REGLEMENTAIRE|CLIENT|AMELIORATION_CONTINUE|CONFORMITE|PREVENTION.
+  classification String?
+  categorie String?
+  activiteConcernee String?
+  zone String?
   valeurInitiale Float?
+  dateReference DateTime?
   cible Float
   actuel Float @default(0)
   sensInverse Boolean @default(false)
   unite String?
+  seuilMin Float?
+  seuilMax Float?
+  // QUOTIDIENNE|HEBDOMADAIRE|MENSUELLE|TRIMESTRIELLE|SEMESTRIELLE|ANNUELLE
+  frequenceMesure String?
+  dateDebut DateTime?
   echeance DateTime?
   responsableId String?
+  // Contributeurs — tableau d'ids utilisateur (Postgres natif), pas de
+  // table de jointure : évite l'ambiguïté de relations multiples vers
+  // User tout en couvrant le besoin du point 9 (pilote/contributeurs).
+  contributeurIds String[] @default([])
+  valideurId String?
+  directionResponsable String?
   budget Float?
+  // CRITIQUE|HAUTE|MOYENNE|FAIBLE
+  priorite String?
+  importanceStrategique String?
+  // Permet de figer manuellement SUSPENDU/ABANDONNE — sinon le statut est
+  // toujours recalculé à la lecture (jamais de valeur figée qui diverge).
+  statutManuel String?
+  annee Int?
+  dupliqueDeId String?
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdById String?
+  updatedById String?
   processusId String?
+  siteId String?
+  workUnitId String?
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   responsable User? @relation(fields:[responsableId], references:[id], onDelete:SetNull)
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  workUnit WorkUnit? @relation(fields:[workUnitId], references:[id], onDelete:SetNull)
+  kpis ObjectifKpi[]
+  objectifRisks ObjectifRisk[]
+  comments ObjectifComment[]
+  reviews ObjectifReview[]
+  actions Action[]
+}
+
+// KPI lié à un objectif (point 7) — soit alimenté manuellement, soit
+// « AUTO » : dans ce cas sourceKey pointe vers une clé du catalogue
+// objectifKpiCatalog() et valeurActuelle n'est jamais stockée durablement,
+// toujours recalculée à la lecture depuis le moteur source (même principe
+// que le statut des preuves de la Veille réglementaire).
+model ObjectifKpi {
+  id String @id @default(cuid())
+  objectifId String
+  nom String
+  definition String?
+  formule String?
+  unite String?
+  frequence String?
+  sourceType String @default("MANUEL")
+  sourceKey String?
+  sourceModule String?
+  responsableId String?
+  valeurInitiale Float?
+  cible Float?
+  valeurActuelle Float?
+  sensInverse Boolean @default(false)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  objectif ObjectifQhse @relation(fields:[objectifId], references:[id], onDelete:Cascade)
+}
+
+// Risque ou opportunité lié à un objectif (point 17) — table de jointure
+// vers le Registre des Risques existant, jamais de duplication du risque.
+model ObjectifRisk {
+  id String @id @default(cuid())
+  objectifId String
+  riskId String
+  type String @default("RISQUE")
+  niveauRisque String?
+  mesuresMaitrise String?
+  createdAt DateTime @default(now())
+  objectif ObjectifQhse @relation(fields:[objectifId], references:[id], onDelete:Cascade)
+  risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
+  @@unique([objectifId, riskId])
+}
+
+// Commentaire de suivi (point 18) — append-only, l'historique complet
+// reste consultable (jamais de modification destructive).
+model ObjectifComment {
+  id String @id @default(cuid())
+  objectifId String
+  type String @default("SUIVI")
+  contenu String
+  auteurId String?
+  createdAt DateTime @default(now())
+  objectif ObjectifQhse @relation(fields:[objectifId], references:[id], onDelete:Cascade)
+}
+
+// Revue périodique (point 19) — jamais écrasée, historique complet
+// conservé dans l'ordre chronologique (CA-38).
+model ObjectifReview {
+  id String @id @default(cuid())
+  objectifId String
+  periodicite String?
+  dateRevue DateTime @default(now())
+  resultats String?
+  ecarts String?
+  analyseCauses String?
+  decision String?
+  nouvelleCible Float?
+  actionsProposees String?
+  commentaire String?
+  createdById String?
+  createdAt DateTime @default(now())
+  objectif ObjectifQhse @relation(fields:[objectifId], references:[id], onDelete:Cascade)
+}
+
+// Checklist de recette du module (point 38, CA-01 à CA-49) — un
+// enregistrement par critère d'acceptation, seedé une fois à la migration
+// et mis à jour par le développeur/administrateur au fil des tests.
+model ObjectifRecetteCriterion {
+  id String @id @default(cuid())
+  code String @unique
+  categorie String?
+  libelle String
+  statut String @default("NON_TESTE")
+  dateTest DateTime?
+  testeurId String?
+  commentaire String?
+  anomalie String?
+  dateCorrection DateTime?
+  resultatRetest String?
   updatedAt DateTime @updatedAt
 }
 
@@ -2992,6 +3138,7 @@ model RegulatoryRequirement {
   nonConformities NonConformity[]
   actions Action[]
   requirementRisks RegulatoryRequirementRisk[]
+  objectifLinks ObjectifRisk[]
   requirementDocuments RegulatoryRequirementDocument[]
   riskReevaluationRequests RegulatoryRiskReevaluationRequest[]
 }

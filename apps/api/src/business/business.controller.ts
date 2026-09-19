@@ -118,5 +118,22 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Delete('regulatory-requirement-documents/:id') regulatoryUnlinkDocument(@Param('id')id:string){return this.s.regulatoryUnlinkDocument(id)}
 @Post('regulatory-requirements/:id/generate-nc') regulatoryGenerateNc(@Param('id')id:string,@Body()b:any){return this.s.regulatoryGenerateNc(id,b)}
 @Post('regulatory-requirements/:id/generate-action') regulatoryGenerateAction(@Param('id')id:string,@Body()b:any){return this.s.regulatoryGenerateAction(id,b)}
-@Get('objectifs-qhse') objectifList(){return this.s.objectifList()} @Post('objectifs-qhse') objectifCreate(@Body()b:any){return this.s.objectifCreate(b)} @Patch('objectifs-qhse/:id') objectifUpdate(@Param('id')id:string,@Body()b:any){return this.s.objectifUpdate(id,b)} @Delete('objectifs-qhse/:id') objectifDelete(@Param('id')id:string){return this.s.objectifDelete(id)}
+@Get('objectifs-qhse') objectifList(@Query('famille')famille?:string,@Query('statut')statut?:string,@Query('responsableId')responsableId?:string,@Query('siteId')siteId?:string,@Query('priorite')priorite?:string,@Query('archived')archived?:string){return this.s.objectifList({famille,statut,responsableId,siteId,priorite,archived})}
+@Get('objectifs-qhse/dashboard') objectifDashboard(@Query('famille')famille?:string,@Query('siteId')siteId?:string,@Query('responsableId')responsableId?:string){return this.s.objectifDashboard({famille,siteId,responsableId})}
+@Get('objectifs-qhse/library') objectifLibrary(){return this.s.objectifLibrary()}
+@Get('objectifs-qhse/kpi-catalog') objectifKpiCatalog(){return this.s.objectifKpiCatalog()}
+@Get('objectifs-qhse/recette') objectifRecetteList(){return this.s.objectifRecetteList()} @Patch('objectifs-qhse/recette/:id') objectifRecetteUpdate(@Param('id')id:string,@Body()b:any){return this.s.objectifRecetteUpdate(id,b)}
+@Get('objectifs-qhse/:id') objectifGet(@Param('id')id:string){return this.s.objectifGet(id)}
+@Post('objectifs-qhse') objectifCreate(@Body()b:any){return this.s.objectifCreate(b)}
+@Patch('objectifs-qhse/:id') objectifUpdate(@Param('id')id:string,@Body()b:any){return this.s.objectifUpdate(id,b)}
+@Delete('objectifs-qhse/:id') objectifDelete(@Param('id')id:string){return this.s.objectifDelete(id)}
+@Post('objectifs-qhse/:id/restore') objectifRestore(@Param('id')id:string){return this.s.objectifRestore(id)}
+@Post('objectifs-qhse/:id/duplicate') objectifDuplicate(@Param('id')id:string,@Body()b:any){return this.s.objectifDuplicate(id,b)}
+@Post('objectifs-qhse/:id/kpis') objectifKpiCreate(@Param('id')id:string,@Body()b:any){return this.s.objectifKpiCreate(id,b)} @Patch('objectifs-qhse-kpis/:id') objectifKpiUpdate(@Param('id')id:string,@Body()b:any){return this.s.objectifKpiUpdate(id,b)} @Delete('objectifs-qhse-kpis/:id') objectifKpiDelete(@Param('id')id:string){return this.s.objectifKpiDelete(id)}
+@Post('objectifs-qhse/:id/actions') objectifActionCreate(@Param('id')id:string,@Body()b:any){return this.s.objectifActionCreate(id,b)}
+@Post('objectifs-qhse/:id/actions/:actionId/link') objectifActionLink(@Param('id')id:string,@Param('actionId')actionId:string){return this.s.objectifActionLink(id,actionId)}
+@Post('objectifs-qhse-actions/:actionId/unlink') objectifActionUnlink(@Param('actionId')actionId:string){return this.s.objectifActionUnlink(actionId)}
+@Post('objectifs-qhse/:id/risks') objectifRiskLink(@Param('id')id:string,@Body()b:any){return this.s.objectifRiskLink(id,b)} @Delete('objectifs-qhse-risks/:id') objectifRiskUnlink(@Param('id')id:string){return this.s.objectifRiskUnlink(id)}
+@Get('objectifs-qhse/:id/comments') objectifCommentList(@Param('id')id:string){return this.s.objectifCommentList(id)} @Post('objectifs-qhse/:id/comments') objectifCommentCreate(@Param('id')id:string,@Body()b:any){return this.s.objectifCommentCreate(id,b)}
+@Get('objectifs-qhse/:id/reviews') objectifReviewList(@Param('id')id:string){return this.s.objectifReviewList(id)} @Post('objectifs-qhse/:id/reviews') objectifReviewCreate(@Param('id')id:string,@Body()b:any){return this.s.objectifReviewCreate(id,b)}
 @Get('worked-hours') workedHoursList(){return this.s.workedHoursList()} @Post('worked-hours') workedHoursCreate(@Body()b:any){return this.s.workedHoursCreate(b)} @Patch('worked-hours/:id') workedHoursUpdate(@Param('id')id:string,@Body()b:any){return this.s.workedHoursUpdate(id,b)} @Delete('worked-hours/:id') workedHoursDelete(@Param('id')id:string){return this.s.workedHoursDelete(id)} }
