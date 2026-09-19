@@ -9840,12 +9840,142 @@ function RegulatoryRequirementsTab() {
   );
 }
 
+
+// ============================================================================
+// VEILLE RÉGLEMENTAIRE — Phase 4 : rapports & indicateurs transversaux.
+// Tout est calculé côté client à partir de la matrice déjà chargée
+// (/business/regulatory-requirements inclut domaine, site, preuves,
+// NC et actions) — aucune donnée dupliquée, aucun nouvel endpoint requis.
+// ============================================================================
+function regulatoryConformiteRate(list) {
+  const applicables = list.filter((r) => r.applicabilite === 'OUI' || r.applicabilite === 'PARTIELLEMENT');
+  const evaluees = applicables.filter((r) => r.statutConformite);
+  const conformes = evaluees.filter((r) => r.statutConformite === 'CONFORME');
+  const taux = evaluees.length ? Math.round((conformes.length / evaluees.length) * 1000) / 10 : null;
+  return { total: list.length, applicables: applicables.length, evaluees: evaluees.length, conformes: conformes.length, taux };
+}
+function regulatoryGroupCompliance(list, keyFn, labelFn) {
+  const groups = {};
+  list.forEach((r) => { const key = keyFn(r) || '__none__'; (groups[key] = groups[key] || []).push(r); });
+  return Object.entries(groups).map(([key, items]) => ({ key, label: labelFn(items), ...regulatoryConformiteRate(items) }));
+}
+function regulatoryWorstEvidenceStatut(evidences) {
+  if (!evidences || !evidences.length) return null;
+  const order = { EXPIRE: 0, A_RENOUVELER: 1, EXPIRE_BIENTOT: 2, VALIDE: 3 };
+  return evidences.reduce((worst, e) => (order[e.statut] < order[worst] ? e.statut : worst), 'VALIDE');
+}
+function regulatoryTraceabilityRows(list) {
+  const header = ['Texte', 'Code exigence', 'Libellé', 'Domaine', 'Site', 'Applicabilité', 'Conformité', 'Statut des preuves', 'NC liées', 'Actions liées'];
+  const rows = list.map((r) => {
+    const worst = regulatoryWorstEvidenceStatut(r.evidences);
+    return [
+      r.text?.reference || r.text?.titre || '—', r.code, r.libelle, r.domain?.label || '—', r.site?.name || '—',
+      REGULATORY_APPLICABILITE_LABELS[r.applicabilite] || r.applicabilite,
+      r.statutConformite ? (REGULATORY_STATUT_CONFORMITE_LABELS[r.statutConformite] || r.statutConformite) : '—',
+      worst ? (REGULATORY_EVIDENCE_STATUT_LABELS[worst] || worst) : 'Aucune preuve',
+      (r.nonConformities || []).filter((n) => n.status !== 'CLOSED').length,
+      (r.actions || []).filter((a) => a.status !== 'CLOSED').length,
+    ];
+  });
+  return [header, ...rows];
+}
+function exportRegulatoryTraceabilityExcel(list) {
+  downloadWorkbook([['Matrice de traçabilité', regulatoryTraceabilityRows(list)]], `veille_matrice_tracabilite_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+function exportRegulatoryTraceabilityCsv(list) {
+  downloadCsv(regulatoryTraceabilityRows(list), `veille_matrice_tracabilite_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+function exportRegulatoryAuditDossier(list, scopeLabel) {
+  const applicables = list.filter((r) => r.applicabilite === 'OUI' || r.applicabilite === 'PARTIELLEMENT');
+  const exigencesRows = [['Code', 'Texte', 'Libellé', 'Domaine', 'Site', 'Conformité', 'Preuve attendue', 'Dernière évaluation', 'Responsable'],
+    ...applicables.map((r) => [r.code, r.text?.titre || '—', r.libelle, r.domain?.label || '—', r.site?.name || '—',
+      r.statutConformite ? (REGULATORY_STATUT_CONFORMITE_LABELS[r.statutConformite] || r.statutConformite) : 'Non évaluée',
+      r.preuveAttendue || '—', r.dateDerniereEvaluation ? new Date(r.dateDerniereEvaluation).toLocaleDateString('fr-FR') : '—',
+      r.responsable ? `${r.responsable.firstName} ${r.responsable.lastName}` : '—'])];
+  const preuvesRows = [['Exigence', 'Preuve', 'Type', 'Expiration', 'Statut'],
+    ...applicables.flatMap((r) => (r.evidences || []).filter((e) => e.statut !== 'VALIDE').map((e) => [r.code, e.nom || '—', e.type || '—', e.dateExpiration ? new Date(e.dateExpiration).toLocaleDateString('fr-FR') : '—', REGULATORY_EVIDENCE_STATUT_LABELS[e.statut] || e.statut]))];
+  const ncRows = [['Exigence', 'Code NC', 'Titre', 'Statut'],
+    ...applicables.flatMap((r) => (r.nonConformities || []).filter((n) => n.status !== 'CLOSED').map((n) => [r.code, n.code, n.title, n.status]))];
+  const actionsRows = [['Exigence', 'Code action', 'Titre', 'Échéance', 'Statut'],
+    ...applicables.flatMap((r) => (r.actions || []).filter((a) => a.status !== 'CLOSED').map((a) => [r.code, a.code, a.title, a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—', a.status]))];
+  downloadWorkbook([
+    ['Exigences applicables', exigencesRows], ['Preuves à surveiller', preuvesRows], ['NC ouvertes', ncRows], ['Actions ouvertes', actionsRows],
+  ], `dossier_audit_veille_${scopeLabel}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function RegulatoryReportsTab() {
+  const C = useTheme();
+  const reqQ = useCollection('/business/regulatory-requirements');
+  const [domainScope, setDomainScope] = useState('TOUS');
+  const [siteScope, setSiteScope] = useState('TOUS');
+  if (reqQ.loading) return <LoadingPanel />;
+  if (reqQ.error) return <ErrorPanel message={reqQ.error} onRetry={reqQ.reload} />;
+  const list = reqQ.data || [];
+  const scoped = list.filter((r) => (domainScope === 'TOUS' || r.domainId === domainScope) && (siteScope === 'TOUS' || r.siteId === siteScope));
+  const domains = [...new Map(list.filter((r) => r.domain).map((r) => [r.domainId, r.domain])).values()];
+  const sites = [...new Map(list.filter((r) => r.site).map((r) => [r.siteId, r.site])).values()];
+  const byDomain = regulatoryGroupCompliance(list, (r) => r.domainId, (items) => items[0].domain?.label || 'Sans domaine');
+  const bySite = regulatoryGroupCompliance(list, (r) => r.siteId, (items) => items[0].site?.name || 'Sans site');
+  const global = regulatoryConformiteRate(scoped);
+  const scopeLabel = normalizeText(`${domainScope === 'TOUS' ? 'tous' : domains.find((d) => d.id === domainScope)?.label}_${siteScope === 'TOUS' ? 'tous' : sites.find((s) => s.id === siteScope)?.name}`).replace(/[^a-z0-9]+/g, '-');
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <select value={domainScope} onChange={(e) => setDomainScope(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="TOUS">Tous les domaines</option>{domains.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+        </select>
+        <select value={siteScope} onChange={(e) => setSiteScope(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="TOUS">Tous les sites</option>{sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Exigences (périmètre)" value={scoped.length} color={C.blue} icon={BookOpen} />
+        <KpiCard label="Applicables" value={global.applicables} color={C.blue} icon={CheckCircle2} />
+        <KpiCard label="Évaluées" value={global.evaluees} color={C.amber} icon={ClipboardCheck} />
+        <KpiCard label="Taux de conformité" value={global.taux != null ? `${global.taux}%` : '—'} color={C.green} icon={Target} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Panel title="Taux de conformité par domaine">
+          {byDomain.length
+            ? <DataTable columns={['Domaine', 'Applicables', 'Évaluées', 'Conformes', 'Taux']} rows={byDomain.map((g) => [g.label, g.applicables, g.evaluees, g.conformes, g.taux != null ? `${g.taux}%` : '—'])} />
+            : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune donnée</p>}
+        </Panel>
+        <Panel title="Taux de conformité par site">
+          {bySite.length
+            ? <DataTable columns={['Site', 'Applicables', 'Évaluées', 'Conformes', 'Taux']} rows={bySite.map((g) => [g.label, g.applicables, g.evaluees, g.conformes, g.taux != null ? `${g.taux}%` : '—'])} />
+            : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune donnée</p>}
+        </Panel>
+      </div>
+      <Panel title="Matrice de traçabilité" subtitle="Texte → Exigence → Site → Applicabilité → Conformité → Preuve → NC → CAPA" right={
+        <div className="flex gap-2">
+          <button onClick={() => exportRegulatoryTraceabilityExcel(scoped)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+          <button onClick={() => exportRegulatoryTraceabilityCsv(scoped)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+        </div>
+      }>
+        {scoped.length
+          ? <DataTable columns={['Texte', 'Code', 'Domaine', 'Site', 'Applicabilité', 'Conformité', 'Preuves', 'NC', 'Actions']}
+              rows={scoped.map((r) => { const worst = regulatoryWorstEvidenceStatut(r.evidences); return [
+                r.text?.reference || r.text?.titre || '—', r.code, r.domain?.label || '—', r.site?.name || '—',
+                regulatoryBadge(C, REGULATORY_APPLICABILITE_LABELS[r.applicabilite] || r.applicabilite, regulatoryApplicabiliteColor(C, r.applicabilite)),
+                r.statutConformite ? regulatoryBadge(C, REGULATORY_STATUT_CONFORMITE_LABELS[r.statutConformite] || r.statutConformite, regulatoryConformiteColor(C, r.statutConformite)) : '—',
+                worst ? regulatoryBadge(C, REGULATORY_EVIDENCE_STATUT_LABELS[worst] || worst, regulatoryEvidenceColor(C, worst)) : '—',
+                (r.nonConformities || []).filter((n) => n.status !== 'CLOSED').length, (r.actions || []).filter((a) => a.status !== 'CLOSED').length,
+              ]; })} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune exigence pour ce périmètre</p>}
+      </Panel>
+      <Panel title="Dossier de préparation à l'audit" subtitle="Exigences applicables, preuves à surveiller, NC et actions ouvertes du périmètre sélectionné">
+        <button onClick={() => exportRegulatoryAuditDossier(scoped, scopeLabel)} className="px-3 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Générer le dossier (Excel)</button>
+      </Panel>
+    </div>
+  );
+}
+
 function VeilleReglementairePage() {
   const C = useTheme();
   const [tab, setTab] = useState('dashboard');
   const tabs = [
     ['dashboard', 'Tableau de bord'], ['textes', 'Textes'], ['exigences', 'Exigences'], ['alertes', 'Alertes & échéances'],
-    ['reevaluations', 'Réévaluations risques'], ['domaines', 'Domaines'], ['catalogue', 'Catalogue simple (ancien)'],
+    ['reevaluations', 'Réévaluations risques'], ['rapports', 'Rapports & indicateurs'], ['domaines', 'Domaines'], ['catalogue', 'Catalogue simple (ancien)'],
   ];
   return (
     <div className="space-y-4">
@@ -9862,6 +9992,7 @@ function VeilleReglementairePage() {
       {tab === 'exigences' && <RegulatoryRequirementsTab />}
       {tab === 'alertes' && <RegulatoryAlertsTab />}
       {tab === 'reevaluations' && <RegulatoryReevaluationsTab />}
+      {tab === 'rapports' && <RegulatoryReportsTab />}
       {tab === 'domaines' && <RegulatoryDomainsTab />}
       {tab === 'catalogue' && <VeillePage />}
     </div>
