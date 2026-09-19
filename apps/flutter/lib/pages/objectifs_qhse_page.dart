@@ -1090,7 +1090,7 @@ class _ObjectifRecetteTabState extends State<ObjectifRecetteTab> {
               const SizedBox(height: 8),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(dateTest == null ? 'Date de test' : objFmtDate(dateTest.toIso8601String())),
+                title: Text(dateTest == null ? 'Date de test' : objFmtDate(dateTest!.toIso8601String())),
                 trailing: const Icon(Icons.calendar_today, size: 18),
                 onTap: () async {
                   final d = await showDatePicker(context: dialogCtx, initialDate: dateTest ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
