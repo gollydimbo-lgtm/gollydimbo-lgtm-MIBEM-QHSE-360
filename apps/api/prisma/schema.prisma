@@ -184,6 +184,7 @@ model User {
   regulatoryRequirementsResponsable RegulatoryRequirement[] @relation("RegulatoryRequirementResponsable")
   regulatoryEvaluationsRealisees RegulatoryEvaluation[] @relation("RegulatoryEvaluationEvaluateur")
   regulatoryEvidencesResponsable RegulatoryEvidence[] @relation("RegulatoryEvidenceResponsable")
+  regulatoryReevalResponsable RegulatoryRiskReevaluationRequest[] @relation("RegulatoryReevalResponsable")
   riskMeasuresResponsable RiskMeasure[]
   riskEvaluationsRealisees RiskEvaluation[]
   haccpStudiesResponsable HaccpStudy[]
@@ -1346,6 +1347,7 @@ model Risk {
   auditFindings AuditFinding[]
   environnementAspects EnvironnementAspect[]
   regulatoryRequirementLinks RegulatoryRequirementRisk[]
+  regulatoryReevaluationRequests RegulatoryRiskReevaluationRequest[]
   @@index([status,score])
 }
 
@@ -2991,6 +2993,7 @@ model RegulatoryRequirement {
   actions Action[]
   requirementRisks RegulatoryRequirementRisk[]
   requirementDocuments RegulatoryRequirementDocument[]
+  riskReevaluationRequests RegulatoryRiskReevaluationRequest[]
 }
 
 // Historique des évaluations de conformité (point 7) — une ligne par
@@ -3059,4 +3062,27 @@ model RegulatoryRequirementDocument {
   requirement RegulatoryRequirement @relation(fields:[requirementId], references:[id], onDelete:Cascade)
   document Document @relation(fields:[documentId], references:[id], onDelete:Cascade)
   @@unique([requirementId, documentId])
+}
+
+// ============================================================================
+// MODULE VEILLE RÉGLEMENTAIRE — Phase 2 : alertes, échéances, workflow
+// d'analyse d'impact et réévaluation des risques.
+// ============================================================================
+
+// Demande de réévaluation d'un risque suite à une évolution réglementaire
+// (points 11-12 du prompt d'interconnexion) — jamais une modification
+// automatique de la cotation, toujours une tâche à traiter par un humain.
+model RegulatoryRiskReevaluationRequest {
+  id String @id @default(cuid())
+  requirementId String
+  riskId String
+  raison String?
+  responsableId String?
+  dateLimite DateTime?
+  statut String @default("A_PLANIFIER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  requirement RegulatoryRequirement @relation(fields:[requirementId], references:[id], onDelete:Cascade)
+  risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
+  responsable User? @relation("RegulatoryReevalResponsable", fields:[responsableId], references:[id], onDelete:SetNull)
 }

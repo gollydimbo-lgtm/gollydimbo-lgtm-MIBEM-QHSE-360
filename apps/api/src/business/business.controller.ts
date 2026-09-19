@@ -95,6 +95,12 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Get('regulatory-settings') regulatorySettingsGet(){return this.s.regulatorySettingsGet()} @Patch('regulatory-settings') regulatorySettingsUpdate(@Body()b:any){return this.s.regulatorySettingsUpdate(b)}
 @Get('regulatory-texts') regulatoryTextList(){return this.s.regulatoryTextList()} @Post('regulatory-texts') regulatoryTextCreate(@Body()b:any){return this.s.regulatoryTextCreate(b)} @Get('regulatory-texts/:id') regulatoryTextGet(@Param('id')id:string){return this.s.regulatoryTextGet(id)} @Patch('regulatory-texts/:id') regulatoryTextUpdate(@Param('id')id:string,@Body()b:any){return this.s.regulatoryTextUpdate(id,b)} @Delete('regulatory-texts/:id') regulatoryTextDelete(@Param('id')id:string){return this.s.regulatoryTextDelete(id)}
 @Get('regulatory-requirements-dashboard') regulatoryDashboard(){return this.s.regulatoryDashboard()}
+@Get('regulatory-alerts') regulatoryAlerts(){return this.s.regulatoryAlerts()}
+@Get('regulatory-calendar') regulatoryCalendar(@Query('from')from?:string,@Query('to')to?:string){return this.s.regulatoryCalendar(from,to)}
+@Get('regulatory-texts/:id/impact-analysis') regulatoryImpactAnalysis(@Param('id')id:string){return this.s.regulatoryImpactAnalysis(id)}
+@Get('regulatory-risk-reevaluations') regulatoryRiskReevaluationList(@Query('requirementId')requirementId?:string){return this.s.regulatoryRiskReevaluationList(requirementId)}
+@Post('regulatory-requirements/:id/request-risk-reevaluation') regulatoryRequestRiskReevaluation(@Param('id')id:string,@Body()b:any){return this.s.regulatoryRequestRiskReevaluation(id,b)}
+@Patch('regulatory-risk-reevaluations/:id') regulatoryRiskReevaluationUpdate(@Param('id')id:string,@Body()b:any){return this.s.regulatoryRiskReevaluationUpdate(id,b)}
 @Get('regulatory-requirements') regulatoryRequirementList(@Query('textId')textId?:string,@Query('domainId')domainId?:string,@Query('siteId')siteId?:string,@Query('applicabilite')applicabilite?:string,@Query('statutConformite')statutConformite?:string){return this.s.regulatoryRequirementList({textId,domainId,siteId,applicabilite,statutConformite})}
 @Post('regulatory-requirements') regulatoryRequirementCreate(@Body()b:any){return this.s.regulatoryRequirementCreate(b)}
 @Get('regulatory-requirements/:id') regulatoryRequirementGet(@Param('id')id:string){return this.s.regulatoryRequirementGet(id)}

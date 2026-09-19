@@ -2173,13 +2173,18 @@ import { writeAudit } from '../common/audit-log.helper';
   nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}},
   requirementRisks:{include:{risk:true}}, requirementDocuments:{include:{document:true}},
  };
- regulatoryRequirementList(filters?:{textId?:string,domainId?:string,siteId?:string,applicabilite?:string,statutConformite?:string}){
-  return this.db.regulatoryRequirement.findMany({where:{
+ async regulatoryRequirementList(filters?:{textId?:string,domainId?:string,siteId?:string,applicabilite?:string,statutConformite?:string}){
+  const list=await this.db.regulatoryRequirement.findMany({where:{
    textId:filters?.textId||undefined, domainId:filters?.domainId||undefined, siteId:filters?.siteId||undefined,
    applicabilite:filters?.applicabilite||undefined, statutConformite:filters?.statutConformite||undefined,
   },include:this.regulatoryRequirementInclude,orderBy:{code:'asc'}});
+  return list.map(r=>({...r,evidences:this.regulatoryDecorateEvidences(r.evidences)}));
  }
- regulatoryRequirementGet(id:string){return this.db.regulatoryRequirement.findUnique({where:{id},include:this.regulatoryRequirementInclude})}
+ async regulatoryRequirementGet(id:string){
+  const req=await this.db.regulatoryRequirement.findUnique({where:{id},include:this.regulatoryRequirementInclude});
+  if(!req) return req;
+  return {...req,evidences:this.regulatoryDecorateEvidences(req.evidences)};
+ }
  async regulatoryRequirementCreate(b:any){
   const req=await this.db.regulatoryRequirement.create({data:b});
   await writeAudit(this.db,'REGULATORY_REQUIREMENT','CREATE',req.id,null,req);
@@ -2234,7 +2239,7 @@ import { writeAudit } from '../common/audit-log.helper';
   return evaluation;
  }
 
- regulatoryEvidenceList(requirementId?:string){return this.db.regulatoryEvidence.findMany({where:requirementId?{requirementId}:undefined,include:{document:true,responsable:true},orderBy:{dateExpiration:'asc'}})}
+ async regulatoryEvidenceList(requirementId?:string){const list=await this.db.regulatoryEvidence.findMany({where:requirementId?{requirementId}:undefined,include:{document:true,responsable:true},orderBy:{dateExpiration:'asc'}});return this.regulatoryDecorateEvidences(list)}
  regulatoryEvidenceCreate(requirementId:string,b:any){return this.db.regulatoryEvidence.create({data:{...b,requirementId}})}
  regulatoryEvidenceUpdate(id:string,b:any){return this.db.regulatoryEvidence.update({where:{id},data:b})}
  regulatoryEvidenceDelete(id:string){return this.db.regulatoryEvidence.delete({where:{id}})}
@@ -2314,6 +2319,128 @@ import { writeAudit } from '../common/audit-log.helper';
    nonConformes:nonConformes.length, aAnalyser:aAnalyser.length, nonEvaluees:nonEvaluees.length, tauxConformite,
    methodeCalcul:'Exigences conformes / Exigences applicables évaluées × 100 (exclut non applicables et non évaluées)',
   };
+ }
+
+ // === MODULE VEILLE RÉGLEMENTAIRE — Phase 2 : alertes, échéances, workflow
+ // d'analyse d'impact, réévaluation des risques. ============================
+
+ // Reclasse une preuve selon sa date d'expiration (points 9 et 15) — jamais
+ // stocké en dur, toujours recalculé, pour ne jamais afficher un statut périmé.
+ private regulatoryEvidenceStatutFromDate(dateExpiration?:Date|null):string{
+  if(!dateExpiration) return 'VALIDE';
+  const jours=Math.ceil((new Date(dateExpiration).getTime()-Date.now())/86400000);
+  if(jours<0) return 'EXPIRE';
+  if(jours<=30) return 'A_RENOUVELER';
+  if(jours<=90) return 'EXPIRE_BIENTOT';
+  return 'VALIDE';
+ }
+ // Applique le recalcul dynamique du statut à une liste de preuves — jamais
+ // fait confiance à la valeur stockée, toujours recalculé à la lecture.
+ private regulatoryDecorateEvidences<T extends {dateExpiration?:Date|null}>(evidences:T[]):T[]{
+  return evidences.map(e=>({...e,statut:this.regulatoryEvidenceStatutFromDate(e.dateExpiration)}));
+ }
+ private regulatoryAlertNiveau(jours:number):string{
+  if(jours<0) return 'CRITIQUE';
+  if(jours<=7) return 'CRITIQUE';
+  if(jours<=15) return 'ECHEANCE_PROCHE';
+  if(jours<=30) return 'ECHEANCE_PROCHE';
+  if(jours<=60) return 'ATTENTION';
+  return 'INFORMATION';
+ }
+
+ // Moteur d'alertes (point 9) — regroupe les échéances d'évaluation et les
+ // preuves arrivant à expiration selon les seuils configurables (90/60/30/
+ // 15/7 jours), plus les nouvelles exigences à analyser et les actions
+ // réglementaires en retard. Calculé à la demande, jamais stocké.
+ async regulatoryAlerts(){
+  const settings=await this.regulatorySettingsGet();
+  const now=new Date();
+  const [requirements,evidences,actionsEnRetard]=await Promise.all([
+   this.db.regulatoryRequirement.findMany({where:{archivedAt:null,dateProchaineEvaluation:{not:null}},include:{text:true,responsable:true}}),
+   this.db.regulatoryEvidence.findMany({where:{dateExpiration:{not:null}},include:{requirement:{include:{text:true}},responsable:true}}),
+   this.db.action.findMany({where:{regulatoryRequirementId:{not:null},status:{not:'CLOSED'},dueDate:{lt:now}},include:{regulatoryRequirement:{include:{text:true}},responsible:true}}),
+  ]);
+  const seuils:[string,boolean][]=[['J90',settings.alerteJ90],['J60',settings.alerteJ60],['J30',settings.alerteJ30],['J15',settings.alerteJ15],['J7',settings.alerteJ7]];
+  const seuilsActifs=new Set(seuils.filter(([,actif])=>actif).map(([k])=>k));
+  const echeancesEvaluation=requirements.map(r=>{
+   const jours=Math.ceil((new Date(r.dateProchaineEvaluation!).getTime()-now.getTime())/86400000);
+   return {type:'EVALUATION',requirementId:r.id,code:r.code,libelle:r.libelle,texte:r.text.titre,responsable:r.responsable,date:r.dateProchaineEvaluation,jours,niveau:this.regulatoryAlertNiveau(jours)};
+  }).filter(a=>a.jours<0||(a.jours<=90&&(seuilsActifs.size>0)));
+  const echeancesPreuves=evidences.map(e=>{
+   const jours=Math.ceil((new Date(e.dateExpiration!).getTime()-now.getTime())/86400000);
+   return {type:'PREUVE',evidenceId:e.id,requirementId:e.requirementId,code:e.requirement.code,libelle:e.requirement.libelle,texte:e.requirement.text.titre,nom:e.nom,responsable:e.responsable,date:e.dateExpiration,jours,niveau:this.regulatoryAlertNiveau(jours)};
+  }).filter(a=>a.jours<0||(a.jours<=90&&(seuilsActifs.size>0)));
+  const nouvellesExigences=await this.db.regulatoryRequirement.findMany({where:{archivedAt:null,statutFile:{in:['NOUVEAU','A_ANALYSER','APPLICABILITE_A_DETERMINER']}},include:{text:true},orderBy:{createdAt:'desc'}});
+  return {
+   echeancesEvaluation:echeancesEvaluation.sort((a,b)=>a.jours-b.jours),
+   echeancesPreuves:echeancesPreuves.sort((a,b)=>a.jours-b.jours),
+   nouvellesExigences,
+   actionsEnRetard,
+   seuilsConfigures:{J90:settings.alerteJ90,J60:settings.alerteJ60,J30:settings.alerteJ30,J15:settings.alerteJ15,J7:settings.alerteJ7},
+  };
+ }
+
+ // Calendrier réglementaire (point 10) — vue plate des échéances
+ // d'évaluation et d'expiration de preuve dans une fenêtre de dates.
+ async regulatoryCalendar(from?:string,to?:string){
+  const gte=from?new Date(from):new Date();
+  const lte=to?new Date(to):new Date(Date.now()+365*86400000);
+  const [requirements,evidences]=await Promise.all([
+   this.db.regulatoryRequirement.findMany({where:{archivedAt:null,dateProchaineEvaluation:{gte,lte}},include:{text:true}}),
+   this.db.regulatoryEvidence.findMany({where:{dateExpiration:{gte,lte}},include:{requirement:true}}),
+  ]);
+  return [
+   ...requirements.map(r=>({type:'EVALUATION',date:r.dateProchaineEvaluation,requirementId:r.id,code:r.code,libelle:`Évaluation — ${r.libelle}`})),
+   ...evidences.map(e=>({type:'PREUVE',date:e.dateExpiration,requirementId:e.requirementId,code:e.requirement.code,libelle:`Expiration preuve — ${e.nom||e.type||'document'}`})),
+  ].sort((a,b)=>new Date(a.date as any).getTime()-new Date(b.date as any).getTime());
+ }
+
+ // Analyse d'impact (points 19-21 du prompt d'interconnexion) — jamais une
+ // conclusion automatique ("impact à analyser" seulement), calculée à la
+ // demande à partir des relations existantes, sans dupliquer les données.
+ async regulatoryImpactAnalysis(textId:string){
+  const text=await this.db.regulatoryText.findUnique({where:{id:textId},include:{
+   requirements:{include:{
+    site:true, workUnit:true, responsable:true,
+    nonConformities:{where:{status:{not:'CLOSED'}}}, actions:{where:{status:{not:'CLOSED'}}},
+    requirementRisks:{include:{risk:true}}, requirementDocuments:{include:{document:true}},
+   }},
+  }});
+  if(!text) throw new NotFoundException('Texte réglementaire introuvable');
+  const sitesImpactes=new Set(text.requirements.map(r=>r.site?.name).filter(Boolean));
+  const risquesImpactes=text.requirements.flatMap(r=>r.requirementRisks.map(rr=>rr.risk));
+  const documentsImpactes=text.requirements.flatMap(r=>r.requirementDocuments.map(rd=>rd.document));
+  const ncOuvertes=text.requirements.flatMap(r=>r.nonConformities);
+  const actionsOuvertes=text.requirements.flatMap(r=>r.actions);
+  return {
+   text, statut:'IMPACT_A_ANALYSER',
+   exigencesImpactees:text.requirements.length,
+   sitesImpactes:[...sitesImpactes],
+   risquesImpactes:[...new Map(risquesImpactes.map(r=>[r.id,r])).values()],
+   documentsImpactes:[...new Map(documentsImpactes.map(d=>[d.id,d])).values()],
+   nonConformitesOuvertes:ncOuvertes, actionsOuvertes:actionsOuvertes,
+  };
+ }
+
+ // Demande de réévaluation d'un risque (points 11-12 du prompt d'inter-
+ // connexion) — une tâche à traiter, jamais une modification directe de la
+ // cotation du risque.
+ regulatoryRiskReevaluationList(requirementId?:string){return this.db.regulatoryRiskReevaluationRequest.findMany({where:requirementId?{requirementId}:undefined,include:{requirement:{include:{text:true}},risk:true,responsable:true},orderBy:{createdAt:'desc'}})}
+ async regulatoryRequestRiskReevaluation(requirementId:string,b:{riskId:string,raison?:string,responsableId?:string,dateLimite?:string}){
+  const req=await this.db.regulatoryRequirement.findUnique({where:{id:requirementId}});
+  if(!req) throw new NotFoundException('Exigence réglementaire introuvable');
+  const demande=await this.db.regulatoryRiskReevaluationRequest.create({data:{
+   requirementId, riskId:b.riskId, raison:b.raison, responsableId:b.responsableId||req.responsableId, dateLimite:b.dateLimite?new Date(b.dateLimite):null,
+  }});
+  await writeAudit(this.db,'REGULATORY_RISK_REEVALUATION','CREATE',demande.id,null,demande);
+  return demande;
+ }
+ async regulatoryRiskReevaluationUpdate(id:string,b:{statut?:string,raison?:string,responsableId?:string,dateLimite?:string}){
+  const current=await this.db.regulatoryRiskReevaluationRequest.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Demande de réévaluation introuvable');
+  const demande=await this.db.regulatoryRiskReevaluationRequest.update({where:{id},data:b as any});
+  await writeAudit(this.db,'REGULATORY_RISK_REEVALUATION','UPDATE',id,current,demande);
+  return demande;
  }
 
  objectifList(){
