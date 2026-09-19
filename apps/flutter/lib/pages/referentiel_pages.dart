@@ -228,8 +228,8 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
 // (Fournisseurs dispose désormais de son propre module dédié — voir fournisseurs_pages.dart)
 // (Hygiène au travail dispose désormais de son propre module dédié — voir hygiene_pages.dart)
 
-class VeilleReglementairePage extends StatelessWidget {
-  const VeilleReglementairePage({super.key});
+class RegulatoryLegacyCataloguePage extends StatelessWidget {
+  const RegulatoryLegacyCataloguePage({super.key});
   @override
   Widget build(BuildContext context) => SimpleCrudPage(
         title: 'Veille réglementaire', endpoint: '/business/veille-reglementaire', codePrefix: 'VEI',

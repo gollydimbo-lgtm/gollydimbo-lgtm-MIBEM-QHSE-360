@@ -16,6 +16,7 @@ import 'pages/epi_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/users_page.dart';
 import 'pages/referentiel_pages.dart';
+import 'pages/regulatory_page.dart';
 import 'pages/processus_pages.dart';
 import 'pages/indicateurs_pages.dart';
 import 'pages/reclamations_pages.dart';
@@ -162,7 +163,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem("Quart d'heure sécurité", Icons.shield_outlined, const SafetyTalkPage()),
       _NavItem('HACCP', Icons.restaurant_menu_outlined, const HaccpPage()),
       _NavItem('Équipements', Icons.precision_manufacturing_outlined, const EquipmentPage()),
-      _NavItem('Veille réglementaire', Icons.search_outlined, const VeilleReglementairePage()),
+      _NavItem('Veille réglementaire', Icons.search_outlined, const RegulatoryPage()),
       _NavItem('Objectifs QHSE', Icons.flag_outlined, const ObjectifsQhsePage()),
       _NavItem('Rapports', Icons.description_outlined, const RapportsPage()),
       _NavItem('Utilisateurs', Icons.people_outline, const UsersPage()),

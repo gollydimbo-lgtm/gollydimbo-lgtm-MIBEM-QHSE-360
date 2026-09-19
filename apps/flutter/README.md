@@ -59,6 +59,17 @@ par ordre de priorité croissante :
   maintenance, contrôles, étalonnages, NC liées) et déclaration de contrôles
   réglementaires sur le terrain, synchronisée automatiquement au retour du
   réseau via la même file d'attente que les autres déclarations terrain
+- **Veille réglementaire** — parité complète avec le tableau de bord web :
+  Textes réglementaires (fiche complète + analyse d'impact "à analyser",
+  jamais de conclusion automatique), Exigences (matrice dynamique, filtres
+  domaine/site/applicabilité/conformité), statuer sur l'applicabilité
+  (justification obligatoire si non applicable/partielle), évaluations de
+  conformité, preuves de conformité (avec dates d'expiration), liaison aux
+  risques et documents GED, génération de NC/actions CAPA, demandes de
+  réévaluation de risque (tâche à traiter, jamais une note modifiée
+  directement), alertes et échéances, rapports (taux de conformité par
+  domaine/site, matrice de traçabilité), référentiel des domaines, et
+  l'ancien catalogue simple conservé en sous-onglet pour compatibilité
 - **Réglages** — adresse du serveur QHSE
 
 ## Lancement local (si vous disposez du SDK Flutter)
