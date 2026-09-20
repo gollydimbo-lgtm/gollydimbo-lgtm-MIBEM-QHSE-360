@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
 import '../theme.dart';
 
@@ -22,7 +23,7 @@ class EnvironnementHome extends StatefulWidget {
 
 class _EnvironnementHomeState extends State<EnvironnementHome> {
   final api = Api();
-  List releves = [], aspects = [], veille = [], produits = [], indicateurs = [], alertes = [];
+  List releves = [], aspects = [], veille = [], produits = [], indicateurs = [], alertes = [], tendances = [];
   Map dashboard = {};
   bool loading = true;
 
@@ -36,6 +37,7 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
       aspects = List.from(await api.get('/business/environnement-aspects'));
       dashboard = Map.from(await api.get('/business/environnement-dashboard'));
       alertes = List.from(await api.get('/business/environnement-alertes'));
+      tendances = List.from(await api.get('/business/environnement-tendances'));
       veille = List.from(await api.get('/business/veille-reglementaire'));
       produits = List.from(await api.get('/business/produits-chimiques'));
       indicateurs = List.from(await api.get('/business/indicateurs-qualite?domaine=ENVIRONNEMENT'));
@@ -115,6 +117,44 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
                 child: Text(a['niveau'] ?? '', style: TextStyle(color: _niveauColor(a['niveau']), fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ))),
+        const SizedBox(height: 20),
+        const Text('Tendances mensuelles par catégorie', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text('Calculées uniquement sur les mois où des relevés existent réellement.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+        const SizedBox(height: 8),
+        if (tendances.isEmpty)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune donnée disponible pour tracer une tendance', style: TextStyle(color: QhseColors.textSecondary)))
+        else
+          ...tendances.map((t) {
+            final points = List.from(t['points'] ?? []);
+            final spots = [for (int i = 0; i < points.length; i++) FlSpot(i.toDouble(), ((points[i]['valeur'] ?? 0) as num).toDouble())];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${t['categorie']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: QhseColors.textSecondary)),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 140,
+                  child: points.isEmpty
+                      ? Center(child: Text('Pas de données', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)))
+                      : LineChart(LineChartData(
+                          gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: QhseColors.border, strokeWidth: 1)),
+                          titlesData: FlTitlesData(
+                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, getTitlesWidget: (v, meta) {
+                              final i = v.toInt();
+                              if (i < 0 || i >= points.length) return const SizedBox.shrink();
+                              return Text('${points[i]['mois']}', style: TextStyle(fontSize: 9, color: QhseColors.textSecondary));
+                            })),
+                            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, meta) => Text('${v.toInt()}', style: TextStyle(fontSize: 9, color: QhseColors.textSecondary)))),
+                          ),
+                          borderData: FlBorderData(show: false),
+                          lineBarsData: [LineChartBarData(spots: spots, isCurved: true, color: QhseColors.blue, barWidth: 2, dotData: const FlDotData(show: true))],
+                        )),
+                ),
+              ]),
+            );
+          }),
       ]),
     );
   }

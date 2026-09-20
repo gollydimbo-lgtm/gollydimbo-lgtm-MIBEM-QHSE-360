@@ -40,6 +40,7 @@ class _ActionsPageState extends State<ActionsPage> {
   List items = [];
   Map dashboard = {}, score = {};
   List trends = [];
+  List alertes = [];
   bool loading = true;
 
   @override
@@ -53,6 +54,7 @@ class _ActionsPageState extends State<ActionsPage> {
       dashboard = Map.from(await api.get('/business/action-dashboard'));
       score = Map.from(await api.get('/business/action-performance-score'));
       trends = List.from(await api.get('/business/action-trends'));
+      alertes = List.from(await api.get('/business/action-alertes'));
     } catch (_) {}
     setState(() => loading = false);
   }
@@ -128,9 +130,33 @@ class _ActionsPageState extends State<ActionsPage> {
     ]),
   );
 
+  Color _alerteColor(String? n) => {
+        'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red,
+        'ATTENTION': QhseColors.amber, 'INFORMATION': QhseColors.blue,
+      }[n] ?? QhseColors.textSecondary;
+
   Widget _buildAnalyses(BuildContext c) => RefreshIndicator(
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(16), children: [
+      Text('Alertes (avec escalade)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+      const SizedBox(height: 4),
+      Text('${alertes.length} point(s) nécessitant attention', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+      const SizedBox(height: 8),
+      alertes.isEmpty
+          ? Card(child: Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.textSecondary)))))
+          : Card(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: [
+              for (final a in alertes)
+                ListTile(
+                  dense: true,
+                  title: Text('${a['label']}', style: const TextStyle(fontSize: 13)),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: _alerteColor(a['niveau']).withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                    child: Text('${a['niveau']}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _alerteColor(a['niveau']))),
+                  ),
+                ),
+            ]))),
+      const SizedBox(height: 16),
       Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
         Text('Score de performance CAPA', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
         const SizedBox(height: 4),

@@ -1136,9 +1136,15 @@ class RegulatoryAlertsTab extends StatefulWidget {
   State<RegulatoryAlertsTab> createState() => _RegulatoryAlertsTabState();
 }
 
+const _regAlertThresholds = [
+  ['alerteJ90', '90 jours'], ['alerteJ60', '60 jours'], ['alerteJ30', '30 jours'],
+  ['alerteJ15', '15 jours'], ['alerteJ7', '7 jours'],
+];
+
 class _RegulatoryAlertsTabState extends State<RegulatoryAlertsTab> {
   final api = Api();
   Map? alerts;
+  Map? settings;
   bool loading = true;
   String? error;
 
@@ -1147,9 +1153,21 @@ class _RegulatoryAlertsTabState extends State<RegulatoryAlertsTab> {
 
   Future<void> load() async {
     setState(() { loading = true; error = null; });
-    try { alerts = Map.from(await api.get('/business/regulatory-alerts')); }
+    try {
+      alerts = Map.from(await api.get('/business/regulatory-alerts'));
+      settings = Map.from(await api.get('/business/regulatory-settings'));
+    }
     catch (e) { error = '$e'; }
     setState(() => loading = false);
+  }
+
+  Future<void> _toggleSetting(String key) async {
+    if (settings == null) return;
+    try {
+      await api.patch('/business/regulatory-settings', {key: !(settings![key] == true)});
+      settings = Map.from(await api.get('/business/regulatory-settings'));
+      if (mounted) setState(() {});
+    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
   @override
@@ -1163,6 +1181,15 @@ class _RegulatoryAlertsTabState extends State<RegulatoryAlertsTab> {
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
+        regSectionTitle("Seuils d'alerte"),
+        Card(child: Padding(padding: const EdgeInsets.all(12), child: Wrap(spacing: 12, runSpacing: 4, children: [
+          for (final t in _regAlertThresholds)
+            FilterChip(
+              label: Text(t[1], style: const TextStyle(fontSize: 12)),
+              selected: settings?[t[0]] == true,
+              onSelected: (_) => _toggleSetting(t[0]),
+            ),
+        ]))),
         regSectionTitle('Échéances d\'évaluation (${echeancesEvaluation.length})'),
         if (echeancesEvaluation.isEmpty) regEmpty('Aucune échéance dans les seuils configurés')
         else ...echeancesEvaluation.map((a) => Card(child: ListTile(

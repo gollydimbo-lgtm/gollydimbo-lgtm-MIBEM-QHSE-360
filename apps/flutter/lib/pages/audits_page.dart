@@ -261,9 +261,15 @@ class AuditDetailPage extends StatefulWidget {
   State<AuditDetailPage> createState() => _AuditDetailPageState();
 }
 
+const _signatureRoleLabels = {
+  'AUDITEUR': 'Auditeur', 'RESPONSABLE_AUDITE': 'Responsable audité',
+  'RESPONSABLE_QHSE': 'Responsable QHSE', 'VALIDATEUR': 'Validateur',
+};
+
 class _AuditDetailPageState extends State<AuditDetailPage> {
   final api = Api();
   Map? audit;
+  List users = [];
   bool loading = true;
   String? error;
 
@@ -272,13 +278,26 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
 
   Future<void> load() async {
     setState(() => loading = true);
-    try { audit = Map.from(await api.get('/business/audits/${widget.auditId}')); }
+    try {
+      audit = Map.from(await api.get('/business/audits/${widget.auditId}'));
+      users = List.from(await api.get('/users'));
+    }
     catch (e) { error = '$e'; }
     setState(() => loading = false);
   }
 
   Future<void> saveResponse(String itemId, Map patch) async {
     try { await api.post('/business/audits/${widget.auditId}/responses/$itemId', patch); load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+  }
+
+  Future<void> addSignatureRole(String role) async {
+    try { await api.post('/business/audits/${widget.auditId}/signatures', {'role': role}); load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+  }
+
+  Future<void> signAs(String signatureId, String signataireId) async {
+    try { await api.post('/business/audit-signatures/$signatureId/sign', {'signataireId': signataireId}); load(); }
     catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
@@ -355,15 +374,30 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
           const SizedBox(height: 20),
           Text('Signatures', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final entry in _signatureRoleLabels.entries)
+              if (!signatures.any((s) => s['role'] == entry.key))
+                ActionChip(
+                  label: Text('+ ${entry.value}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                  backgroundColor: QhseColors.cardAlt,
+                  onPressed: () => addSignatureRole(entry.key),
+                ),
+          ]),
+          const SizedBox(height: 6),
           if (signatures.isEmpty)
             Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune signature demandée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...signatures.map((s) => Card(child: ListTile(
                   dense: true,
-                  title: Text(s['role'] ?? ''),
+                  title: Text(_signatureRoleLabels[s['role']] ?? s['role'] ?? ''),
                   subtitle: s['statut'] == 'SIGNE'
-                      ? Text('Signé le ${s['signedAt'].toString().substring(0, 10)}', style: TextStyle(color: QhseColors.green, fontSize: 11))
-                      : Text('En attente', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+                      ? Text('Signé par ${s['signataire']?['firstName'] ?? ''} ${s['signataire']?['lastName'] ?? ''} le ${s['signedAt'].toString().substring(0, 10)}', style: TextStyle(color: QhseColors.green, fontSize: 11))
+                      : DropdownButton<String>(
+                          isDense: true,
+                          hint: Text('Signer en tant que…', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                          items: users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}', style: const TextStyle(fontSize: 12)))).toList(),
+                          onChanged: (v) { if (v != null) signAs(s['id'], v); },
+                        ),
                 ))),
 
           const SizedBox(height: 20),

@@ -26,8 +26,10 @@ class NonConformitiesPage extends StatefulWidget {
 
 class _NonConformitiesPageState extends State<NonConformitiesPage> {
   final api = Api();
-  List items = [], recurrentes = [], trends = [];
+  List items = [], recurrentes = [], trends = [], alertes = [];
   Map dashboard = {}, ncSettings = {};
+  Map? syntheseDirection;
+  bool syntheseLoading = false;
   bool loading = true;
   String? filter;
   bool multiSelectMode = false;
@@ -35,6 +37,18 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
 
   @override
   void initState() { super.initState(); load(); }
+
+  Future<void> generateSynthese() async {
+    setState(() => syntheseLoading = true);
+    try { syntheseDirection = Map.from(await api.get('/business/nc-synthese-direction')); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+    setState(() => syntheseLoading = false);
+  }
+
+  Color _alerteColor(String? n) => {
+        'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red,
+        'ATTENTION': QhseColors.amber, 'INFORMATION': QhseColors.blue,
+      }[n] ?? QhseColors.textSecondary;
 
   Future<void> load() async {
     setState(() => loading = true);
@@ -45,6 +59,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
       recurrentes = List.from(await api.get('/business/nc-recurrentes'));
       trends = List.from(await api.get('/business/nc-trends'));
       ncSettings = Map.from(await api.get('/business/nc-settings'));
+      alertes = List.from(await api.get('/business/nc-alertes'));
     } catch (_) {}
     setState(() => loading = false);
   }
@@ -214,6 +229,25 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   Widget _buildAnalyses() => RefreshIndicator(
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(16), children: [
+      Text('Alertes (avec escalade)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+      const SizedBox(height: 4),
+      Text('${alertes.length} point(s) nécessitant attention', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+      const SizedBox(height: 8),
+      alertes.isEmpty
+          ? Card(child: Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.textSecondary)))))
+          : Card(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: [
+              for (final a in alertes)
+                ListTile(
+                  dense: true,
+                  title: Text('${a['label']}', style: const TextStyle(fontSize: 13)),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: _alerteColor(a['niveau']).withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                    child: Text('${a['niveau']}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _alerteColor(a['niveau']))),
+                  ),
+                ),
+            ]))),
+      const SizedBox(height: 20),
       Text('Évolution sur 12 mois — nouvelles NC', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
       const SizedBox(height: 8),
       SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary))) : _NcTrendChart(trends: trends)),
@@ -224,6 +258,46 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
         Text('${dashboard['coutTotalNonQualite'] ?? '—'}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
         Text('Moyenne par NC : ${dashboard['coutMoyenParNc'] ?? '—'}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
       ]))),
+      const SizedBox(height: 20),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text('Synthèse direction', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+        FilledButton.icon(
+          onPressed: syntheseLoading ? null : generateSynthese,
+          icon: syntheseLoading ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.summarize_outlined, size: 16),
+          label: const Text('Générer'),
+        ),
+      ]),
+      if (syntheseDirection != null) ...[
+        const SizedBox(height: 8),
+        Text('Générée le ${(syntheseDirection!['genereLe'] ?? '').toString().substring(0, 10)}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+        const SizedBox(height: 8),
+        Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (final entry in <List<Object?>>[
+            ['Total NC', syntheseDirection!['dashboard']?['total']],
+            ['NC critiques', syntheseDirection!['dashboard']?['critiques']],
+            ['NC majeures', syntheseDirection!['dashboard']?['majeures']],
+            ['Taux de clôture', syntheseDirection!['dashboard']?['tauxCloture'] != null ? '${syntheseDirection!['dashboard']['tauxCloture']}%' : '—'],
+            ['Actions en retard', syntheseDirection!['dashboard']?['actionsEnRetard']],
+            ['Coût total de non-qualité', syntheseDirection!['dashboard']?['coutTotalNonQualite']],
+          ])
+            Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('${entry[0]}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+              Text('${entry[1] ?? '—'}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ])),
+        ]))),
+        if ((syntheseDirection!['processusLesPlusProblematiques'] as List?)?.isNotEmpty ?? false) ...[
+          const SizedBox(height: 12),
+          Text('Processus les plus problématiques', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          for (final p in (syntheseDirection!['processusLesPlusProblematiques'] as List))
+            ListTile(dense: true, title: Text('${p['processus']}', style: const TextStyle(fontSize: 12)), trailing: Text('${p['nombre']}')),
+        ],
+        if ((syntheseDirection!['principalesRecurrences'] as List?)?.isNotEmpty ?? false) ...[
+          const SizedBox(height: 12),
+          Text('Principales récurrences', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          for (final r in (syntheseDirection!['principalesRecurrences'] as List))
+            ListTile(dense: true, title: Text('${r['titre']}', style: const TextStyle(fontSize: 12)), trailing: Text('${r['occurrences']}')),
+        ],
+      ],
     ]),
   );
 }

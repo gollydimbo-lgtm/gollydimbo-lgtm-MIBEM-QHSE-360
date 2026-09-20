@@ -31,6 +31,7 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
   Map stats = {'volume': {}, 'pareto': [], 'parMecanisme': [], 'parZone': []};
   List alertes = [];
   Map recidives = {'parCauseRacine': [], 'parZone': [], 'parMecanisme': []};
+  List workedHours = [];
   bool loading = true;
   int tabIndex = 0;
 
@@ -44,8 +45,65 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
       stats = Map.from(await api.get('/business/safety-events-stats'));
       alertes = List.from(await api.get('/business/safety-events-alertes'));
       recidives = Map.from(await api.get('/business/safety-events-recidives'));
+      workedHours = List.from(await api.get('/business/worked-hours'));
     } catch (_) {}
     setState(() => loading = false);
+  }
+
+  Future<void> _showWorkedHoursDialog({Map? record}) async {
+    final editing = record != null;
+    DateTime periodStart = record != null ? DateTime.parse(record['periodStart']) : DateTime(DateTime.now().year, 1, 1);
+    DateTime periodEnd = record != null ? DateTime.parse(record['periodEnd']) : DateTime.now();
+    final hoursCtrl = TextEditingController(text: record?['hours']?.toString() ?? '');
+    final siteCtrl = TextEditingController(text: record?['site'] ?? '');
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
+        title: Text(editing ? 'Modifier les heures travaillées' : 'Nouvelles heures travaillées'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Expanded(child: OutlinedButton(
+              onPressed: () async { final d = await showDatePicker(context: dc, initialDate: periodStart, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setD(() => periodStart = d); },
+              child: Text('Début : ${periodStart.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 12)),
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton(
+              onPressed: () async { final d = await showDatePicker(context: dc, initialDate: periodEnd, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setD(() => periodEnd = d); },
+              child: Text('Fin : ${periodEnd.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 12)),
+            )),
+          ]),
+          const SizedBox(height: 8),
+          TextField(controller: hoursCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Heures travaillées (total sur la période)')),
+          TextField(controller: siteCtrl, decoration: const InputDecoration(labelText: 'Site (optionnel)')),
+          if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: TextStyle(color: QhseColors.red, fontSize: 12))),
+        ])),
+        actions: [
+          if (editing) TextButton(
+            onPressed: () async {
+              try { await api.delete('/business/worked-hours/${record['id']}'); if (dc.mounted) Navigator.pop(dc, true); }
+              catch (e) { setD(() => error = '$e'); }
+            },
+            child: Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+          ),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
+          FilledButton(
+            onPressed: () async {
+              final hours = double.tryParse(hoursCtrl.text.replaceAll(',', '.'));
+              if (hours == null) { setD(() => error = 'Heures invalides'); return; }
+              try {
+                final payload = {'periodStart': periodStart.toIso8601String(), 'periodEnd': periodEnd.toIso8601String(), 'hours': hours, 'site': siteCtrl.text.trim()};
+                if (editing) { await api.patch('/business/worked-hours/${record['id']}', payload); }
+                else { await api.post('/business/worked-hours', {'code': 'HT-${DateTime.now().millisecondsSinceEpoch}', ...payload}); }
+                if (dc.mounted) Navigator.pop(dc, true);
+              } catch (e) { setD(() => error = '$e'); }
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      )),
+    );
+    if (ok == true) load();
   }
 
   @override
@@ -53,11 +111,11 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
     final volume = Map.from(stats['volume'] ?? {});
     final pareto = List.from(stats['pareto'] ?? []);
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Accidents & incidents'),
-          bottom: TabBar(onTap: (i) => setState(() => tabIndex = i), tabs: const [Tab(text: 'Tableau de bord'), Tab(text: 'Registre')]),
+          bottom: TabBar(onTap: (i) => setState(() => tabIndex = i), tabs: const [Tab(text: 'Tableau de bord'), Tab(text: 'Registre'), Tab(text: 'Heures travaillées')]),
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NewSafetyEventPage())).then((_) => load()),
@@ -131,8 +189,30 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                           },
                         ),
                 ),
+                RefreshIndicator(
+                  onRefresh: load,
+                  child: workedHours.isEmpty
+                      ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune période enregistrée')))])
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: workedHours.length,
+                          itemBuilder: (_, i) {
+                            final h = workedHours[i];
+                            return Card(child: ListTile(
+                              leading: const Icon(Icons.schedule),
+                              title: Text('${_date(h['periodStart'])} → ${_date(h['periodEnd'])}'),
+                              subtitle: Text('${h['hours']} h${(h['site'] ?? '').toString().isNotEmpty ? ' · ${h['site']}' : ''}'),
+                              onTap: () => _showWorkedHoursDialog(record: h),
+                            ));
+                          },
+                        ),
+                ),
               ]),
       ),
+      bottomNavigationBar: tabIndex == 2 ? SafeArea(child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: FilledButton.icon(onPressed: () => _showWorkedHoursDialog(), icon: const Icon(Icons.add), label: const Text('Nouvelle période')),
+      )) : null,
     );
   }
 

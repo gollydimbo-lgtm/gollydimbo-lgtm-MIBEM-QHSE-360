@@ -38,9 +38,12 @@ class RisksPage extends StatefulWidget {
 
 class _RisksPageState extends State<RisksPage> {
   final api = Api();
-  List items = [], categories = [], workUnits = [], alertes = [];
+  List items = [], categories = [], workUnits = [], alertes = [], top10 = [];
   Map dashboard = {};
   bool loading = true;
+  final searchCtrl = TextEditingController();
+  List? searchResults;
+  int _searchToken = 0;
 
   @override
   void initState() { super.initState(); load(); }
@@ -53,18 +56,35 @@ class _RisksPageState extends State<RisksPage> {
       alertes = List.from(await api.get('/business/risk-alertes'));
       categories = List.from(await api.get('/business/risk-categories'));
       workUnits = List.from(await api.get('/business/work-units'));
+      top10 = List.from(await api.get('/business/risk-top10'));
     } catch (_) {}
     setState(() => loading = false);
   }
 
+  Future<void> _onSearchChanged(String q) async {
+    final token = ++_searchToken;
+    if (q.trim().isEmpty) { setState(() => searchResults = null); return; }
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (token != _searchToken) return;
+    try {
+      final res = List.from(await api.get('/business/risks-search?q=${Uri.encodeQueryComponent(q.trim())}'));
+      if (token == _searchToken && mounted) setState(() => searchResults = res);
+    } catch (_) {
+      if (token == _searchToken && mounted) setState(() => searchResults = []);
+    }
+  }
+
+  @override
+  void dispose() { searchCtrl.dispose(); super.dispose(); }
+
   @override
   Widget build(BuildContext c) => DefaultTabController(
-    length: 5,
+    length: 6,
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Registre des risques'),
         bottom: const TabBar(isScrollable: true, tabs: [
-          Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Hiérarchisation'), Tab(text: 'Cartographie'), Tab(text: 'Paramétrage'),
+          Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Hiérarchisation'), Tab(text: 'Cartographie'), Tab(text: 'Top 10'), Tab(text: 'Paramétrage'),
         ]),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -74,8 +94,29 @@ class _RisksPageState extends State<RisksPage> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildHierarchisation(c), _buildCartographie(c), _buildParametrage(c)]),
+          : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildHierarchisation(c), _buildCartographie(c), _buildTop10(c), _buildParametrage(c)]),
     ),
+  );
+
+  Widget _buildTop10(BuildContext c) => RefreshIndicator(
+    onRefresh: load,
+    child: top10.isEmpty
+        ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun risque enregistré')))])
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: top10.length,
+            itemBuilder: (_, i) {
+              final r = top10[i];
+              final color = _niveauColor(r['grossLevel']);
+              final nbActions = (r['actions'] as List?)?.length ?? 0;
+              return Card(child: ListTile(
+                leading: CircleAvatar(backgroundColor: color, child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                title: Text('${r['hazard']}'),
+                subtitle: Text('${r['workUnit']?['name'] ?? '—'} · ${r['category']?['label'] ?? '—'} · score ${r['grossScore'] ?? '—'} · ${nbActions > 0 ? '$nbActions action(s)' : 'Aucune action'}'),
+                onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RiskDetailPage(riskId: r['id']))).then((_) => load()),
+              ));
+            },
+          ),
   );
 
   Widget _buildApercu(BuildContext c) => RefreshIndicator(
@@ -115,27 +156,46 @@ class _RisksPageState extends State<RisksPage> {
     ]),
   );
 
-  Widget _buildRegistre(BuildContext c) => RefreshIndicator(
-    onRefresh: load,
-    child: items.isEmpty
-        ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun risque enregistré')))])
-        : ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: items.length,
-            itemBuilder: (_, i) {
-              final r = items[i];
-              final score = r['grossScore'] ?? r['score'] ?? 0;
-              final color = _niveauColor(r['grossLevel']);
-              return Card(child: ListTile(
-                leading: CircleAvatar(backgroundColor: color, child: Text('$score', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                title: Text('${r['code']} — ${r['hazard']}'),
-                subtitle: Text('${r['category']?['label'] ?? 'Sans catégorie'} · ${r['workUnit']?['name'] ?? 'Sans unité'}'),
-                trailing: Text(_niveauLabel(r['grossLevel']), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
-                onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RiskDetailPage(riskId: r['id']))).then((_) => load()),
-              ));
-            },
+  Widget _buildRegistre(BuildContext c) {
+    final list = searchResults ?? items;
+    return RefreshIndicator(
+      onRefresh: load,
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            controller: searchCtrl,
+            onChanged: _onSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'Rechercher un risque (danger, situation, catégorie, unité de travail...)',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              isDense: true,
+            ),
           ),
-  );
+        ),
+        Expanded(
+          child: list.isEmpty
+              ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(searchResults != null ? 'Aucun résultat pour cette recherche' : 'Aucun risque enregistré')))])
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: list.length,
+                  itemBuilder: (_, i) {
+                    final r = list[i];
+                    final score = r['grossScore'] ?? r['score'] ?? 0;
+                    final color = _niveauColor(r['grossLevel']);
+                    return Card(child: ListTile(
+                      leading: CircleAvatar(backgroundColor: color, child: Text('$score', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                      title: Text('${r['code']} — ${r['hazard']}'),
+                      subtitle: Text('${r['category']?['label'] ?? 'Sans catégorie'} · ${r['workUnit']?['name'] ?? 'Sans unité'}'),
+                      trailing: Text(_niveauLabel(r['grossLevel']), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
+                      onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RiskDetailPage(riskId: r['id']))).then((_) => load()),
+                    ));
+                  },
+                ),
+        ),
+      ]),
+    );
+  }
 
   Widget _buildHierarchisation(BuildContext c) {
     final groups = [
