@@ -10,12 +10,12 @@ name: Build MIBEM QHSE 360 (Android + Windows)
 #    du dépôt une fois le scaffold en place (généré à l'instant ou déjà
 #    présent d'un run précédent) et publient les artefacts.
 
-# DÉSACTIVÉ : cette appli (flutter_app / "MIBEM QHSE 360") est abandonnée.
-# L'application officielle est "Gestion QHSE 360" (apps/web).
-# Ce workflow ne se déclenche plus automatiquement ; il reste utilisable
-# manuellement (bouton "Run workflow") si besoin, mais ne publie plus
-# de release à chaque push.
 on:
+  push:
+    branches: [main]
+    paths:
+      - "flutter_app/**"
+      - "assets/branding/**"
   workflow_dispatch:
     inputs:
       api_base_url:

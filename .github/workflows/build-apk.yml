@@ -1,10 +1,13 @@
 name: Build Android APK
 
-# DÉSACTIVÉ : cette appli (apps/flutter / "QHSE MIBEM") est abandonnée.
-# L'application officielle est "Gestion QHSE 360" (apps/web).
-# Ce workflow ne se déclenche plus automatiquement au push ; il reste
-# utilisable manuellement (bouton "Run workflow") si besoin.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/flutter/**'
+      - '.github/workflows/build-apk.yml'
+      - '.github/scripts/ensure-flutter-platforms.sh'
+      - 'assets/branding/**'
   workflow_dispatch:
     inputs:
       api_base_url:

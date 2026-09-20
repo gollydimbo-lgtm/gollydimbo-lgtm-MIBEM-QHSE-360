@@ -98,4 +98,22 @@ if [ -f "$CMAKE" ]; then
   sed -i 's/set(BINARY_NAME "qhse_mobile")/set(BINARY_NAME "QHSE_MIBEM")/' "$CMAKE" || true
 fi
 
+
+# Applique le logo QHSE 360 (icônes officielles, communes à toutes les
+# applications) sur le socle Android/Windows fraîchement généré.
+BRANDING="$(dirname "$0")/../../assets/branding/qhse360"
+if [ -d "$BRANDING" ]; then
+  echo "== Application du logo QHSE 360 =="
+  for DPI in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+    SRC_ICON="$BRANDING/android/mipmap-$DPI/ic_launcher.png"
+    DST_DIR="android/app/src/main/res/mipmap-$DPI"
+    if [ -f "$SRC_ICON" ] && [ -d "$DST_DIR" ]; then
+      cp "$SRC_ICON" "$DST_DIR/ic_launcher.png"
+    fi
+  done
+  if [ -f "$BRANDING/windows/app_icon.ico" ] && [ -d "windows/runner/resources" ]; then
+    cp "$BRANDING/windows/app_icon.ico" "windows/runner/resources/app_icon.ico"
+  fi
+fi
+
 echo "== Socle Flutter prêt =="
