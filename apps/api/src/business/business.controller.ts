@@ -142,4 +142,11 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Get('company-identity') companyIdentityGet(){return this.s.companyIdentityGet()}
 @Patch('company-identity') companyIdentityUpdate(@Body()b:any){return this.s.companyIdentityUpdate(b)}
 @Get('rapports/consolide') rapportConsolide(@Query('from')from?:string,@Query('to')to?:string,@Query('siteId')siteId?:string){return this.s.rapportConsolide({from,to,siteId})}
+@Get('rapports') rapportList(@Query('statut')statut?:string,@Query('siteId')siteId?:string){return this.s.rapportList({statut,siteId})}
+@Get('rapports/:id') rapportGet(@Param('id')id:string){return this.s.rapportGet(id)}
+@Post('rapports') rapportCreate(@Body()b:any){return this.s.rapportCreate(b)}
+@Patch('rapports/:id') rapportUpdate(@Param('id')id:string,@Body()b:any){return this.s.rapportUpdate(id,b)}
+@Post('rapports/:id/valider') rapportValider(@Param('id')id:string,@Body()b:any){return this.s.rapportValider(id,b)}
+@Post('rapports/:id/revision') rapportRevision(@Param('id')id:string){return this.s.rapportRevision(id)}
+@Post('rapports/:id/distribuer') rapportDistribuer(@Param('id')id:string,@Body()b:any){return this.s.rapportDistribuer(id,b)}
 }

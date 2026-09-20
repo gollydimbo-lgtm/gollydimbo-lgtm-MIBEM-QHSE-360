@@ -11170,44 +11170,68 @@ function rapportGroupBy(items, keyFn) {
   return [...m.entries()].map(([name, value]) => ({ name, value }));
 }
 function RapportDocumentTab() {
+  const [selectedId, setSelectedId] = useState(null);
+  return selectedId
+    ? <RapportEditorPanel id={selectedId} onBack={() => setSelectedId(null)} />
+    : <RapportListEtCreation onOpen={setSelectedId} />;
+}
+const RAPPORT_STATUT_LABELS = { BROUILLON: 'Brouillon', EN_REVUE: 'En revue', VALIDE: 'Validé', DISTRIBUE: 'Distribué' };
+function rapportStatutColor(C, statut) { return { BROUILLON: C.textMuted, EN_REVUE: C.amber, VALIDE: C.green, DISTRIBUE: C.blue }[statut] || C.textMuted; }
+function RapportListEtCreation({ onOpen }) {
+  const C = useTheme();
+  const [showForm, setShowForm] = useState(false);
+  const listQ = useCollection('/business/rapports');
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end no-print">
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau rapport</button>
+      </div>
+      {showForm && <RapportCreationForm onClose={() => setShowForm(false)} onCreated={(id) => { setShowForm(false); onOpen(id); }} />}
+      <Panel title="Rapports enregistrés" subtitle={`${(listQ.data || []).length} rapport(s)`}>
+        {listQ.loading ? <LoadingPanel /> : listQ.error ? <ErrorPanel message={listQ.error} onRetry={listQ.reload} /> : (listQ.data || []).length
+          ? <DataTable columns={['Titre', 'Période', 'Site', 'Statut', 'Version']}
+              rows={listQ.data.map((r) => [r.titre, `${new Date(r.periodeFrom).toLocaleDateString('fr-FR')} — ${new Date(r.periodeTo).toLocaleDateString('fr-FR')}`, r.site?.name || 'Tous sites', regulatoryBadge(C, RAPPORT_STATUT_LABELS[r.statut] || r.statut, rapportStatutColor(C, r.statut)), `V${r.version}`])}
+              onRowClick={(i) => onOpen(listQ.data[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun rapport enregistré — créez-en un</p>}
+      </Panel>
+    </div>
+  );
+}
+function RapportCreationForm({ onClose, onCreated }) {
   const C = useTheme();
   const now = new Date();
+  const [titre, setTitre] = useState('Rapport mensuel QHSE');
   const [from, setFrom] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10));
   const [to, setTo] = useState(now.toISOString().slice(0, 10));
   const [siteId, setSiteId] = useState('');
   const [mode, setMode] = useState('complet');
   const [domaineThematique, setDomaineThematique] = useState('controles');
-  const [titre, setTitre] = useState('Rapport mensuel QHSE');
   const [confidentialite, setConfidentialite] = useState('Interne');
+  const [saving, setSaving] = useState(false);
   const sitesQ = useCollection('/quality/catalog/sites');
-  const params = new URLSearchParams({ from, to, ...(siteId ? { siteId } : {}) });
-  const consolideQ = useCollection(`/business/rapports/consolide?${params.toString()}`);
-  const identiteQ = useCollection('/business/company-identity');
-
-  if (consolideQ.loading || identiteQ.loading) return <LoadingPanel />;
-  if (consolideQ.error) return <ErrorPanel message={consolideQ.error} onRetry={consolideQ.reload} />;
-  const d = consolideQ.data;
-  const identite = d.identite || identiteQ.data || {};
-  const domainesVisibles = mode === 'thematique' ? RAPPORT_DOMAINES.filter((x) => x.key === domaineThematique)
-    : mode === 'synthese' ? RAPPORT_DOMAINES.filter((x) => ['objectifsQhse', 'accidents', 'risques', 'actionsCapa'].includes(x.key))
-    : RAPPORT_DOMAINES;
-  const sommaire = domainesVisibles.filter((x) => rapportGetSection(d, x.key)?.hasData);
-  const siteNom = sitesQ.data?.find((s) => s.id === siteId)?.name;
-
+  async function create() {
+    setSaving(true);
+    try {
+      const created = await api.post('/business/rapports', { titre, from, to, siteId: siteId || undefined, mode: mode.toUpperCase(), domaineThematique: mode === 'thematique' ? domaineThematique : undefined, confidentialite });
+      onCreated(created.id);
+    } finally { setSaving(false); }
+  }
   return (
-    <div className="space-y-4">
-      <div className="no-print flex flex-wrap gap-2 items-end p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
-        <FormField label="Titre du rapport"><input value={titre} onChange={(e) => setTitre(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none w-56" style={inputStyle(C)} /></FormField>
-        <FormField label="Du"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} /></FormField>
-        <FormField label="Au"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} /></FormField>
+    <Modal title="Nouveau rapport QHSE" onClose={onClose}>
+      <div className="space-y-3">
+        <FormField label="Titre"><input value={titre} onChange={(e) => setTitre(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Du"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Au"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
         <FormField label="Site">
-          <select value={siteId} onChange={(e) => setSiteId(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <select value={siteId} onChange={(e) => setSiteId(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
             <option value="">Tous les sites</option>
             {(sitesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </FormField>
         <FormField label="Mode">
-          <select value={mode} onChange={(e) => setMode(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <select value={mode} onChange={(e) => setMode(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
             <option value="complet">Rapport complet</option>
             <option value="synthese">Synthèse Direction</option>
             <option value="thematique">Thématique</option>
@@ -11215,75 +11239,115 @@ function RapportDocumentTab() {
         </FormField>
         {mode === 'thematique' && (
           <FormField label="Domaine">
-            <select value={domaineThematique} onChange={(e) => setDomaineThematique(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+            <select value={domaineThematique} onChange={(e) => setDomaineThematique(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
               {RAPPORT_DOMAINES.filter((x) => x.key !== 'objectifsQhse').map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
             </select>
           </FormField>
         )}
-        <FormField label="Confidentialité"><input value={confidentialite} onChange={(e) => setConfidentialite(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none w-32" style={inputStyle(C)} /></FormField>
-        <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button>
+        <FormField label="Confidentialité"><input value={confidentialite} onChange={(e) => setConfidentialite(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <button onClick={create} disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{saving ? 'Création…' : 'Créer le brouillon'}</button>
+        <p className="text-xs" style={{ color: C.textMuted }}>Les données de la période sont figées à la création. Corriger une donnée source se fait dans son module d'origine.</p>
+      </div>
+    </Modal>
+  );
+}
+function RapportEditorPanel({ id, onBack }) {
+  const C = useTheme();
+  const rapportQ = useCollection(`/business/rapports/${id}`);
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (rapportQ.data) setForm({ analyseQhse: rapportQ.data.analyseQhse || '', observationsDirection: rapportQ.data.observationsDirection || '', conclusion: rapportQ.data.conclusion || '', preparePar: rapportQ.data.preparePar || '', verifiePar: rapportQ.data.verifiePar || '' }); }, [rapportQ.data?.id, rapportQ.data?.updatedAt]);
+  if (rapportQ.loading || !form) return <LoadingPanel />;
+  if (rapportQ.error) return <ErrorPanel message={rapportQ.error} onRetry={rapportQ.reload} />;
+  const r = rapportQ.data;
+  const d = r.donnees;
+  const verrouille = r.statut === 'VALIDE' || r.statut === 'DISTRIBUE';
+  const domainesVisibles = r.mode === 'THEMATIQUE' ? RAPPORT_DOMAINES.filter((x) => x.key === r.domaineThematique)
+    : r.mode === 'SYNTHESE' ? RAPPORT_DOMAINES.filter((x) => ['objectifsQhse', 'accidents', 'risques', 'actionsCapa'].includes(x.key))
+    : RAPPORT_DOMAINES;
+  const sommaire = domainesVisibles.filter((x) => rapportGetSection(d, x.key)?.hasData);
+  async function save() { setSaving(true); try { await api.patch(`/business/rapports/${id}`, form); rapportQ.reload(); } finally { setSaving(false); } }
+  async function valider() {
+    const nom = window.prompt('Nom et fonction du validateur :');
+    if (!nom) return;
+    await save();
+    await api.post(`/business/rapports/${id}/valider`, { validePar: nom });
+    rapportQ.reload();
+  }
+  async function nouvelleVersion() {
+    await api.post(`/business/rapports/${id}/revision`, {});
+    onBack();
+  }
+  async function distribuer() {
+    const email = window.prompt('E-mail du destinataire :');
+    if (!email) return;
+    const distribuePar = window.prompt('Distribué par (nom) :') || '';
+    await api.post(`/business/rapports/${id}/distribuer`, { destinataireEmail: email, distribuePar });
+    rapportQ.reload();
+  }
+  return (
+    <div className="space-y-4">
+      <div className="no-print flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+        <button onClick={onBack} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>← Retour à la liste</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {regulatoryBadge(C, `${RAPPORT_STATUT_LABELS[r.statut]} · V${r.version}`, rapportStatutColor(C, r.statut))}
+          {!verrouille && <button onClick={save} disabled={saving} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{saving ? '…' : 'Enregistrer'}</button>}
+          {!verrouille && <button onClick={valider} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Valider</button>}
+          {r.statut === 'VALIDE' && <button onClick={distribuer} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Distribuer</button>}
+          {verrouille && <button onClick={nouvelleVersion} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Nouvelle version</button>}
+          <button onClick={() => window.print()} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Imprimer / PDF</button>
+        </div>
       </div>
 
       <div className="p-8 rounded-lg space-y-2 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-        {identite.logoUrl && <img src={identite.logoUrl} alt="Logo" className="h-16 mx-auto mb-2" />}
-        <div className="text-xs uppercase tracking-wide" style={{ color: C.textMuted }}>{identite.nomOfficiel || identite.nomCommercial || 'Entreprise'}</div>
-        <div className="text-2xl font-bold" style={{ color: C.text }}>{titre.toUpperCase()}</div>
-        <div className="text-sm" style={{ color: C.textMuted }}>Période : {new Date(from).toLocaleDateString('fr-FR')} — {new Date(to).toLocaleDateString('fr-FR')}</div>
-        {siteNom && <div className="text-sm" style={{ color: C.textMuted }}>Site : {siteNom}</div>}
+        {d.identite?.logoUrl && <img src={d.identite.logoUrl} alt="Logo" className="h-16 mx-auto mb-2" />}
+        <div className="text-xs uppercase tracking-wide" style={{ color: C.textMuted }}>{d.identite?.nomOfficiel || d.identite?.nomCommercial || 'Entreprise'}</div>
+        <div className="text-2xl font-bold" style={{ color: C.text }}>{r.titre.toUpperCase()}</div>
+        <div className="text-sm" style={{ color: C.textMuted }}>Période : {new Date(r.periodeFrom).toLocaleDateString('fr-FR')} — {new Date(r.periodeTo).toLocaleDateString('fr-FR')}</div>
+        {r.site && <div className="text-sm" style={{ color: C.textMuted }}>Site : {r.site.name}</div>}
         <div className="text-xs mt-2" style={{ color: C.textMuted }}>Généré le {new Date(d.genereLe).toLocaleString('fr-FR')}</div>
       </div>
 
       <Panel title="Informations du document">
         <DataTable columns={['Élément', 'Information']} rows={[
           ['Type de document', 'Rapport QHSE'],
-          ['Période', `${new Date(from).toLocaleDateString('fr-FR')} — ${new Date(to).toLocaleDateString('fr-FR')}`],
-          ['Site', siteNom || 'Tous les sites'],
-          ['Préparé par', identite.responsableQhseNom || '—'],
-          ['Vérifié par', identite.directeurNom || '—'],
-          ['Statut', 'Brouillon'],
-          ['Confidentialité', confidentialite],
+          ['Période', `${new Date(r.periodeFrom).toLocaleDateString('fr-FR')} — ${new Date(r.periodeTo).toLocaleDateString('fr-FR')}`],
+          ['Site', r.site?.name || 'Tous les sites'],
+          ['Préparé par', d.identite?.responsableQhseNom || '—'],
+          ['Statut', RAPPORT_STATUT_LABELS[r.statut]],
+          ['Version', r.version],
+          ['Confidentialité', r.confidentialite || '—'],
         ]} />
       </Panel>
 
       <Panel title="Sommaire">
         {sommaire.length
-          ? <ol className="list-decimal list-inside text-sm space-y-1" style={{ color: C.text }}>
-              <li>Résumé exécutif</li>
-              {sommaire.map((s) => <li key={s.key}>{s.label}</li>)}
-            </ol>
+          ? <ol className="list-decimal list-inside text-sm space-y-1" style={{ color: C.text }}><li>Résumé exécutif</li>{sommaire.map((s) => <li key={s.key}>{s.label}</li>)}<li>Analyse du Responsable QHSE</li>{r.observationsDirection && <li>Observations de la Direction</li>}<li>Conclusion</li></ol>
           : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune section avec des données sur cette période</p>}
       </Panel>
 
       <Panel title="Résumé exécutif">
         <DataTable columns={['Domaine', 'Objectifs atteints', 'À risque', 'En retard', 'Avancement moyen']}
-          rows={(d.resumeExecutif || []).map((r) => [
-            RAPPORT_FAMILLE_LABELS[r.famille] || r.famille,
-            `${r.atteints} / ${r.total}`,
-            r.aRisque,
-            r.enRetard,
-            r.moyenneAvancement != null ? `${r.moyenneAvancement}%` : 'Non évaluable',
-          ])} />
+          rows={(d.resumeExecutif || []).map((x) => [RAPPORT_FAMILLE_LABELS[x.famille] || x.famille, `${x.atteints} / ${x.total}`, x.aRisque, x.enRetard, x.moyenneAvancement != null ? `${x.moyenneAvancement}%` : 'Non évaluable'])} />
       </Panel>
 
       {domainesVisibles.map((dom) => {
         const sec = rapportGetSection(d, dom.key);
         if (!sec) return null;
         if (!sec.hasData) {
-          return mode === 'complet' ? (
-            <Panel key={dom.key} title={dom.label}>
-              <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune donnée enregistrée pour cette rubrique sur la période sélectionnée.</p>
-            </Panel>
+          return r.mode === 'COMPLET' ? (
+            <Panel key={dom.key} title={dom.label}><p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune donnée enregistrée pour cette rubrique sur la période sélectionnée.</p></Panel>
           ) : null;
         }
         if (dom.key === 'objectifsQhse') {
-          const r = sec.resume;
+          const res = sec.resume;
           return (
-            <Panel key={dom.key} title={`${dom.label} (${r.total})`}>
+            <Panel key={dom.key} title={`${dom.label} (${res.total})`}>
               <div className="flex flex-wrap gap-3">
-                <KpiCard label="Atteints" value={r.atteints} color={C.green} icon={CheckCircle2} />
-                <KpiCard label="En cours" value={r.enCours} color={C.blue} icon={Activity} />
-                <KpiCard label="En retard" value={r.enRetard} color={C.red} icon={AlertTriangle} />
-                <KpiCard label="À risque" value={r.aRisque} color={C.red} icon={FileWarning} />
+                <KpiCard label="Atteints" value={res.atteints} color={C.green} icon={CheckCircle2} />
+                <KpiCard label="En cours" value={res.enCours} color={C.blue} icon={Activity} />
+                <KpiCard label="En retard" value={res.enRetard} color={C.red} icon={AlertTriangle} />
+                <KpiCard label="À risque" value={res.aRisque} color={C.red} icon={FileWarning} />
               </div>
             </Panel>
           );
@@ -11301,12 +11365,47 @@ function RapportDocumentTab() {
         );
       })}
 
+      <Panel title="Analyse / avis du Responsable QHSE">
+        {verrouille
+          ? <p className="text-sm whitespace-pre-wrap" style={{ color: C.text }}>{form.analyseQhse || 'Aucune analyse renseignée.'}</p>
+          : <textarea value={form.analyseQhse} onChange={(e) => setForm({ ...form, analyseQhse: e.target.value })} rows={4} placeholder="Votre lecture professionnelle des résultats de la période..." className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />}
+      </Panel>
+
+      {(r.observationsDirection || !verrouille) && (
+        <Panel title="Observations de la Direction">
+          {verrouille
+            ? <p className="text-sm whitespace-pre-wrap" style={{ color: C.text }}>{form.observationsDirection || 'Aucune observation.'}</p>
+            : <textarea value={form.observationsDirection} onChange={(e) => setForm({ ...form, observationsDirection: e.target.value })} rows={3} placeholder="Facultatif — commentaires, décisions, orientations de la Direction..." className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />}
+        </Panel>
+      )}
+
       <Panel title="Conclusion">
-        <p className="text-sm" style={{ color: C.textMuted }}>
-          {sommaire.length === 0
-            ? "Aucune donnée n'a été enregistrée dans l'application sur cette période : la conclusion ne peut pas être générée automatiquement."
-            : `${sommaire.length} rubrique(s) alimentée(s) sur la période. Reportez-vous au résumé exécutif et aux sections ci-dessus pour le détail par domaine.`}
-        </p>
+        {verrouille
+          ? <p className="text-sm whitespace-pre-wrap" style={{ color: C.text }}>{form.conclusion || (sommaire.length === 0 ? "Aucune donnée n'a été enregistrée sur cette période." : '')}</p>
+          : <textarea value={form.conclusion} onChange={(e) => setForm({ ...form, conclusion: e.target.value })}
+              placeholder={sommaire.length === 0 ? "Aucune donnée n'a été enregistrée dans l'application sur cette période : la conclusion ne peut pas être générée automatiquement." : `${sommaire.length} rubrique(s) alimentée(s) sur la période — synthèse factuelle à rédiger...`}
+              rows={3} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />}
+      </Panel>
+
+      <Panel title="Validation">
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Préparé par">
+            {verrouille ? <p className="text-sm" style={{ color: C.text }}>{form.preparePar || '—'}</p>
+              : <input value={form.preparePar} onChange={(e) => setForm({ ...form, preparePar: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Nom / fonction" />}
+          </FormField>
+          <FormField label="Vérifié par">
+            {verrouille ? <p className="text-sm" style={{ color: C.text }}>{form.verifiePar || '—'}</p>
+              : <input value={form.verifiePar} onChange={(e) => setForm({ ...form, verifiePar: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} placeholder="Nom / fonction" />}
+          </FormField>
+        </div>
+        {r.validePar && <p className="text-xs mt-3" style={{ color: C.textMuted }}>Validé par {r.validePar} le {new Date(r.valideParDate).toLocaleString('fr-FR')}</p>}
+      </Panel>
+
+      <Panel title={`Journal de distribution (${(r.distributions || []).length})`}>
+        {(r.distributions || []).length
+          ? <DataTable columns={['Destinataire', 'Version', 'Date', 'Distribué par']}
+              rows={r.distributions.map((dt) => [dt.destinataireEmail || dt.destinataireId || '—', `V${dt.version}`, new Date(dt.dateDistribution).toLocaleString('fr-FR'), dt.distribuePar || '—'])} />
+          : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Ce rapport n'a pas encore été distribué</p>}
       </Panel>
     </div>
   );

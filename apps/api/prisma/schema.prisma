@@ -194,6 +194,8 @@ model User {
   haccpMonitoringResponsable HaccpMonitoringRecord[]
   haccpPrpsResponsable HaccpPrp[]
   haccpRevisionsResponsable HaccpRevision[]
+  rapportsQhseCrees RapportQhse[]
+  rapportDistributionsRecues RapportDistribution[]
 }
 
 model Role {
@@ -1035,6 +1037,7 @@ model Site {
   equipments Equipment[]
   regulatoryRequirements RegulatoryRequirement[]
   objectifsQhse ObjectifQhse[]
+  rapportsQhse RapportQhse[]
   createdAt DateTime @default(now())
 }
 
@@ -3256,4 +3259,56 @@ model CompanyIdentity {
   responsableRapportId String?
   updatedById String?
   updatedAt DateTime @updatedAt
+}
+
+// Rapports QHSE — Phase 3 : le rapport devient une entite persistee, avec
+// statut/version et un contenu editorial (avis QHSE, observations Direction,
+// conclusion) explicitement separe de "donnees" (instantane fige du moteur
+// de consolidation au moment de la creation, jamais recalcule silencieusement
+// ni modifiable — corriger une donnee source se fait dans son module
+// d'origine, pas ici). Un rapport VALIDE ou DISTRIBUE est verrouille cote
+// service : toute modification cree une nouvelle version (versionOfId).
+model RapportQhse {
+  id String @id @default(cuid())
+  titre String
+  mode String @default("COMPLET")
+  domaineThematique String?
+  periodeFrom DateTime
+  periodeTo DateTime
+  siteId String?
+  confidentialite String?
+  statut String @default("BROUILLON")
+  version Int @default(1)
+  versionGroupId String?
+  versionOfId String?
+  donnees Json
+  analyseQhse String?
+  observationsDirection String?
+  conclusion String?
+  preparePar String?
+  prepareParDate DateTime?
+  verifiePar String?
+  verifieParDate DateTime?
+  validePar String?
+  valideParDate DateTime?
+  createdById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
+  createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  distributions RapportDistribution[]
+}
+
+// Traçabilité de diffusion (point 32) — qui a reçu quelle version, quand,
+// distribuée par qui.
+model RapportDistribution {
+  id String @id @default(cuid())
+  rapportId String
+  destinataireId String?
+  destinataireEmail String?
+  distribuePar String?
+  dateDistribution DateTime @default(now())
+  version Int
+  rapport RapportQhse @relation(fields:[rapportId], references:[id], onDelete:Cascade)
+  destinataire User? @relation(fields:[destinataireId], references:[id], onDelete:SetNull)
 }

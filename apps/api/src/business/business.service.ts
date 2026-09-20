@@ -3097,4 +3097,106 @@ import { writeAudit } from '../common/audit-log.helper';
    siteNom:site?.name||null,
   };
  }
+
+ // ============================================================================
+ // RAPPORTS QHSE — Phase 3 : cycle de vie (brouillon -> revue -> valide ->
+ // distribue), avec verrouillage et separation stricte entre donnees sources
+ // (figees a la creation, jamais reecrites) et contenu editorial (modifiable
+ // tant que le rapport n'est pas valide).
+ // ============================================================================
+
+ rapportList(filters?:{statut?:string,siteId?:string}){
+  const where:any={};
+  if(filters?.statut) where.statut=filters.statut;
+  if(filters?.siteId) where.siteId=filters.siteId;
+  return this.db.rapportQhse.findMany({where,orderBy:{createdAt:'desc'},include:{site:true,distributions:true}});
+ }
+ async rapportGet(id:string){
+  const r=await this.db.rapportQhse.findUnique({where:{id},include:{site:true,distributions:true}});
+  if(!r) throw new NotFoundException('Rapport introuvable');
+  return r;
+ }
+
+ // Creation (AC01..AC09) — fige un instantane du moteur de consolidation :
+ // le rapport ne recalculera plus jamais ses donnees sources apres coup.
+ async rapportCreate(b:{titre:string,mode?:string,domaineThematique?:string,from:string,to:string,siteId?:string,confidentialite?:string,createdById?:string}){
+  const donnees=await this.rapportConsolide({from:b.from,to:b.to,siteId:b.siteId});
+  const created=await this.db.rapportQhse.create({data:{
+   titre:b.titre,mode:b.mode||'COMPLET',domaineThematique:b.domaineThematique||null,
+   periodeFrom:new Date(b.from),periodeTo:new Date(b.to),siteId:b.siteId||null,
+   confidentialite:b.confidentialite||'Interne',statut:'BROUILLON',version:1,
+   donnees:donnees as any,createdById:b.createdById||null,
+  }});
+  await this.db.rapportQhse.update({where:{id:created.id},data:{versionGroupId:created.id}});
+  await writeAudit(this.db,'RAPPORT_QHSE','CREATE',created.id,null,created);
+  return this.rapportGet(created.id);
+ }
+
+ // Modification du contenu editorial (AC35..AC38, AC44) — jamais les
+ // donnees sources : seuls les champs de presentation/analyse sont
+ // acceptes ici. Un rapport verrouille (VALIDE/DISTRIBUE) refuse l'edition,
+ // voir rapportRevision() pour creer une nouvelle version.
+ async rapportUpdate(id:string,b:any){
+  const current=await this.rapportGet(id);
+  if(current.statut==='VALIDE'||current.statut==='DISTRIBUE'){
+   throw new Error('Ce rapport est verrouillé (validé ou distribué) : créez une nouvelle version pour le modifier.');
+  }
+  const updated=await this.db.rapportQhse.update({where:{id},data:{
+   titre:b.titre??current.titre,confidentialite:b.confidentialite??current.confidentialite,
+   analyseQhse:b.analyseQhse??current.analyseQhse,observationsDirection:b.observationsDirection??current.observationsDirection,
+   conclusion:b.conclusion??current.conclusion,
+   preparePar:b.preparePar??current.preparePar,prepareParDate:b.preparePar?new Date():current.prepareParDate,
+   verifiePar:b.verifiePar??current.verifiePar,verifieParDate:b.verifiePar?new Date():current.verifieParDate,
+   statut:b.statut==='EN_REVUE'?'EN_REVUE':current.statut,
+  }});
+  await writeAudit(this.db,'RAPPORT_QHSE','UPDATE',id,current,updated);
+  return updated;
+ }
+
+ // Validation (AC18, AC19) — verrouille le rapport. Aucune archivage GED
+ // automatique tant que l'export PDF reel n'existe pas (phase suivante) :
+ // on ne cree jamais une fiche documentaire pointant vers un fichier qui
+ // n'existe pas.
+ async rapportValider(id:string,b:{validePar:string}){
+  const current=await this.rapportGet(id);
+  if(current.statut==='VALIDE'||current.statut==='DISTRIBUE') throw new Error('Ce rapport est déjà validé.');
+  if(!b.validePar) throw new Error('Le nom du validateur est requis.');
+  const updated=await this.db.rapportQhse.update({where:{id},data:{statut:'VALIDE',validePar:b.validePar,valideParDate:new Date()}});
+  await writeAudit(this.db,'RAPPORT_QHSE','VALIDATE',id,current,updated);
+  return updated;
+ }
+
+ // Nouvelle version (AC20, AC45) — jamais un ecrasement silencieux d'un
+ // rapport valide/distribue : une nouvelle ligne, nouvelles donnees
+ // consolidees fraiches, contenu editorial repris comme point de depart.
+ async rapportRevision(id:string){
+  const source=await this.rapportGet(id);
+  const donnees=await this.rapportConsolide({from:source.periodeFrom.toISOString(),to:source.periodeTo.toISOString(),siteId:source.siteId||undefined});
+  const created=await this.db.rapportQhse.create({data:{
+   titre:source.titre,mode:source.mode,domaineThematique:source.domaineThematique,
+   periodeFrom:source.periodeFrom,periodeTo:source.periodeTo,siteId:source.siteId,
+   confidentialite:source.confidentialite,statut:'BROUILLON',version:source.version+1,
+   versionGroupId:source.versionGroupId||source.id,versionOfId:source.id,
+   donnees:donnees as any,analyseQhse:source.analyseQhse,observationsDirection:source.observationsDirection,
+   conclusion:source.conclusion,createdById:source.createdById,
+  }});
+  await writeAudit(this.db,'RAPPORT_QHSE','CREATE',created.id,null,created);
+  return this.rapportGet(created.id);
+ }
+
+ // Distribution tracee (AC30, point 32) — jamais de suppression de
+ // l'historique : chaque diffusion reste consultable meme apres une
+ // nouvelle version.
+ async rapportDistribuer(id:string,b:{destinataireId?:string,destinataireEmail?:string,distribuePar?:string}){
+  const current=await this.rapportGet(id);
+  if(current.statut!=='VALIDE'&&current.statut!=='DISTRIBUE') throw new Error('Seul un rapport validé peut être distribué.');
+  if(!b.destinataireId&&!b.destinataireEmail) throw new Error('Un destinataire (utilisateur ou e-mail) est requis.');
+  const dist=await this.db.rapportDistribution.create({data:{
+   rapportId:id,destinataireId:b.destinataireId||null,destinataireEmail:b.destinataireEmail||null,
+   distribuePar:b.distribuePar||null,version:current.version,
+  }});
+  await this.db.rapportQhse.update({where:{id},data:{statut:'DISTRIBUE'}});
+  await writeAudit(this.db,'RAPPORT_QHSE','DISTRIBUTE',id,current,dist);
+  return dist;
+ }
 }
