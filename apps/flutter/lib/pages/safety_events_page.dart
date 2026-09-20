@@ -208,11 +208,11 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                         ),
                 ),
               ]),
+        bottomNavigationBar: tabIndex == 2 ? SafeArea(child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: FilledButton.icon(onPressed: () => _showWorkedHoursDialog(), icon: const Icon(Icons.add), label: const Text('Nouvelle période')),
+        )) : null,
       ),
-      bottomNavigationBar: tabIndex == 2 ? SafeArea(child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: FilledButton.icon(onPressed: () => _showWorkedHoursDialog(), icon: const Icon(Icons.add), label: const Text('Nouvelle période')),
-      )) : null,
     );
   }
 
