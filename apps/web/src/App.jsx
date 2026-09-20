@@ -4156,6 +4156,17 @@ function PilotagePage() {
   const actions = useCollection('/business/actions');
   const nonConformities = useCollection('/business/non-conformities');
 
+  // Vue par rôle (point du cahier des charges Cockpit QHSE 360) : la même
+  // page adapte sa densité d'information selon qui la regarde, au lieu
+  // d'obliger tout le monde à filtrer le même écran complet. Le choix de
+  // l'utilisateur est mémorisé ; par défaut on se cale sur son rôle réel.
+  const PILOTAGE_ROLE_TO_VUE = { ADMINISTRATEUR: 'direction', CONSULTATION: 'direction', RESPONSABLE_QHSE: 'qhse', ASSISTANT_QHSE: 'qhse', CONTROLEUR_QUALITE: 'qhse', AUDITEUR: 'qhse', CHEF_PRODUCTION: 'terrain', OPERATEUR: 'terrain' };
+  const [vue, setVue] = useState(() => {
+    try { const saved = localStorage.getItem('qhse_pilotage_vue'); if (saved) return saved; } catch {}
+    return PILOTAGE_ROLE_TO_VUE[getStoredUser()?.role] || 'qhse';
+  });
+  useEffect(() => { try { localStorage.setItem('qhse_pilotage_vue', vue); } catch {} }, [vue]);
+
   if (dash.loading || audits.loading || actions.loading || nonConformities.loading) return <LoadingPanel />;
   if (dash.error) return <ErrorPanel message={dash.error} />;
 
@@ -4175,7 +4186,14 @@ function PilotagePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between"><LiveBadge /></div>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <LiveBadge />
+        <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+          {[['direction', 'Vue Direction'], ['qhse', 'Vue Responsable QHSE'], ['terrain', 'Vue Contrôleur Terrain']].map(([id, label]) => (
+            <button key={id} onClick={() => setVue(id)} className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors" style={{ backgroundColor: vue === id ? C.blue : 'transparent', color: vue === id ? '#fff' : C.textMuted }}>{label}</button>
+          ))}
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-3">
         <KpiCard label="NC ouvertes" value={counters.nonConformitiesOpen} objectif={`${counters.nonConformitiesCritical} critique(s)`} color={C.red} icon={AlertTriangle} />
@@ -4185,14 +4203,16 @@ function PilotagePage() {
         <KpiCard label="Taux de conformité" value={indicators.qualite.tauxConformite != null ? `${indicators.qualite.tauxConformite}%` : '—'} objectif="30 derniers jours" color={C.green} icon={ShieldCheck} />
       </div>
 
-      {/* Deuxième rangée de KPI : indicateurs déjà calculés côté API mais jusqu'ici non affichés au pilotage */}
-      <div className="flex flex-wrap gap-3">
-        <KpiCard label="Risques élevés" value={counters.risksHigh} objectif={`${counters.risksTotal} risque(s) suivi(s)`} color={counters.risksHigh > 0 ? C.red : C.green} icon={AlertTriangle} />
-        <KpiCard label="Documents en attente" value={counters.documentsPendingApproval} objectif="validation GED" color={C.blue} icon={BookOpen} />
-        <KpiCard label="Formations expirant" value={counters.trainingsExpiringSoon} objectif="sous 30 jours" color={counters.trainingsExpiringSoon > 0 ? C.amber : C.green} icon={Users} />
-        <KpiCard label="EPI à renouveler" value={counters.epiRenewalsDue30d} objectif="sous 30 jours" color={counters.epiRenewalsDue30d > 0 ? C.amber : C.green} icon={Shield} />
-        <KpiCard label="Équipements en retard" value={counters.equipmentOverdueInspection} objectif="inspection dépassée" color={counters.equipmentOverdueInspection > 0 ? C.red : C.green} icon={Cog} />
-      </div>
+      {/* Deuxième rangée de KPI : indicateurs déjà calculés côté API mais jusqu'ici non affichés au pilotage. Masquée en vue Direction (vue une minute, l'essentiel seulement). */}
+      {vue !== 'direction' && (
+        <div className="flex flex-wrap gap-3">
+          <KpiCard label="Risques élevés" value={counters.risksHigh} objectif={`${counters.risksTotal} risque(s) suivi(s)`} color={counters.risksHigh > 0 ? C.red : C.green} icon={AlertTriangle} />
+          <KpiCard label="Documents en attente" value={counters.documentsPendingApproval} objectif="validation GED" color={C.blue} icon={BookOpen} />
+          <KpiCard label="Formations expirant" value={counters.trainingsExpiringSoon} objectif="sous 30 jours" color={counters.trainingsExpiringSoon > 0 ? C.amber : C.green} icon={Users} />
+          <KpiCard label="EPI à renouveler" value={counters.epiRenewalsDue30d} objectif="sous 30 jours" color={counters.epiRenewalsDue30d > 0 ? C.amber : C.green} icon={Shield} />
+          <KpiCard label="Équipements en retard" value={counters.equipmentOverdueInspection} objectif="inspection dépassée" color={counters.equipmentOverdueInspection > 0 ? C.red : C.green} icon={Cog} />
+        </div>
+      )}
 
       {/* Centre d'alertes unifié : ce que le Responsable QHSE devrait regarder en premier, tous domaines confondus, déjà trié par priorité côté API. */}
       <Panel title="Alertes prioritaires" subtitle="Toutes les échéances et anomalies critiques, tous modules confondus, triées par priorité">
@@ -4200,7 +4220,7 @@ function PilotagePage() {
           <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune alerte en cours.</p>
         ) : (
           <div className="divide-y" style={{ borderColor: C.border }}>
-            {alertes.slice(0, 10).map((a, i) => (
+            {alertes.slice(0, vue === 'direction' ? 5 : 10).map((a, i) => (
               <div key={i} className="flex items-start gap-3 py-2.5">
                 <span className="text-lg leading-none mt-0.5">{a.icon}</span>
                 <div className="flex-1 min-w-0">
@@ -4217,25 +4237,34 @@ function PilotagePage() {
         )}
       </Panel>
 
-      {/* Pareto & récurrences : moteurs déjà existants (safetyEventsStats, ncSyntheseDirection) désormais visibles au pilotage central, sans logique dupliquée. */}
+      {/* Pareto & récurrences : moteurs déjà existants (safetyEventsStats, ncSyntheseDirection) désormais visibles au pilotage central, sans logique dupliquée. Analyses de fond réservées à la vue Responsable QHSE. */}
+      {vue === 'qhse' && (
+      <>
       <div className="grid grid-cols-2 gap-4">
         <Panel title="Pareto des causes racines — sécurité" subtitle="Causes qui concentrent le plus d'événements de sécurité">
           {analyses.securite.pareto.length
             ? <ParetoChart causes={analyses.securite.pareto.map((p) => ({ cause: p.name, occurrences: p.value }))} />
             : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune cause racine renseignée sur les événements sécurité</p>}
         </Panel>
-        <Panel title="Non-conformités récurrentes" subtitle="Mêmes anomalies qui reviennent — à instruire en Ishikawa / 5 Pourquoi">
+        <Panel title="Non-conformités récurrentes" subtitle="Mêmes anomalies qui reviennent — à instruire en Ishikawa / 5 Pourquoi" right={analyses.nonConformites.recurrences.length > 0 && (
+          <button onClick={() => window.__qhseGoTo && window.__qhseGoTo('non-conformites', { tab: 'recurrence' })} className="text-xs font-medium" style={{ color: C.blue }}>Voir l'analyse complète →</button>
+        )}>
           {analyses.nonConformites.recurrences.length === 0 ? (
             <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune récurrence détectée</p>
           ) : (
             <div className="divide-y" style={{ borderColor: C.border }}>
               {analyses.nonConformites.recurrences.map((r, i) => (
-                <div key={i} className="py-2">
+                <div key={i} className="py-2 cursor-pointer" onClick={() => window.__qhseGoTo && window.__qhseGoTo('non-conformites', { tab: 'recurrence' })}>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium truncate" style={{ color: C.text }}>{r.titre}</p>
                     <span className="text-xs font-semibold shrink-0" style={{ color: C.red }}>{r.occurrences}×</span>
                   </div>
-                  <p className="text-xs" style={{ color: C.textMuted }}>{r.processus} · {new Date(r.premiereOccurrence).toLocaleDateString('fr-FR')} → {new Date(r.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs" style={{ color: C.textMuted }}>{r.processus} · {new Date(r.premiereOccurrence).toLocaleDateString('fr-FR')} → {new Date(r.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                    <span className="text-[11px] font-medium shrink-0" style={{ color: r.analyseCausaleFaite ? C.green : C.amber }}>
+                      {r.analyseCausaleFaite ? '✓ cause racine identifiée' : '⚠ analyse causale manquante'}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -4248,7 +4277,11 @@ function PilotagePage() {
           ? <HorizontalBars data={analyses.nonConformites.processusLesPlusProblematiques.map((p) => ({ label: p.processus, count: p.nombre }))} labelKey="label" valueKey="count" color={C.red} />
           : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun processus renseigné sur les non-conformités</p>}
       </Panel>
+      </>
+      )}
 
+      {/* Tendance & score composite : utiles à Direction (vue une minute) et au Responsable QHSE ; pas au Contrôleur Terrain, dont la vue reste actionnable. */}
+      {vue !== 'terrain' && (
       <div className="grid grid-cols-2 gap-4">
         <Panel title="Événements sécurité & non-conformités par semaine" subtitle="8 dernières semaines">
           <ResponsiveContainer width="100%" height={220}>
@@ -4280,6 +4313,9 @@ function PilotagePage() {
           </div>
         </Panel>
       </div>
+      )}
+      {/* Répartitions détaillées : réservées à la vue Responsable QHSE, pour ne pas noyer Direction et Terrain sous des graphiques d'analyse. */}
+      {vue === 'qhse' && (
       <div className="grid grid-cols-3 gap-4">
         <Panel title="Non-conformités par source">
           {ncBySource.length ? <DonutChart data={ncBySource} colors={[C.red, C.amber, C.blue, C.green, '#8B5CF6', C.textMuted]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
@@ -4293,6 +4329,7 @@ function PilotagePage() {
           <DonutChart data={[{ name: 'Terminées', value: capaStats.terminees }, { name: 'En cours', value: capaStats.enCours }, { name: 'En retard', value: capaStats.enRetard }]} colors={[C.green, C.blue, C.red]} />
         </Panel>
       </div>
+      )}
     </div>
   );
 }
@@ -8503,7 +8540,13 @@ function NonConformitesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [tab, setTab] = useState('apercu');
+  const [tab, setTab] = useState(() => {
+    // Ouverture directe depuis le pilotage central (ex. clic sur une récurrence) :
+    // on lit une seule fois l'onglet demandé, puis on l'efface.
+    const t = window.__qhsePendingTab;
+    if (t) delete window.__qhsePendingTab;
+    return t || 'apercu';
+  });
   const [settingsForm, setSettingsForm] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -13712,6 +13755,17 @@ const PAGES = {
 export default function QhseDashboard() {
   const [user, setUser] = useState(getStoredUser());
   const [page, setPage] = useState('pilotage');
+  // Pont de navigation minimal, utilisé par le pilotage central pour ouvrir
+  // directement un autre module (ex. une non-conformité récurrente) sans
+  // faire chercher la page à l'utilisateur. __qhsePendingTab est lu une
+  // seule fois par la page cible à son montage, puis effacé.
+  useEffect(() => {
+    window.__qhseGoTo = (pageId, opts) => {
+      if (opts && opts.tab) window.__qhsePendingTab = opts.tab;
+      setPage(pageId);
+    };
+    return () => { delete window.__qhseGoTo; };
+  }, []);
   const [themeMode, setThemeMode] = useState('dark');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);

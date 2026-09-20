@@ -176,7 +176,11 @@ import { saveFile } from '../documents/file-storage.util';
   return Object.values(groupes).filter(g=>g.length>=2).map(g=>({
    titre:g[0].title, processus:g[0].processus?.nom||'Sans processus',
    occurrences:g.length, premiereOccurrence:g[g.length-1].occurredAt, derniereOccurrence:g[0].occurredAt,
-   historique:g.map(n=>({id:n.id,code:n.code,date:n.occurredAt,statut:n.status})),
+   // Une récurrence dont AUCUNE occurrence n'a de cause racine confirmée doit
+   // être signalée : c'est justement le signal qu'une analyse Ishikawa / 5
+   // Pourquoi n'a jamais été faite sur ce problème qui pourtant se répète.
+   analyseCausaleFaite:g.some(n=>n.causeRacineIdentifiee),
+   historique:g.map(n=>({id:n.id,code:n.code,date:n.occurredAt,statut:n.status,causeRacineIdentifiee:n.causeRacineIdentifiee})),
   })).sort((a,b)=>b.occurrences-a.occurrences);
  }
  private async ncRecurrentesCount(){ return (await this.ncRecurrentes()).reduce((s,g)=>s+g.occurrences,0); }
