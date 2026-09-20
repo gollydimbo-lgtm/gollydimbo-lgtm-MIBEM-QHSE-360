@@ -31,4 +31,9 @@ export class DashboardController {
   score() {
     return this.service.score();
   }
+
+  @Get('analyses')
+  analyses() {
+    return this.service.analyses();
+  }
 }

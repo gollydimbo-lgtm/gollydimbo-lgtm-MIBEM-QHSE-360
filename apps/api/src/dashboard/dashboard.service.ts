@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { BusinessService } from '../business/business.service';
 import { EpiMovementType, QualityControlStatus, DocumentStatus } from '@prisma/client';
 
 type Alert = {
@@ -14,7 +15,7 @@ type Alert = {
 
 @Injectable()
 export class DashboardService {
-  constructor(private db: PrismaService) {}
+  constructor(private db: PrismaService, private business: BusinessService) {}
 
   // ---------------------------------------------------------------------
   // Vue d'ensemble : compteurs par domaine (bloc du haut du tableau de bord)
@@ -242,11 +243,35 @@ export class DashboardService {
   }
 
   // ---------------------------------------------------------------------
+  // Analyses cross-module : Pareto et récurrences. Ces moteurs existent déjà
+  // dans les services métier (safetyEventsStats pour le Pareto des causes
+  // racines sécurité, ncSyntheseDirection pour les processus les plus
+  // problématiques et les non-conformités récurrentes) — on les RÉUTILISE
+  // ici plutôt que de recalculer la même chose, pour que le Cockpit central
+  // regroupe l'information au lieu de la dupliquer.
+  // ---------------------------------------------------------------------
+  async analyses() {
+    const [ncSynthese, securite] = await Promise.all([
+      this.business.ncSyntheseDirection(),
+      this.business.safetyEventsStats(),
+    ]);
+    return {
+      nonConformites: {
+        processusLesPlusProblematiques: ncSynthese.processusLesPlusProblematiques,
+        recurrences: ncSynthese.principalesRecurrences,
+      },
+      securite: {
+        pareto: securite.pareto,
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------------
   // Point d'entrée unique consommé par Flutter / le futur web : tout en un.
   // ---------------------------------------------------------------------
   async full() {
-    const [overview, trends, alerts, score] = await Promise.all([this.overview(), this.trends(8), this.alerts(), this.score()]);
-    return { overview, trends, alerts, score };
+    const [overview, trends, alerts, score, analyses] = await Promise.all([this.overview(), this.trends(8), this.alerts(), this.score(), this.analyses()]);
+    return { overview, trends, alerts, score, analyses };
   }
 
   // ------------------------------- utils --------------------------------

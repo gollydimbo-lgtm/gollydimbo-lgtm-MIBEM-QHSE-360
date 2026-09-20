@@ -4163,6 +4163,7 @@ function PilotagePage() {
   const trends = dash.data.trends;
   const alertes = dash.data.alerts || [];
   const score = dash.data.score || { global: null, confiance: 'FAIBLE', domaines: {} };
+  const analyses = dash.data.analyses || { nonConformites: { processusLesPlusProblematiques: [], recurrences: [] }, securite: { pareto: [] } };
   const auditsPlanifies = (audits.data || []).filter((a) => a.status === 'PLANNED').length;
   const auditsTotal = (audits.data || []).length;
   const capaStats = computeCapaStatsReal(actions.data || []);
@@ -4214,6 +4215,38 @@ function PilotagePage() {
             ))}
           </div>
         )}
+      </Panel>
+
+      {/* Pareto & récurrences : moteurs déjà existants (safetyEventsStats, ncSyntheseDirection) désormais visibles au pilotage central, sans logique dupliquée. */}
+      <div className="grid grid-cols-2 gap-4">
+        <Panel title="Pareto des causes racines — sécurité" subtitle="Causes qui concentrent le plus d'événements de sécurité">
+          {analyses.securite.pareto.length
+            ? <ParetoChart causes={analyses.securite.pareto.map((p) => ({ cause: p.name, occurrences: p.value }))} />
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune cause racine renseignée sur les événements sécurité</p>}
+        </Panel>
+        <Panel title="Non-conformités récurrentes" subtitle="Mêmes anomalies qui reviennent — à instruire en Ishikawa / 5 Pourquoi">
+          {analyses.nonConformites.recurrences.length === 0 ? (
+            <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune récurrence détectée</p>
+          ) : (
+            <div className="divide-y" style={{ borderColor: C.border }}>
+              {analyses.nonConformites.recurrences.map((r, i) => (
+                <div key={i} className="py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium truncate" style={{ color: C.text }}>{r.titre}</p>
+                    <span className="text-xs font-semibold shrink-0" style={{ color: C.red }}>{r.occurrences}×</span>
+                  </div>
+                  <p className="text-xs" style={{ color: C.textMuted }}>{r.processus} · {new Date(r.premiereOccurrence).toLocaleDateString('fr-FR')} → {new Date(r.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <Panel title="Processus les plus problématiques" subtitle="Nombre de non-conformités par processus">
+        {analyses.nonConformites.processusLesPlusProblematiques.length
+          ? <HorizontalBars data={analyses.nonConformites.processusLesPlusProblematiques.map((p) => ({ label: p.processus, count: p.nombre }))} labelKey="label" valueKey="count" color={C.red} />
+          : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun processus renseigné sur les non-conformités</p>}
       </Panel>
 
       <div className="grid grid-cols-2 gap-4">
