@@ -11285,6 +11285,23 @@ function RapportEditorPanel({ id, onBack }) {
     await api.post(`/business/rapports/${id}/distribuer`, { destinataireEmail: email, distribuePar });
     rapportQ.reload();
   }
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [gedBusy, setGedBusy] = useState(false);
+  async function telechargerPdf() {
+    setPdfBusy(true);
+    try {
+      const res = await api.post(`/business/rapports/${id}/pdf`, {});
+      if (res?.url) window.open(res.url, '_blank');
+    } finally { setPdfBusy(false); }
+  }
+  async function archiverGed() {
+    setGedBusy(true);
+    try {
+      const res = await api.post(`/business/rapports/${id}/archiver-ged`, {});
+      rapportQ.reload();
+      if (res?.code) window.alert(`Archivé dans la GED : ${res.code}`);
+    } catch (err) { window.alert(err.message); } finally { setGedBusy(false); }
+  }
   return (
     <div className="space-y-4">
       <div className="no-print flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
@@ -11296,6 +11313,9 @@ function RapportEditorPanel({ id, onBack }) {
           {r.statut === 'VALIDE' && <button onClick={distribuer} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Distribuer</button>}
           {verrouille && <button onClick={nouvelleVersion} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Nouvelle version</button>}
           <button onClick={() => window.print()} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Imprimer / PDF</button>
+          <button onClick={telechargerPdf} disabled={pdfBusy} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{pdfBusy ? '…' : 'Télécharger PDF'}</button>
+          {verrouille && !r.documentId && <button onClick={archiverGed} disabled={gedBusy} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: C.amber, color: '#3a2604' }}>{gedBusy ? '…' : 'Archiver dans la GED'}</button>}
+          {r.documentId && regulatoryBadge(C, 'Archivé en GED', C.green)}
         </div>
       </div>
 

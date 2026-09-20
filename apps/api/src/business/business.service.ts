@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import PDFDocument from 'pdfkit';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
+import { saveFile } from '../documents/file-storage.util';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
  qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} qualityDelete(id:string){return this.db.qualityControl.delete({where:{id}})}
@@ -3198,5 +3200,155 @@ import { writeAudit } from '../common/audit-log.helper';
   await this.db.rapportQhse.update({where:{id},data:{statut:'DISTRIBUE'}});
   await writeAudit(this.db,'RAPPORT_QHSE','DISTRIBUTE',id,current,dist);
   return dist;
+ }
+
+ // ============================================================================
+ // RAPPORTS QHSE — Phase 4 : export PDF reel (pdfkit, pur JS, sans Chromium)
+ // et archivage automatique en GED. Le PDF est reconstruit uniquement a
+ // partir de "donnees" (l'instantane fige a la creation du rapport) et du
+ // contenu editorial deja enregistre — jamais un nouveau calcul.
+ // ============================================================================
+
+ private rapportSectionsOrdonnees(d:any){
+  const flat=(key:string,label:string,sec:any)=>({key,label,sec});
+  return [
+   flat('controles','Contrôles qualité',d.sections.qualite.controles),
+   flat('nonConformites','Non-conformités',d.sections.qualite.nonConformites),
+   flat('reclamations','Réclamations clients',d.sections.qualite.reclamations),
+   flat('accidents','Accidents',d.sections.securite.accidents),
+   flat('incidents','Incidents',d.sections.securite.incidents),
+   flat('risques','Risques et prévention',d.sections.risques),
+   flat('audits','Audits et inspections',d.sections.audits),
+   flat('actionsCapa',"Plan d'actions CAPA",d.sections.actionsCapa),
+   flat('formations','Formations et sensibilisations',d.sections.formations),
+   flat('environnement','Performance environnementale',d.sections.environnement),
+   flat('veilleReglementaire','Veille réglementaire',d.sections.veilleReglementaire),
+  ];
+ }
+
+ private rapportBuildPdf(r:any):Promise<Buffer>{
+  const d=r.donnees;
+  const famLabels:Record<string,string>={QUALITE:'Qualité',HYGIENE:'Hygiène',SECURITE:'Sécurité',ENVIRONNEMENT:'Environnement'};
+  const fmt=(v:any)=>v?new Date(v).toLocaleDateString('fr-FR'):'—';
+  return new Promise((resolve,reject)=>{
+   const doc=new PDFDocument({margin:50,size:'A4',bufferPages:true});
+   const chunks:Buffer[]=[];
+   doc.on('data',c=>chunks.push(c));
+   doc.on('end',()=>resolve(Buffer.concat(chunks)));
+   doc.on('error',reject);
+
+   // Page de garde
+   doc.fontSize(10).fillColor('#666').text((d.identite?.nomOfficiel||d.identite?.nomCommercial||'').toUpperCase(),{align:'center'});
+   doc.moveDown(6);
+   doc.fontSize(22).fillColor('#111').text(r.titre.toUpperCase(),{align:'center'});
+   doc.moveDown();
+   doc.fontSize(12).fillColor('#444').text(`Période : ${fmt(r.periodeFrom)} — ${fmt(r.periodeTo)}`,{align:'center'});
+   if(r.site?.name) doc.text(`Site : ${r.site.name}`,{align:'center'});
+   doc.moveDown(8);
+   doc.fontSize(9).fillColor('#999').text(`Généré le ${new Date(d.genereLe).toLocaleString('fr-FR')} — Version ${r.version} — ${r.statut}`,{align:'center'});
+
+   // Fiche documentaire
+   doc.addPage();
+   doc.fontSize(16).fillColor('#111').text('Informations du document');
+   doc.moveDown();
+   const infos=[
+    ['Type de document','Rapport QHSE'],['Période',`${fmt(r.periodeFrom)} — ${fmt(r.periodeTo)}`],
+    ['Site',r.site?.name||'Tous les sites'],['Préparé par',r.preparePar||'—'],['Vérifié par',r.verifiePar||'—'],
+    ['Validé par',r.validePar?`${r.validePar} (${fmt(r.valideParDate)})`:'—'],['Statut',r.statut],['Version',String(r.version)],
+    ['Confidentialité',r.confidentialite||'—'],
+   ];
+   doc.fontSize(10).fillColor('#333');
+   for(const [k,v] of infos) doc.text(`${k} : ${v}`);
+
+   // Sommaire + résumé exécutif
+   doc.addPage();
+   doc.fontSize(16).fillColor('#111').text('Résumé exécutif');
+   doc.moveDown();
+   doc.fontSize(10).fillColor('#333');
+   for(const x of (d.resumeExecutif||[])){
+    doc.text(`${famLabels[x.famille]||x.famille} — objectifs atteints ${x.atteints}/${x.total}, à risque ${x.aRisque}, en retard ${x.enRetard}, avancement moyen ${x.moyenneAvancement!=null?x.moyenneAvancement+'%':'non évaluable'}`);
+   }
+
+   // Sections par domaine
+   const sections=this.rapportSectionsOrdonnees(d).filter(s=>r.mode!=='THEMATIQUE'||s.key===r.domaineThematique);
+   for(const s of sections){
+    if(!s.sec?.hasData){ if(r.mode==='COMPLET'){ doc.moveDown(1.5); doc.fontSize(13).fillColor('#111').text(s.label); doc.fontSize(9).fillColor('#999').text('Aucune donnée enregistrée pour cette rubrique sur la période sélectionnée.'); } continue; }
+    doc.moveDown(1.5);
+    doc.fontSize(13).fillColor('#111').text(`${s.label} (${s.sec.count})`);
+    doc.fontSize(9).fillColor('#333');
+    for(const it of s.sec.items.slice(0,15)){
+     const date=it.date||it.echeance||it.dateApplication;
+     doc.text(`• ${it.code||it.titre||it.libelle||it.id}${date?' — '+fmt(date):''}${it.statut||it.type?' — '+(it.statut||it.type):''}`);
+    }
+    if(s.sec.count>15) doc.fontSize(8).fillColor('#999').text(`${s.sec.count-15} élément(s) supplémentaire(s) non détaillé(s) ici — voir le module d'origine.`);
+   }
+
+   // Objectifs QHSE
+   if(d.sections.objectifsQhse?.hasData){
+    const res=d.sections.objectifsQhse.resume;
+    doc.moveDown(1.5);
+    doc.fontSize(13).fillColor('#111').text(`Objectifs QHSE (${res.total})`);
+    doc.fontSize(9).fillColor('#333').text(`Atteints ${res.atteints} — En cours ${res.enCours} — En retard ${res.enRetard} — À risque ${res.aRisque}`);
+   }
+
+   // Contenu éditorial
+   doc.addPage();
+   doc.fontSize(16).fillColor('#111').text('Analyse / avis du Responsable QHSE');
+   doc.moveDown(0.5);
+   doc.fontSize(10).fillColor('#333').text(r.analyseQhse||'Aucune analyse renseignée.');
+   if(r.observationsDirection){
+    doc.moveDown(1.5);
+    doc.fontSize(16).fillColor('#111').text('Observations de la Direction');
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#333').text(r.observationsDirection);
+   }
+   doc.moveDown(1.5);
+   doc.fontSize(16).fillColor('#111').text('Conclusion');
+   doc.moveDown(0.5);
+   doc.fontSize(10).fillColor('#333').text(r.conclusion||"Aucune conclusion rédigée.");
+
+   // Signatures
+   doc.moveDown(3);
+   doc.fontSize(10).fillColor('#333');
+   doc.text(`Préparé par : ${r.preparePar||'—'}`);
+   doc.text(`Vérifié par : ${r.verifiePar||'—'}`);
+   doc.text(`Validé par : ${r.validePar||'—'}${r.valideParDate?' le '+fmt(r.valideParDate):''}`);
+
+   doc.end();
+  });
+ }
+
+ // Genere le PDF a la demande (previsualisation/telechargement), sans
+ // condition de statut.
+ async rapportGenererPdf(id:string){
+  const r=await this.rapportGet(id);
+  const buffer=await this.rapportBuildPdf(r);
+  const fileName=`${r.titre.replace(/[^a-zA-Z0-9]+/g,'-')}-V${r.version}.pdf`;
+  const {storagePath}=saveFile(fileName,buffer.toString('base64'));
+  const url='/uploads/'+storagePath.split(/[\/]/).pop();
+  return {url,fileName};
+ }
+
+ // Archivage GED (point 33, AC21) — uniquement pour un rapport valide ou
+ // distribue, avec un fichier PDF reel derriere la fiche documentaire.
+ async rapportArchiverGed(id:string,b?:{createdById?:string}){
+  const r=await this.rapportGet(id);
+  if(r.statut!=='VALIDE'&&r.statut!=='DISTRIBUE') throw new Error('Seul un rapport validé peut être archivé dans la GED.');
+  const buffer=await this.rapportBuildPdf(r);
+  const fileName=`${r.titre.replace(/[^a-zA-Z0-9]+/g,'-')}-V${r.version}.pdf`;
+  const {storagePath,checksum}=saveFile(fileName,buffer.toString('base64'));
+  const annee=r.periodeFrom.getFullYear();
+  const periodeLabel=`${new Date(r.periodeFrom).toLocaleDateString('fr-FR')} - ${new Date(r.periodeTo).toLocaleDateString('fr-FR')}`;
+  const category=`Rapports QHSE/${annee}/${r.site?.name||'Tous sites'}/${r.mode}/${periodeLabel}`;
+  const document=await this.db.document.create({data:{
+   code:`RAP-${r.id.slice(0,8).toUpperCase()}-V${r.version}`,title:r.titre,category,
+   documentGroup:'EVALUATION_CONTROLE_AMELIORATION',status:'ACTIVE',siteId:r.siteId,
+   createdById:b?.createdById||r.createdById,description:`Rapport QHSE archivé automatiquement — version ${r.version}.`,
+   documentType:'Rapport QHSE',qrToken:randomUUID(),
+  }});
+  await this.db.documentVersion.create({data:{documentId:document.id,version:1,fileName,storagePath,checksum,status:'ACTIVE'}});
+  await this.db.rapportQhse.update({where:{id},data:{documentId:document.id}});
+  await writeAudit(this.db,'RAPPORT_QHSE','ARCHIVE_GED',id,null,{documentId:document.id});
+  return document;
  }
 }

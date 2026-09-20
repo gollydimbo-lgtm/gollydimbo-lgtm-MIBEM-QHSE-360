@@ -349,6 +349,7 @@ model Document {
   links DocumentLink[]
   regulatoryEvidences RegulatoryEvidence[]
   regulatoryRequirementLinks RegulatoryRequirementDocument[]
+  rapportsQhse RapportQhse[]
 }
 
 model DocumentVersion {
@@ -3292,10 +3293,12 @@ model RapportQhse {
   validePar String?
   valideParDate DateTime?
   createdById String?
+  documentId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
   createdBy User? @relation(fields:[createdById], references:[id], onDelete:SetNull)
+  document Document? @relation(fields:[documentId], references:[id], onDelete:SetNull)
   distributions RapportDistribution[]
 }
 

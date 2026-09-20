@@ -149,4 +149,6 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Post('rapports/:id/valider') rapportValider(@Param('id')id:string,@Body()b:any){return this.s.rapportValider(id,b)}
 @Post('rapports/:id/revision') rapportRevision(@Param('id')id:string){return this.s.rapportRevision(id)}
 @Post('rapports/:id/distribuer') rapportDistribuer(@Param('id')id:string,@Body()b:any){return this.s.rapportDistribuer(id,b)}
+  @Post('rapports/:id/pdf') rapportGenererPdf(@Param('id')id:string){return this.s.rapportGenererPdf(id)}
+  @Post('rapports/:id/archiver-ged') rapportArchiverGed(@Param('id')id:string,@Body()b:any){return this.s.rapportArchiverGed(id,b)}
 }
