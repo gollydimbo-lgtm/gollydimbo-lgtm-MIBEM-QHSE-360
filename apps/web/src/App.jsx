@@ -4161,6 +4161,7 @@ function PilotagePage() {
 
   const { counters, indicators } = dash.data.overview;
   const trends = dash.data.trends;
+  const alertes = dash.data.alerts || [];
   const auditsPlanifies = (audits.data || []).filter((a) => a.status === 'PLANNED').length;
   const auditsTotal = (audits.data || []).length;
   const capaStats = computeCapaStatsReal(actions.data || []);
@@ -4169,9 +4170,12 @@ function PilotagePage() {
     ? Math.round(indicators.qualite.tauxConformite * 0.5 + Math.max(0, 100 - counters.actionsOverdue * 8) * 0.3 + Math.max(0, 100 - counters.risksHigh * 10) * 0.2)
     : null;
 
+  const ALERT_LEVEL_COLOR = { CRITICAL: C.red, WARNING: C.amber, INFO: C.blue, SUCCESS: C.green };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between"><LiveBadge /></div>
+
       <div className="flex flex-wrap gap-3">
         <KpiCard label="NC ouvertes" value={counters.nonConformitiesOpen} objectif={`${counters.nonConformitiesCritical} critique(s)`} color={C.red} icon={AlertTriangle} />
         <KpiCard label="Actions en retard" value={counters.actionsOverdue} objectif={`${counters.actionsOpen} ouverte(s) au total`} color={C.red} icon={Activity} />
@@ -4179,6 +4183,39 @@ function PilotagePage() {
         <KpiCard label="Audits" value={`${auditsTotal - auditsPlanifies} / ${auditsTotal}`} objectif={`${auditsPlanifies} planifié(s)`} color={C.blue} icon={ClipboardList} />
         <KpiCard label="Taux de conformité" value={indicators.qualite.tauxConformite != null ? `${indicators.qualite.tauxConformite}%` : '—'} objectif="30 derniers jours" color={C.green} icon={ShieldCheck} />
       </div>
+
+      {/* Deuxième rangée de KPI : indicateurs déjà calculés côté API mais jusqu'ici non affichés au pilotage */}
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Risques élevés" value={counters.risksHigh} objectif={`${counters.risksTotal} risque(s) suivi(s)`} color={counters.risksHigh > 0 ? C.red : C.green} icon={AlertTriangle} />
+        <KpiCard label="Documents en attente" value={counters.documentsPendingApproval} objectif="validation GED" color={C.blue} icon={BookOpen} />
+        <KpiCard label="Formations expirant" value={counters.trainingsExpiringSoon} objectif="sous 30 jours" color={counters.trainingsExpiringSoon > 0 ? C.amber : C.green} icon={Users} />
+        <KpiCard label="EPI à renouveler" value={counters.epiRenewalsDue30d} objectif="sous 30 jours" color={counters.epiRenewalsDue30d > 0 ? C.amber : C.green} icon={Shield} />
+        <KpiCard label="Équipements en retard" value={counters.equipmentOverdueInspection} objectif="inspection dépassée" color={counters.equipmentOverdueInspection > 0 ? C.red : C.green} icon={Cog} />
+      </div>
+
+      {/* Centre d'alertes unifié : ce que le Responsable QHSE devrait regarder en premier, tous domaines confondus, déjà trié par priorité côté API. */}
+      <Panel title="Alertes prioritaires" subtitle="Toutes les échéances et anomalies critiques, tous modules confondus, triées par priorité">
+        {alertes.length === 0 ? (
+          <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune alerte en cours.</p>
+        ) : (
+          <div className="divide-y" style={{ borderColor: C.border }}>
+            {alertes.slice(0, 10).map((a, i) => (
+              <div key={i} className="flex items-start gap-3 py-2.5">
+                <span className="text-lg leading-none mt-0.5">{a.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: ALERT_LEVEL_COLOR[a.level] || C.textMuted }}>{a.domain.replace(/_/g, ' ')}</span>
+                    {a.code && <span className="text-xs" style={{ color: C.textMuted }}>{a.code}</span>}
+                  </div>
+                  <p className="text-sm font-medium truncate" style={{ color: C.text }}>{a.title}</p>
+                  <p className="text-xs" style={{ color: C.textMuted }}>{a.detail}{a.dueDate ? ` · échéance ${new Date(a.dueDate).toLocaleDateString('fr-FR')}` : ''}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+
       <div className="grid grid-cols-2 gap-4">
         <Panel title="Événements sécurité & non-conformités par semaine" subtitle="8 dernières semaines">
           <ResponsiveContainer width="100%" height={220}>
