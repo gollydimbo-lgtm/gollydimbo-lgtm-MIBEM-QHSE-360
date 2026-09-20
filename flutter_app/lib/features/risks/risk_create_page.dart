@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/models.dart';
+import '../../shared/widgets/metric_card.dart';
 
 const _kRiskCategories = {
   'SECURITE': 'Sécurité',
