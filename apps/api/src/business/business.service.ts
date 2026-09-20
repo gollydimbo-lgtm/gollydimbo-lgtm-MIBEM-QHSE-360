@@ -3009,6 +3009,27 @@ import { writeAudit } from '../common/audit-log.helper';
  // module d'origine. Une rubrique sans donnee reste presente dans la reponse
  // (hasData:false) mais ne doit jamais etre affichee comme une page vide par
  // le client — c'est au client de la masquer.
+ // Resume executif par famille QHSE (point 5) — reutilise objectifList()
+ // tel quel, jamais un second calcul d'avancement. Un resultat n'est
+ // jamais fabrique quand aucun objectif de la famille n'est evaluable.
+ async rapportResumeExecutif(siteId?:string){
+  const familles=['QUALITE','HYGIENE','SECURITE','ENVIRONNEMENT'];
+  const resume=[];
+  for(const famille of familles){
+   const list=await this.objectifList({famille,siteId});
+   const evaluables=(list as any[]).filter(o=>o.avancement!=null);
+   const moyenneAvancement=evaluables.length?Math.round(evaluables.reduce((s,o)=>s+o.avancement,0)/evaluables.length):null;
+   resume.push({
+    famille,total:(list as any[]).length,
+    atteints:(list as any[]).filter(o=>o.statutCalcule==='ATTEINT').length,
+    enRetard:(list as any[]).filter(o=>o.statutCalcule==='EN_RETARD').length,
+    aRisque:(list as any[]).filter(o=>o.statutCalcule==='A_RISQUE').length,
+    moyenneAvancement,
+   });
+  }
+  return resume;
+ }
+
  async rapportConsolide(filters?:{from?:string,to?:string,siteId?:string}){
   const now=new Date();
   const from=filters?.from?new Date(filters.from):new Date(now.getFullYear(),now.getMonth(),1);
@@ -3054,6 +3075,26 @@ import { writeAudit } from '../common/audit-log.helper';
     veilleReglementaire:section(veille,v=>({id:v.id,code:v.code,dateApplication:v.dateApplication})),
     objectifsQhse:{hasData:objectifsQhse.total>0,resume:objectifsQhse},
    },
+   resumeExecutif:await this.rapportResumeExecutif(siteId),
+   identite:await this.rapportIdentiteResolue(siteId),
+  };
+ }
+
+ // Identite resolue (point 7) — noms des responsables configures et nom
+ // du site selectionne, prets pour la page de garde. Aucune nouvelle
+ // donnee : uniquement une lecture jointe de CompanyIdentity/Site/User.
+ async rapportIdentiteResolue(siteId?:string){
+  const identite=await this.companyIdentityGet();
+  const ids=[identite.responsableQhseId,identite.directeurId,identite.responsableRapportId].filter(Boolean) as string[];
+  const users=ids.length?await this.db.user.findMany({where:{id:{in:ids}}}):[];
+  const nom=(id:string|null)=>{const u=users.find(x=>x.id===id);return u?`${u.firstName||''} ${u.lastName||''}`.trim():null;};
+  const site=siteId?await this.db.site.findUnique({where:{id:siteId}}):null;
+  return {
+   ...identite,
+   responsableQhseNom:nom(identite.responsableQhseId),
+   directeurNom:nom(identite.directeurId),
+   responsableRapportNom:nom(identite.responsableRapportId),
+   siteNom:site?.name||null,
   };
  }
 }

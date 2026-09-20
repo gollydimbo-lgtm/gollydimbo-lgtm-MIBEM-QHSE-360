@@ -11024,7 +11024,7 @@ function RapportsPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <LiveBadge />
         <div className="flex flex-wrap gap-2">
-          {[['generateur', 'Générateur'], ['identite', "Identité de l'entreprise"], ['consolidation', 'Aperçu consolidation']].map(([id, label]) => (
+          {[['generateur', 'Générateur'], ['identite', "Identité de l'entreprise"], ['consolidation', 'Aperçu consolidation'], ['document', 'Document standardisé']].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
           ))}
         </div>
@@ -11053,6 +11053,7 @@ function RapportsPage() {
       )}
       {tab === 'identite' && <RapportsIdentitePanel />}
       {tab === 'consolidation' && <RapportsConsolidationPanel />}
+      {tab === 'document' && <RapportDocumentTab />}
     </div>
   );
 }
@@ -11137,6 +11138,175 @@ function RapportsConsolidationPanel() {
           );
         })()}
         <p className="text-xs mt-3" style={{ color: C.textMuted }}>Objectifs QHSE actifs sur cette sélection : {consolideQ.data?.sections?.objectifsQhse?.resume?.total ?? '—'}</p>
+      </Panel>
+    </div>
+  );
+}
+
+const RAPPORT_DOMAINES = [
+  { key: 'objectifsQhse', label: 'Objectifs QHSE', flat: false },
+  { key: 'controles', label: 'Contrôles qualité', flat: true },
+  { key: 'nonConformites', label: 'Non-conformités', flat: true },
+  { key: 'reclamations', label: 'Réclamations clients', flat: true },
+  { key: 'accidents', label: 'Accidents', flat: true },
+  { key: 'incidents', label: 'Incidents', flat: true },
+  { key: 'risques', label: 'Risques et prévention', flat: true },
+  { key: 'audits', label: 'Audits et inspections', flat: true },
+  { key: 'actionsCapa', label: 'Plan d\'actions CAPA', flat: true },
+  { key: 'formations', label: 'Formations et sensibilisations', flat: true },
+  { key: 'environnement', label: 'Performance environnementale', flat: true },
+  { key: 'veilleReglementaire', label: 'Veille réglementaire', flat: true },
+];
+const RAPPORT_FAMILLE_LABELS = { QUALITE: 'Qualité', HYGIENE: 'Hygiène', SECURITE: 'Sécurité', ENVIRONNEMENT: 'Environnement' };
+function rapportGetSection(d, key) {
+  if (key === 'objectifsQhse') return d.sections.objectifsQhse;
+  if (key === 'controles' || key === 'nonConformites' || key === 'reclamations') return d.sections.qualite[key];
+  if (key === 'accidents' || key === 'incidents') return d.sections.securite[key];
+  return d.sections[key];
+}
+function rapportGroupBy(items, keyFn) {
+  const m = new Map();
+  for (const it of items) { const k = keyFn(it) || 'Non renseigné'; m.set(k, (m.get(k) || 0) + 1); }
+  return [...m.entries()].map(([name, value]) => ({ name, value }));
+}
+function RapportDocumentTab() {
+  const C = useTheme();
+  const now = new Date();
+  const [from, setFrom] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10));
+  const [to, setTo] = useState(now.toISOString().slice(0, 10));
+  const [siteId, setSiteId] = useState('');
+  const [mode, setMode] = useState('complet');
+  const [domaineThematique, setDomaineThematique] = useState('controles');
+  const [titre, setTitre] = useState('Rapport mensuel QHSE');
+  const [confidentialite, setConfidentialite] = useState('Interne');
+  const sitesQ = useCollection('/quality/catalog/sites');
+  const params = new URLSearchParams({ from, to, ...(siteId ? { siteId } : {}) });
+  const consolideQ = useCollection(`/business/rapports/consolide?${params.toString()}`);
+  const identiteQ = useCollection('/business/company-identity');
+
+  if (consolideQ.loading || identiteQ.loading) return <LoadingPanel />;
+  if (consolideQ.error) return <ErrorPanel message={consolideQ.error} onRetry={consolideQ.reload} />;
+  const d = consolideQ.data;
+  const identite = d.identite || identiteQ.data || {};
+  const domainesVisibles = mode === 'thematique' ? RAPPORT_DOMAINES.filter((x) => x.key === domaineThematique)
+    : mode === 'synthese' ? RAPPORT_DOMAINES.filter((x) => ['objectifsQhse', 'accidents', 'risques', 'actionsCapa'].includes(x.key))
+    : RAPPORT_DOMAINES;
+  const sommaire = domainesVisibles.filter((x) => rapportGetSection(d, x.key)?.hasData);
+  const siteNom = sitesQ.data?.find((s) => s.id === siteId)?.name;
+
+  return (
+    <div className="space-y-4">
+      <div className="no-print flex flex-wrap gap-2 items-end p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+        <FormField label="Titre du rapport"><input value={titre} onChange={(e) => setTitre(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none w-56" style={inputStyle(C)} /></FormField>
+        <FormField label="Du"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Au"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Site">
+          <select value={siteId} onChange={(e) => setSiteId(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+            <option value="">Tous les sites</option>
+            {(sitesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Mode">
+          <select value={mode} onChange={(e) => setMode(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+            <option value="complet">Rapport complet</option>
+            <option value="synthese">Synthèse Direction</option>
+            <option value="thematique">Thématique</option>
+          </select>
+        </FormField>
+        {mode === 'thematique' && (
+          <FormField label="Domaine">
+            <select value={domaineThematique} onChange={(e) => setDomaineThematique(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+              {RAPPORT_DOMAINES.filter((x) => x.key !== 'objectifsQhse').map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+            </select>
+          </FormField>
+        )}
+        <FormField label="Confidentialité"><input value={confidentialite} onChange={(e) => setConfidentialite(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none w-32" style={inputStyle(C)} /></FormField>
+        <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button>
+      </div>
+
+      <div className="p-8 rounded-lg space-y-2 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        {identite.logoUrl && <img src={identite.logoUrl} alt="Logo" className="h-16 mx-auto mb-2" />}
+        <div className="text-xs uppercase tracking-wide" style={{ color: C.textMuted }}>{identite.nomOfficiel || identite.nomCommercial || 'Entreprise'}</div>
+        <div className="text-2xl font-bold" style={{ color: C.text }}>{titre.toUpperCase()}</div>
+        <div className="text-sm" style={{ color: C.textMuted }}>Période : {new Date(from).toLocaleDateString('fr-FR')} — {new Date(to).toLocaleDateString('fr-FR')}</div>
+        {siteNom && <div className="text-sm" style={{ color: C.textMuted }}>Site : {siteNom}</div>}
+        <div className="text-xs mt-2" style={{ color: C.textMuted }}>Généré le {new Date(d.genereLe).toLocaleString('fr-FR')}</div>
+      </div>
+
+      <Panel title="Informations du document">
+        <DataTable columns={['Élément', 'Information']} rows={[
+          ['Type de document', 'Rapport QHSE'],
+          ['Période', `${new Date(from).toLocaleDateString('fr-FR')} — ${new Date(to).toLocaleDateString('fr-FR')}`],
+          ['Site', siteNom || 'Tous les sites'],
+          ['Préparé par', identite.responsableQhseNom || '—'],
+          ['Vérifié par', identite.directeurNom || '—'],
+          ['Statut', 'Brouillon'],
+          ['Confidentialité', confidentialite],
+        ]} />
+      </Panel>
+
+      <Panel title="Sommaire">
+        {sommaire.length
+          ? <ol className="list-decimal list-inside text-sm space-y-1" style={{ color: C.text }}>
+              <li>Résumé exécutif</li>
+              {sommaire.map((s) => <li key={s.key}>{s.label}</li>)}
+            </ol>
+          : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune section avec des données sur cette période</p>}
+      </Panel>
+
+      <Panel title="Résumé exécutif">
+        <DataTable columns={['Domaine', 'Objectifs atteints', 'À risque', 'En retard', 'Avancement moyen']}
+          rows={(d.resumeExecutif || []).map((r) => [
+            RAPPORT_FAMILLE_LABELS[r.famille] || r.famille,
+            `${r.atteints} / ${r.total}`,
+            r.aRisque,
+            r.enRetard,
+            r.moyenneAvancement != null ? `${r.moyenneAvancement}%` : 'Non évaluable',
+          ])} />
+      </Panel>
+
+      {domainesVisibles.map((dom) => {
+        const sec = rapportGetSection(d, dom.key);
+        if (!sec) return null;
+        if (!sec.hasData) {
+          return mode === 'complet' ? (
+            <Panel key={dom.key} title={dom.label}>
+              <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune donnée enregistrée pour cette rubrique sur la période sélectionnée.</p>
+            </Panel>
+          ) : null;
+        }
+        if (dom.key === 'objectifsQhse') {
+          const r = sec.resume;
+          return (
+            <Panel key={dom.key} title={`${dom.label} (${r.total})`}>
+              <div className="flex flex-wrap gap-3">
+                <KpiCard label="Atteints" value={r.atteints} color={C.green} icon={CheckCircle2} />
+                <KpiCard label="En cours" value={r.enCours} color={C.blue} icon={Activity} />
+                <KpiCard label="En retard" value={r.enRetard} color={C.red} icon={AlertTriangle} />
+                <KpiCard label="À risque" value={r.aRisque} color={C.red} icon={FileWarning} />
+              </div>
+            </Panel>
+          );
+        }
+        const parStatut = rapportGroupBy(sec.items, (it) => it.statut || it.type);
+        return (
+          <Panel key={dom.key} title={`${dom.label} (${sec.count})`}>
+            <div className="grid grid-cols-2 gap-4">
+              <DataTable columns={['Code / Titre', 'Date', 'Statut']}
+                rows={sec.items.slice(0, 10).map((it) => [it.code || it.titre || it.libelle || it.id, it.date || it.echeance || it.dateApplication ? new Date(it.date || it.echeance || it.dateApplication).toLocaleDateString('fr-FR') : '—', it.statut || it.type || '—'])} />
+              {parStatut.length > 1 && <DonutChart data={parStatut} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', C.textMuted]} />}
+            </div>
+            {sec.count > 10 && <p className="text-xs mt-2" style={{ color: C.textMuted }}>{sec.count - 10} élément(s) supplémentaire(s) non affiché(s) ici — voir le module d'origine.</p>}
+          </Panel>
+        );
+      })}
+
+      <Panel title="Conclusion">
+        <p className="text-sm" style={{ color: C.textMuted }}>
+          {sommaire.length === 0
+            ? "Aucune donnée n'a été enregistrée dans l'application sur cette période : la conclusion ne peut pas être générée automatiquement."
+            : `${sommaire.length} rubrique(s) alimentée(s) sur la période. Reportez-vous au résumé exécutif et aux sections ci-dessus pour le détail par domaine.`}
+        </p>
       </Panel>
     </div>
   );
