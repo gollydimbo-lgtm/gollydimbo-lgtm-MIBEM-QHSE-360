@@ -26,4 +26,9 @@ export class DashboardController {
   alerts() {
     return this.service.alerts();
   }
+
+  @Get('score')
+  score() {
+    return this.service.score();
+  }
 }

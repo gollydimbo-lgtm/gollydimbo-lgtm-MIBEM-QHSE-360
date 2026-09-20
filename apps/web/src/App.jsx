@@ -4162,15 +4162,15 @@ function PilotagePage() {
   const { counters, indicators } = dash.data.overview;
   const trends = dash.data.trends;
   const alertes = dash.data.alerts || [];
+  const score = dash.data.score || { global: null, confiance: 'FAIBLE', domaines: {} };
   const auditsPlanifies = (audits.data || []).filter((a) => a.status === 'PLANNED').length;
   const auditsTotal = (audits.data || []).length;
   const capaStats = computeCapaStatsReal(actions.data || []);
   const ncBySource = groupCount(nonConformities.data || [], (n) => n.source || 'Source non renseignée');
-  const composite = indicators.qualite.tauxConformite != null
-    ? Math.round(indicators.qualite.tauxConformite * 0.5 + Math.max(0, 100 - counters.actionsOverdue * 8) * 0.3 + Math.max(0, 100 - counters.risksHigh * 10) * 0.2)
-    : null;
 
   const ALERT_LEVEL_COLOR = { CRITICAL: C.red, WARNING: C.amber, INFO: C.blue, SUCCESS: C.green };
+  const SCORE_DOMAINE_LABELS = { qualite: 'Qualité', securite: 'Sécurité', risques: 'Risques', actions: 'Actions correctives' };
+  const SCORE_CONFIANCE_LABELS = { ELEVEE: 'Fiabilité élevée — tous les domaines ont assez de données', MOYENNE: 'Fiabilité moyenne — certains domaines manquent de données', FAIBLE: 'Fiabilité faible — trop peu de données pour se fier à ce score' };
 
   return (
     <div className="space-y-6">
@@ -4229,11 +4229,21 @@ function PilotagePage() {
             </LineChart>
           </ResponsiveContainer>
         </Panel>
-        <Panel title={composite != null ? `Indice composite (estimation) : ${composite}%` : 'Indice composite'} subtitle="Qualité 50% · Actions à jour 30% · Risques maîtrisés 20%">
-          <div className="flex items-center justify-center" style={{ height: 220 }}>
-            {composite != null
-              ? <div className="text-6xl font-bold" style={{ color: composite >= 80 ? C.green : composite >= 60 ? C.amber : C.red }}>{composite}%</div>
-              : <p className="text-sm" style={{ color: C.textMuted }}>Pas assez de contrôles qualité soumis sur 30 jours pour calculer un taux de conformité.</p>}
+        <Panel title={score.global != null ? `Score composite QHSE : ${score.global}%` : 'Score composite QHSE'} subtitle={SCORE_CONFIANCE_LABELS[score.confiance] || ''}>
+          <div className="flex flex-col justify-center gap-3 py-2" style={{ minHeight: 220 }}>
+            <div className="text-5xl font-bold text-center" style={{ color: score.global == null ? C.textMuted : score.global >= 80 ? C.green : score.global >= 60 ? C.amber : C.red }}>
+              {score.global != null ? `${score.global}%` : '—'}
+            </div>
+            <div className="space-y-1.5 mt-1">
+              {Object.entries(score.domaines).map(([key, d]) => (
+                <div key={key} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-medium" style={{ color: C.text }}>{SCORE_DOMAINE_LABELS[key] || key}</span>
+                  <span className="text-right" style={{ color: d.score != null ? C.textMuted : C.amber }}>
+                    {d.score != null ? `${d.score}% · ${d.detail}` : `Données insuffisantes · ${d.detail}`}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </Panel>
       </div>

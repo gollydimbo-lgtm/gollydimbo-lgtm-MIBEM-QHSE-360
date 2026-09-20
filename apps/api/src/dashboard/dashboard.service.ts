@@ -187,11 +187,66 @@ export class DashboardService {
   }
 
   // ---------------------------------------------------------------------
+  // Score composite QHSE : agrège qualité / sécurité / risques / actions
+  // en un seul indicateur, en s'appuyant UNIQUEMENT sur des données déjà
+  // saisies dans l'application. Règle absolue : jamais de valeur inventée.
+  // Quand un domaine n'a pas assez de données pour être noté, on l'exclut
+  // du calcul et on le signale explicitement (DONNEES_INSUFFISANTES),
+  // au lieu de lui attribuer 0% ou de le passer sous silence.
+  // ---------------------------------------------------------------------
+  async score() {
+    const ov = await this.overview();
+    const { counters, indicators } = ov;
+
+    const domaines: Record<string, { score: number | null; poids: number; fiabilite: 'DONNEES_SUFFISANTES' | 'DONNEES_INSUFFISANTES'; detail: string }> = {};
+
+    // Qualité : taux de conformité des contrôles des 30 derniers jours.
+    // Sous 5 contrôles soumis, l'échantillon est jugé trop faible pour noter.
+    const controlesSoumis = indicators.qualite.controlesSoumis30j;
+    const SEUIL_MIN_CONTROLES = 5;
+    domaines.qualite = controlesSoumis >= SEUIL_MIN_CONTROLES
+      ? { score: indicators.qualite.tauxConformite, poids: 0.35, fiabilite: 'DONNEES_SUFFISANTES', detail: `${controlesSoumis} contrôle(s) qualité soumis sur 30 jours` }
+      : { score: null, poids: 0.35, fiabilite: 'DONNEES_INSUFFISANTES', detail: controlesSoumis === 0 ? 'Aucun contrôle qualité soumis sur 30 jours' : `Seulement ${controlesSoumis} contrôle(s) qualité soumis sur 30 jours (${SEUIL_MIN_CONTROLES} minimum requis)` };
+
+    // Sécurité : indicateur basé sur un comptage d'événements. Un comptage est
+    // toujours une donnée réelle (0 événement = vraiment 0), jamais "insuffisant".
+    const evenements = counters.safetyEvents30d;
+    domaines.securite = { score: Math.max(0, 100 - evenements * 10), poids: 0.25, fiabilite: 'DONNEES_SUFFISANTES', detail: `${evenements} événement(s) sécurité sur 30 jours` };
+
+    // Risques maîtrisés : part des risques actifs qui ne sont PAS élevés.
+    // Si le registre des risques est vide, ce n'est pas "0% de risque" : c'est
+    // une absence de donnée à distinguer d'un vrai résultat.
+    domaines.risques = counters.risksTotal > 0
+      ? { score: Math.round(((counters.risksTotal - counters.risksHigh) / counters.risksTotal) * 100), poids: 0.20, fiabilite: 'DONNEES_SUFFISANTES', detail: `${counters.risksHigh} risque(s) élevé(s) sur ${counters.risksTotal} suivi(s)` }
+      : { score: null, poids: 0.20, fiabilite: 'DONNEES_INSUFFISANTES', detail: 'Aucun risque suivi dans le registre' };
+
+    // Actions correctives à jour : part des actions ouvertes qui ne sont pas en
+    // retard. Zéro action ouverte est une vraie situation favorable (score 100),
+    // pas une donnée manquante.
+    domaines.actions = counters.actionsOpen > 0
+      ? { score: Math.round(((counters.actionsOpen - counters.actionsOverdue) / counters.actionsOpen) * 100), poids: 0.20, fiabilite: 'DONNEES_SUFFISANTES', detail: `${counters.actionsOverdue} action(s) en retard sur ${counters.actionsOpen} ouverte(s)` }
+      : { score: 100, poids: 0.20, fiabilite: 'DONNEES_SUFFISANTES', detail: 'Aucune action ouverte' };
+
+    const domainesNotes = Object.values(domaines).filter((d) => d.score != null);
+    const poidsTotal = domainesNotes.reduce((s, d) => s + d.poids, 0);
+    const global = poidsTotal > 0
+      ? Math.round(domainesNotes.reduce((s, d) => s + (d.score as number) * d.poids, 0) / poidsTotal)
+      : null;
+
+    const nbDomaines = Object.keys(domaines).length;
+    const nbDomainesFiables = Object.values(domaines).filter((d) => d.fiabilite === 'DONNEES_SUFFISANTES').length;
+    const confiance: 'ELEVEE' | 'MOYENNE' | 'FAIBLE' =
+      nbDomainesFiables === nbDomaines ? 'ELEVEE' : nbDomainesFiables >= nbDomaines / 2 ? 'MOYENNE' : 'FAIBLE';
+
+    return { global, confiance, domaines };
+  }
+
+  // ---------------------------------------------------------------------
   // Point d'entrée unique consommé par Flutter / le futur web : tout en un.
   // ---------------------------------------------------------------------
   async full() {
-    const [overview, trends, alerts] = await Promise.all([this.overview(), this.trends(8), this.alerts()]);
-    return { overview, trends, alerts };
+    const [overview, trends, alerts, score] = await Promise.all([this.overview(), this.trends(8), this.alerts(), this.score()]);
+    return { overview, trends, alerts, score };
   }
 
   // ------------------------------- utils --------------------------------
