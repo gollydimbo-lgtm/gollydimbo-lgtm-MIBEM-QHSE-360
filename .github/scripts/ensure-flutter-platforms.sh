@@ -4,7 +4,16 @@
 # natifs doivent être produits par le vrai SDK Flutter, pas écrits à la main).
 # Idempotent : ne touche pas lib/, pubspec.yaml, ni un dossier déjà généré.
 set -euo pipefail
-cd "$(dirname "$0")/../../apps/flutter"
+# IMPORTANT : on résout le dossier du script en chemin ABSOLU avant tout
+# "cd". Un "$(dirname "$0")" laissé relatif (ex: ".github/scripts") casse
+# silencieusement le bloc "Application du logo" plus bas : une fois qu'on a
+# "cd"é dans apps/flutter, ce chemin relatif ne pointe plus vers le bon
+# dossier (il est réinterprété depuis apps/flutter), donc le test [ -d ... ]
+# échoue sans erreur et le logo QHSE 360 n'est jamais copié — ni pour
+# Android, ni pour Windows. D'où SCRIPT_DIR, calculé une seule fois, ici.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BRANDING="$SCRIPT_DIR/../../assets/branding/qhse360"
+cd "$SCRIPT_DIR/../../apps/flutter"
 
 if [ ! -d "android" ] || [ ! -d "windows" ]; then
   echo "== Génération des dossiers natifs manquants (android/windows) =="
@@ -101,7 +110,7 @@ fi
 
 # Applique le logo QHSE 360 (icônes officielles, communes à toutes les
 # applications) sur le socle Android/Windows fraîchement généré.
-BRANDING="$(dirname "$0")/../../assets/branding/qhse360"
+# (BRANDING est déjà résolu en chemin absolu tout en haut du script.)
 if [ -d "$BRANDING" ]; then
   echo "== Application du logo QHSE 360 =="
   for DPI in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
