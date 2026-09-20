@@ -11423,6 +11423,11 @@ function RapportEditorPanel({ id, onBack }) {
   const rapportQ = useCollection(`/business/rapports/${id}`);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Ces deux hooks doivent être appelés avant tout retour conditionnel
+  // (règle des hooks React) : les déclarer plus bas faisait planter le
+  // composant (page blanche) au passage du chargement à l'état chargé.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [gedBusy, setGedBusy] = useState(false);
   useEffect(() => { if (rapportQ.data) setForm({ analyseQhse: rapportQ.data.analyseQhse || '', observationsDirection: rapportQ.data.observationsDirection || '', conclusion: rapportQ.data.conclusion || '', preparePar: rapportQ.data.preparePar || '', verifiePar: rapportQ.data.verifiePar || '' }); }, [rapportQ.data?.id, rapportQ.data?.updatedAt]);
   if (rapportQ.loading || !form) return <LoadingPanel />;
   if (rapportQ.error) return <ErrorPanel message={rapportQ.error} onRetry={rapportQ.reload} />;
@@ -11452,8 +11457,6 @@ function RapportEditorPanel({ id, onBack }) {
     await api.post(`/business/rapports/${id}/distribuer`, { destinataireEmail: email, distribuePar });
     rapportQ.reload();
   }
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [gedBusy, setGedBusy] = useState(false);
   async function telechargerPdf() {
     setPdfBusy(true);
     try {
@@ -13016,6 +13019,11 @@ function EquipmentPage() {
   const [showForm, setShowForm] = useState(false);
   const [detailId, setDetailId] = useState(null);
   const [filter, setFilter] = useState('TOUS');
+  // Ce hook DOIT être appelé avant tout retour conditionnel (règle des
+  // hooks React) : le déclarer plus bas, après le "if (loading) return",
+  // faisait planter le composant (page blanche) dès que le chargement se
+  // terminait, car le nombre de hooks appelés changeait d'un rendu à l'autre.
+  const [showAnalytics, setShowAnalytics] = useState(false);
   if (equipment.loading) return <LoadingPanel />;
   if (equipment.error) return <ErrorPanel message={equipment.error} onRetry={equipment.reload} />;
   const list = equipment.data || [];
@@ -13030,7 +13038,6 @@ function EquipmentPage() {
     return true;
   });
   const dash = dashboardQ.data;
-  const [showAnalytics, setShowAnalytics] = useState(false);
   return (
     <div className="space-y-6">
       {showForm && <EquipmentForm onClose={() => setShowForm(false)} onCreated={() => { equipment.reload(); dashboardQ.reload(); }} />}
