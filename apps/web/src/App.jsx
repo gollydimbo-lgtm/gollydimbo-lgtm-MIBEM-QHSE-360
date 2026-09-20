@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, createContext, useContext 
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, ComposedChart, ReferenceLine, Bar,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
 } from 'recharts';
 import {
   LayoutDashboard, ShieldCheck, HardHat, Leaf, AlertTriangle, FileBarChart,
@@ -4155,6 +4156,7 @@ function PilotagePage() {
   const audits = useCollection('/business/audits');
   const actions = useCollection('/business/actions');
   const nonConformities = useCollection('/business/non-conformities');
+  const risks = useCollection('/business/risks');
 
   // Vue par rôle (point du cahier des charges Cockpit QHSE 360) : la même
   // page adapte sa densité d'information selon qui la regarde, au lieu
@@ -4167,7 +4169,7 @@ function PilotagePage() {
   });
   useEffect(() => { try { localStorage.setItem('qhse_pilotage_vue', vue); } catch {} }, [vue]);
 
-  if (dash.loading || audits.loading || actions.loading || nonConformities.loading) return <LoadingPanel />;
+  if (dash.loading || audits.loading || actions.loading || nonConformities.loading || risks.loading) return <LoadingPanel />;
   if (dash.error) return <ErrorPanel message={dash.error} />;
 
   const { counters, indicators } = dash.data.overview;
@@ -4179,6 +4181,17 @@ function PilotagePage() {
   const auditsTotal = (audits.data || []).length;
   const capaStats = computeCapaStatsReal(actions.data || []);
   const ncBySource = groupCount(nonConformities.data || [], (n) => n.source || 'Source non renseignée');
+
+  // Radar de conformité : uniquement les domaines disposant d'assez de
+  // données (même règle anti-invention que le score composite) — un score
+  // manquant n'est jamais affiché comme 0%, il est simplement absent du radar.
+  const radarDomaines = [
+    { domaine: 'Qualité', valeur: score.domaines.qualite?.score },
+    { domaine: 'Sécurité', valeur: score.domaines.securite?.score },
+    { domaine: 'Risques maîtrisés', valeur: score.domaines.risques?.score },
+    { domaine: 'Actions à jour', valeur: score.domaines.actions?.score },
+    { domaine: 'Audits clôturés', valeur: auditsTotal > 0 ? Math.round(((auditsTotal - auditsPlanifies) / auditsTotal) * 100) : null },
+  ].filter((d) => d.valeur != null);
 
   const ALERT_LEVEL_COLOR = { CRITICAL: C.red, WARNING: C.amber, INFO: C.blue, SUCCESS: C.green };
   const SCORE_DOMAINE_LABELS = { qualite: 'Qualité', securite: 'Sécurité', risques: 'Risques', actions: 'Actions correctives' };
@@ -4272,11 +4285,42 @@ function PilotagePage() {
         </Panel>
       </div>
 
-      <Panel title="Processus les plus problématiques" subtitle="Nombre de non-conformités par processus">
-        {analyses.nonConformites.processusLesPlusProblematiques.length
-          ? <HorizontalBars data={analyses.nonConformites.processusLesPlusProblematiques.map((p) => ({ label: p.processus, count: p.nombre }))} labelKey="label" valueKey="count" color={C.red} />
-          : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun processus renseigné sur les non-conformités</p>}
-      </Panel>
+      {/* Pareto des non-conformités (réutilise ParetoChart, déjà utilisé sur la page Non-conformités) + radar de conformité multi-domaines, calculé côté client depuis le score déjà renvoyé par l'API — aucune donnée fabriquée, un domaine sans assez de données est simplement absent du radar. */}
+      <div className="grid grid-cols-2 gap-4">
+        <Panel title="Pareto des non-conformités" subtitle="Sources qui concentrent le plus de non-conformités">
+          {ncBySource.length
+            ? <ParetoChart causes={ncBySource.map((s) => ({ cause: s.name, occurrences: s.value }))} />
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
+        </Panel>
+        <Panel title="Radar de conformité QHSE" subtitle="Domaines avec des données suffisantes uniquement">
+          {radarDomaines.length >= 3 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <RadarChart data={radarDomaines}>
+                <PolarGrid stroke={C.border} />
+                <PolarAngleAxis dataKey="domaine" tick={{ fill: C.textMuted, fontSize: 10 }} />
+                <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: C.textMuted, fontSize: 9 }} />
+                <Radar name="Score" dataKey="valeur" stroke={C.blue} fill={C.blue} fillOpacity={0.35} />
+                <Tooltip contentStyle={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text }} formatter={(v) => [`${v}%`, 'Score']} />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas assez de domaines avec des données suffisantes pour tracer un radar fiable.</p>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Panel title="Processus les plus problématiques" subtitle="Nombre de non-conformités par processus">
+          {analyses.nonConformites.processusLesPlusProblematiques.length
+            ? <HorizontalBars data={analyses.nonConformites.processusLesPlusProblematiques.map((p) => ({ label: p.processus, count: p.nombre }))} labelKey="label" valueKey="count" color={C.red} />
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun processus renseigné sur les non-conformités</p>}
+        </Panel>
+        <Panel title="Matrice de criticité 5×5" subtitle="Gravité × probabilité, tous risques actifs">
+          {(risks.data || []).length
+            ? <RiskMatrix5x5 risques={(risks.data || []).map((r) => ({ gravite: r.severity, probabilite: r.probability }))} />
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+        </Panel>
+      </div>
       </>
       )}
 
