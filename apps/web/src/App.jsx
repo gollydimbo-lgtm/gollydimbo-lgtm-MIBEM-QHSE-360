@@ -13672,7 +13672,7 @@ export default function QhseDashboard() {
         >
           <div className="flex items-center justify-between gap-2 mb-6 px-2">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: C.blue }}><ShieldCheck size={20} color="#fff" /></div>
+              <img src="/logo-192.png" alt="QHSE 360" className="w-9 h-9 shrink-0" />
               <div>
                 <div className="text-sm font-semibold" style={{ color: C.text }}>Gestion QHSE 360</div>
                 <div className="text-[10px]" style={{ color: C.textMuted }}>Qualité · Sécurité · Hygiène · Environnement</div>

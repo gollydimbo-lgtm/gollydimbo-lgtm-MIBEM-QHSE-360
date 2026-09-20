@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
 import { login, getBaseUrl, setBaseUrl, checkHealth } from './api';
 
 const C = { bg: '#0B0F19', card: '#111827', border: '#1F2937', text: '#FFFFFF', textMuted: '#9CA3AF', blue: '#3B82F6', red: '#EF4444' };
@@ -42,7 +41,7 @@ export default function LoginPage({ onLoggedIn }) {
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: C.bg, fontFamily: 'Inter, system-ui, sans-serif' }}>
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl p-6" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
         <div className="flex items-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: C.blue }}><ShieldCheck size={20} color="#fff" /></div>
+          <img src="/logo-192.png" alt="QHSE 360" className="w-9 h-9 shrink-0" />
           <div>
             <div className="text-sm font-semibold" style={{ color: C.text }}>Gestion QHSE 360</div>
             <div className="text-[10px]" style={{ color: C.textMuted }}>Connexion à votre serveur</div>
