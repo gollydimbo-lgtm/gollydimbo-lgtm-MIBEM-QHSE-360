@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../services/api.dart';
 import '../theme.dart';
@@ -80,18 +81,20 @@ class RapportsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Rapports'),
           bottom: const TabBar(tabs: [
             Tab(text: 'Rapports QHSE'),
             Tab(text: 'Export rapide'),
+            Tab(text: 'Identité entreprise'),
           ]),
         ),
         body: const TabBarView(children: [
           _RapportsQhseTab(),
           _ExportRapideTab(),
+          _CompanyIdentityTab(),
         ]),
       ),
     );
@@ -875,6 +878,189 @@ class _ExportRapideTabState extends State<_ExportRapideTab> {
           ),
         );
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Onglet "Identité entreprise" (RapportsIdentitePanel) — réutilisée sur la
+// page de garde et l'en-tête des rapports générés (PDF/GED).
+// ---------------------------------------------------------------------------
+
+class _CompanyIdentityTab extends StatefulWidget {
+  const _CompanyIdentityTab();
+
+  @override
+  State<_CompanyIdentityTab> createState() => _CompanyIdentityTabState();
+}
+
+class _CompanyIdentityTabState extends State<_CompanyIdentityTab> {
+  final api = Api();
+  Map? identity;
+  bool loading = true;
+  bool saving = false;
+  String? error;
+
+  final nomOfficielCtrl = TextEditingController();
+  final nomCommercialCtrl = TextEditingController();
+  final sigleCtrl = TextEditingController();
+  final sloganCtrl = TextEditingController();
+  final adresseCtrl = TextEditingController();
+  final paysCtrl = TextEditingController();
+  final telephoneCtrl = TextEditingController();
+  final emailCtrl = TextEditingController();
+  final siteInternetCtrl = TextEditingController();
+  String? logoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  @override
+  void dispose() {
+    nomOfficielCtrl.dispose();
+    nomCommercialCtrl.dispose();
+    sigleCtrl.dispose();
+    sloganCtrl.dispose();
+    adresseCtrl.dispose();
+    paysCtrl.dispose();
+    telephoneCtrl.dispose();
+    emailCtrl.dispose();
+    siteInternetCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> load() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final data = await api.get('/business/company-identity');
+      identity = Map.from(data);
+      nomOfficielCtrl.text = identity!['nomOfficiel']?.toString() ?? '';
+      nomCommercialCtrl.text = identity!['nomCommercial']?.toString() ?? '';
+      sigleCtrl.text = identity!['sigle']?.toString() ?? '';
+      sloganCtrl.text = identity!['slogan']?.toString() ?? '';
+      adresseCtrl.text = identity!['adresse']?.toString() ?? '';
+      paysCtrl.text = identity!['pays']?.toString() ?? '';
+      telephoneCtrl.text = identity!['telephone']?.toString() ?? '';
+      emailCtrl.text = identity!['email']?.toString() ?? '';
+      siteInternetCtrl.text = identity!['siteInternet']?.toString() ?? '';
+      logoUrl = identity!['logoUrl']?.toString();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> pickLogo() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      final ext = picked.name.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+      final b64 = base64Encode(bytes);
+      setState(() => logoUrl = 'data:image/$ext;base64,$b64');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur lors de la sélection du logo : $e')));
+    }
+  }
+
+  Future<void> save() async {
+    setState(() => saving = true);
+    try {
+      await api.patch('/business/company-identity', {
+        'nomOfficiel': nomOfficielCtrl.text.trim(),
+        'nomCommercial': nomCommercialCtrl.text.trim(),
+        'sigle': sigleCtrl.text.trim(),
+        'slogan': sloganCtrl.text.trim(),
+        'adresse': adresseCtrl.text.trim(),
+        'pays': paysCtrl.text.trim(),
+        'telephone': telephoneCtrl.text.trim(),
+        'email': emailCtrl.text.trim(),
+        'siteInternet': siteInternetCtrl.text.trim(),
+        if (logoUrl != null) 'logoUrl': logoUrl,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Identité de l\'entreprise enregistrée.')));
+      }
+      await load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Widget _field(String label, TextEditingController ctrl) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: ctrl,
+        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return Center(child: Text('Erreur : $error'));
+    ImageProvider? preview;
+    if (logoUrl != null && logoUrl!.startsWith('data:')) {
+      try {
+        final b64 = logoUrl!.split(',').last;
+        preview = MemoryImage(base64Decode(b64));
+      } catch (_) {}
+    } else if (logoUrl != null && logoUrl!.isNotEmpty) {
+      preview = NetworkImage(logoUrl!);
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          "Identité de l'entreprise",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const Text(
+          "Réutilisée automatiquement sur la page de garde et l'en-tête des rapports",
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        const SizedBox(height: 16),
+        _field('Nom officiel', nomOfficielCtrl),
+        _field('Nom commercial', nomCommercialCtrl),
+        _field('Sigle', sigleCtrl),
+        _field('Slogan', sloganCtrl),
+        _field('Adresse', adresseCtrl),
+        _field('Pays', paysCtrl),
+        _field('Téléphone', telephoneCtrl),
+        _field('Email', emailCtrl),
+        _field('Site internet', siteInternetCtrl),
+        const Text('Logo', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Row(children: [
+          if (preview != null)
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+              child: Image(image: preview, fit: BoxFit.contain),
+            ),
+          if (preview != null) const SizedBox(width: 12),
+          OutlinedButton.icon(onPressed: pickLogo, icon: const Icon(Icons.image_outlined), label: const Text('Choisir un logo')),
+        ]),
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: saving ? null : save,
+          child: saving
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Enregistrer'),
+        ),
+      ],
     );
   }
 }
