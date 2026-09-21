@@ -3465,6 +3465,18 @@ function UtilisateursPage() {
     await confirmAndDelete(`${u.firstName} ${u.lastName}`, `/users/${u.id}`, () => users.reload());
   }
   const currentEmail = getStoredUser()?.email;
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
+  const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filteredUsers = search.trim() ? list.filter((u) => norm([u.firstName, u.lastName, u.email, u.roles.map((r) => ROLE_LABELS[r.role.name] || r.role.name).join(' ')].join(' ')).includes(norm(search))) : list;
+  function usersExportRows() {
+    return [
+      ['Nom', 'Email', 'Rôle', 'Statut'],
+      ...filteredUsers.map((u) => [`${u.firstName} ${u.lastName}`, u.email, u.roles.map((r) => ROLE_LABELS[r.role.name] || r.role.name).join(', '), u.status === 'ACTIVE' ? 'Actif' : 'Inactif']),
+    ];
+  }
+  function exportUsersExcel() { downloadWorkbook([['Utilisateurs', usersExportRows()]], `Utilisateurs-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportUsersCsv() { downloadCsv(usersExportRows(), `Utilisateurs-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -3478,15 +3490,20 @@ function UtilisateursPage() {
         <KpiCard label="Comptes créés" value={list.length} color={C.blue} icon={Users} />
         <KpiCard label="Comptes actifs" value={list.filter((u) => u.status === 'ACTIVE').length} color={C.green} icon={ShieldCheck} />
       </div>
-      <Panel title="Liste des utilisateurs">
-        {list.length ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un utilisateur (nom, email, rôle...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+        <button onClick={exportUsersExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+        <button onClick={exportUsersCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+      </div>
+      <Panel title={search.trim() ? `Résultats de recherche (${filteredUsers.length})` : 'Liste des utilisateurs'}>
+        {filteredUsers.length ? (
           <table className="w-full text-sm">
             <thead><tr style={{ color: C.textMuted }}>
               <th className="text-left font-normal pb-2">Nom</th><th className="text-left font-normal pb-2">Email</th>
               <th className="text-left font-normal pb-2">Rôle</th><th className="text-left font-normal pb-2">Statut</th><th className="text-left font-normal pb-2">Actions</th>
             </tr></thead>
             <tbody>
-              {list.map((u) => (
+              {filteredUsers.map((u) => (
                 <tr key={u.id} style={{ borderTop: `1px solid ${C.border}` }}>
                   <td className="py-2" style={{ color: C.text }}>{u.firstName} {u.lastName}</td>
                   <td className="py-2" style={{ color: C.textMuted }}>{u.email}</td>
@@ -3503,7 +3520,7 @@ function UtilisateursPage() {
               ))}
             </tbody>
           </table>
-        ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun utilisateur pour le moment</p>}
+        ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun utilisateur pour le moment'}</p>}
       </Panel>
     </div>
   );
@@ -7019,6 +7036,18 @@ function EnvironnementPage() {
   const scoreLevel = dash.score == null ? null : dash.score >= 80 ? { label: 'Bon', color: C.green } : dash.score >= 60 ? { label: 'À améliorer', color: C.amber } : { label: 'Critique', color: C.red };
   const veilleStatutLabel = { A_TRAITER: 'À traiter', EN_COURS: 'En cours', INTEGREE: 'Intégrée', CONFORME: 'Conforme', PARTIELLEMENT_CONFORME: 'Partiellement conforme', NON_CONFORME: 'Non conforme', NON_APPLICABLE: 'Non applicable', A_VERIFIER: 'À vérifier' };
   const veilleStatutColor = { CONFORME: C.green, INTEGREE: C.green, PARTIELLEMENT_CONFORME: C.amber, NON_CONFORME: C.red, NON_APPLICABLE: C.textMuted, A_VERIFIER: C.amber, A_TRAITER: C.amber, EN_COURS: C.blue };
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
+  const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filteredReleves = search.trim() ? sorted.filter((r) => norm([r.categorie, r.type, r.site].join(' ')).includes(norm(search))) : sorted;
+  function relevesExportRows() {
+    return [
+      ['Catégorie', 'Type', 'Valeur', 'Unité', 'Site', 'Date', 'Conforme'],
+      ...filteredReleves.map((r) => [r.categorie || '', r.type, r.value ?? '', r.unit || '', r.site || '', new Date(r.recordedAt).toLocaleDateString('fr-FR'), r.conforme == null ? '' : (r.conforme ? 'Conforme' : 'Non conforme')]),
+    ];
+  }
+  function exportRelevesExcel() { downloadWorkbook([['Relevés environnementaux', relevesExportRows()]], `Releves-environnement-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportRelevesCsv() { downloadCsv(relevesExportRows(), `Releves-environnement-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -7119,12 +7148,17 @@ function EnvironnementPage() {
             </Panel>
             <Panel title="Détail par catégorie"><HorizontalBars data={byCategorie} labelKey="name" valueKey="value" color={C.blue} /></Panel>
           </div>
-          <Panel title="Registre des relevés environnementaux">
-            {sorted.length
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un relevé (catégorie, type, site...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportRelevesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportRelevesCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          </div>
+          <Panel title={search.trim() ? `Résultats de recherche (${filteredReleves.length})` : 'Registre des relevés environnementaux'}>
+            {filteredReleves.length
               ? <DataTable columns={['Catégorie', 'Type', 'Valeur', 'Unité', 'Site', 'Date', 'Conforme']}
-                  rows={sorted.map((r) => [r.categorie || '—', r.type, r.value ?? '—', r.unit || '—', r.site || '—', new Date(r.recordedAt).toLocaleDateString('fr-FR'), r.conforme == null ? '—' : <StatusChip statut={r.conforme ? 'Conforme' : 'Non conforme'} />])}
-                  onRowClick={(i) => setSelected(sorted[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun relevé enregistré pour le moment</p>}
+                  rows={filteredReleves.map((r) => [r.categorie || '—', r.type, r.value ?? '—', r.unit || '—', r.site || '—', new Date(r.recordedAt).toLocaleDateString('fr-FR'), r.conforme == null ? '—' : <StatusChip statut={r.conforme ? 'Conforme' : 'Non conforme'} />])}
+                  onRowClick={(i) => setSelected(filteredReleves[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun relevé enregistré pour le moment'}</p>}
           </Panel>
         </div>
       )}
@@ -12628,6 +12662,13 @@ function HaccpSurveillanceTab({ studyId, ccpId, onStudyChange, onCcpChange }) {
   const recordsQ = useCollection(ccpId ? `/haccp/ccps/${ccpId}/monitoring` : null);
   const ccps = ccpsQ.data || [];
   const selectedCcp = ccps.find((c) => c.id === ccpId);
+  // Export harmonisé (audit priorité 7, finding #17).
+  function exportMonitoringExcel() {
+    downloadWorkbook([[`Relevés — ${selectedCcp?.reference || ''}`, [
+      ['Date prévue', 'Date réalisée', 'Valeur', 'Conforme', 'Statut', 'Lot', 'Commentaire'],
+      ...(recordsQ.data || []).map((r) => [r.datePrevue ? new Date(r.datePrevue).toLocaleDateString('fr-FR') : '', r.dateRealisee ? new Date(r.dateRealisee).toLocaleDateString('fr-FR') : '', r.valeurTexte || r.valeur || '', r.conforme == null ? '' : (r.conforme ? 'Oui' : 'Non'), r.statut, r.lotNumero || '', r.commentaire || '']),
+    ]]], `Releves-HACCP-${(selectedCcp?.reference || 'ccp').replace(/[^a-zA-Z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
   return (
     <div className="space-y-4">
       <LiveBadge />
@@ -12650,7 +12691,7 @@ function HaccpSurveillanceTab({ studyId, ccpId, onStudyChange, onCcpChange }) {
           <Panel title={`Nouveau relevé — ${selectedCcp.reference}`} subtitle={selectedCcp.limiteCritique ? `Limite critique : ${selectedCcp.limiteCritique}` : undefined}>
             <HaccpMonitoringForm ccpId={ccpId} usersQ={usersQ} onCreated={recordsQ.reload} />
           </Panel>
-          <Panel title="Historique des relevés" subtitle={`${(recordsQ.data || []).length} relevé(s)`}>
+          <Panel title="Historique des relevés" subtitle={`${(recordsQ.data || []).length} relevé(s)`} right={(recordsQ.data || []).length > 0 && <button onClick={exportMonitoringExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>}>
             {recordsQ.loading ? <LoadingPanel /> : recordsQ.error ? <ErrorPanel message={recordsQ.error} onRetry={recordsQ.reload} /> : (
               (recordsQ.data || []).length
                 ? <div className="space-y-2">{recordsQ.data.map((r) => <HaccpMonitoringRow key={r.id} record={r} onChanged={recordsQ.reload} />)}</div>
@@ -14745,12 +14786,24 @@ function SafetyTalkPage() {
   }
 
   const talks = talksQ.data || [];
-  const filteredTalks = statusFilter ? talks.filter((t) => t.status === statusFilter) : talks;
+  const filteredTalks0 = statusFilter ? talks.filter((t) => t.status === statusFilter) : talks;
   const upcoming = talks.filter((t) => t.scheduledAt && new Date(t.scheduledAt) >= new Date() && !['DELIVERED', 'ANNULE'].includes(t.status))
     .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 6);
   const recos = recommendationsQ.data || [];
   const dash = dashboardQ.data || {};
   const selectedTalk = detailId ? talks.find((t) => t.id === detailId) : null;
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
+  const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filteredTalks = search.trim() ? filteredTalks0.filter((t) => norm(t.title).includes(norm(search))) : filteredTalks0;
+  function safetyTalksExportRows() {
+    return [
+      ['Titre', 'Semaine du', 'Planifié le', 'Priorité', 'Statut'],
+      ...filteredTalks.map((t) => [t.title, new Date(t.weekStart).toLocaleDateString('fr-FR'), t.scheduledAt ? new Date(t.scheduledAt).toLocaleString('fr-FR') : '', ST_PRIORITE_LABEL[t.priorite] || t.priorite || '', ST_STATUS_LABEL[t.status] || t.status]),
+    ];
+  }
+  function exportSafetyTalksExcel() { downloadWorkbook([['Quarts d\'heure sécurité', safetyTalksExportRows()]], `Quarts-heure-securite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportSafetyTalksCsv() { downloadCsv(safetyTalksExportRows(), `Quarts-heure-securite-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -14823,6 +14876,11 @@ function SafetyTalkPage() {
               </select>
               <button onClick={() => { setFormPrefill(null); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle séance</button>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une séance (titre...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportSafetyTalksExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportSafetyTalksCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
           </div>
           {talksQ.loading ? <LoadingPanel /> : talksQ.error ? <ErrorPanel message={talksQ.error} onRetry={talksQ.reload} /> : (
             filteredTalks.length === 0
