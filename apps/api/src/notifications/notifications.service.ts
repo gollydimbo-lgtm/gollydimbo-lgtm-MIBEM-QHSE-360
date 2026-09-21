@@ -72,7 +72,7 @@ export class NotificationsService {
       this.db.regulatoryRequirement.findMany({ where: { dateProchaineEvaluation: { not: null } }, include: { text: true } }),
       this.db.visiteMedicale.findMany({ where: { prochaineVisite: { not: null } }, include: { employee: true } }),
       this.db.equipment.findMany({ where: { nextInspectionAt: { not: null } }, select: { id: true, name: true, nextInspectionAt: true } }),
-      this.db.training.findMany({ where: { status: { notIn: ['REALISEE', 'CLOTUREE', 'ANNULEE'] }, scheduledAt: { not: null } }, select: { id: true, title: true, scheduledAt: true } }),
+      this.db.training.findMany({ where: { status: { notIn: ['REALISEE', 'CLOTUREE', 'ANNULEE'] } }, select: { id: true, title: true, scheduledAt: true } }),
     ]);
 
     for (const a of actions) push({ module: 'ACTION', titre: a.title, dueDate: a.dueDate, lienEntityId: a.id });
@@ -80,7 +80,7 @@ export class NotificationsService {
     for (const h of habilitations) push({ module: 'HABILITATION', titre: `${h.intitule} — ${h.employee.firstName} ${h.employee.lastName}`, dueDate: h.dateExpiration, lienEntityId: h.id });
     for (const m of maintenances) push({ module: 'MAINTENANCE', titre: `Maintenance — ${m.equipment?.name ?? ''}`, dueDate: m.dateProchaine, lienEntityId: m.id });
     for (const v of veilles) push({ module: 'VEILLE_REGLEMENTAIRE', titre: v.text?.reference ?? 'Exigence réglementaire', dueDate: v.dateProchaineEvaluation, lienEntityId: v.id });
-    for (const vm of visites) push({ module: 'VISITE_MEDICALE', titre: `Visite médicale — ${vm.employee?.firstName ?? ''} ${vm.employee?.lastName ?? ''}`, dueDate: vm.prochaineVisite, lienEntityId: vm.id });
+    for (const vm of visites) push({ module: 'VISITE_MEDICALE', titre: `Visite médicale — ${vm.employee ? vm.employee.firstName + ' ' + vm.employee.lastName : vm.employeNom}`, dueDate: vm.prochaineVisite, lienEntityId: vm.id });
     for (const c of calibrations) push({ module: 'EQUIPEMENT', titre: `Inspection — ${c.name}`, dueDate: c.nextInspectionAt, lienEntityId: c.id });
     for (const t of formations) push({ module: 'FORMATION', titre: t.title, dueDate: t.scheduledAt, lienEntityId: t.id });
 
@@ -136,7 +136,7 @@ export class NotificationsService {
     for (const vm of visitesEnRetard) {
       candidats.push({
         sourceKey: `VISITE_MEDICALE_RETARD::${vm.id}`, module: 'VISITE_MEDICALE', niveau: 'WARNING',
-        titre: `Visite médicale échue — ${vm.employee?.firstName ?? ''} ${vm.employee?.lastName ?? ''}`,
+        titre: `Visite médicale échue — ${vm.employee ? vm.employee.firstName + ' ' + vm.employee.lastName : vm.employeNom}`,
         detail: `Prévue le ${vm.prochaineVisite!.toISOString().slice(0, 10)}`, dueDate: vm.prochaineVisite,
         lienModule: 'VISITE_MEDICALE', lienEntityId: vm.id,
       });
