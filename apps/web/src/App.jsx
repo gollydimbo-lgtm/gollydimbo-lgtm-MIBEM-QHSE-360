@@ -449,19 +449,24 @@ function RiskMatrix5x5({ risques }) {
 }
 function DataTable({ columns, rows, onRowClick }) {
   const C = useTheme();
+  // overflow-x-auto (audit finding #16) — sans ça, un tableau à 7-8
+  // colonnes déborde ou écrase le texte sur tablette (format portrait),
+  // gênant pour un audit terrain sur tablette.
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr style={{ color: C.textMuted }}>{columns.map((c, i) => <th key={i} className="text-left font-normal pb-2">{c}</th>)}</tr>
-      </thead>
-      <tbody>
-        {rows.map((row, i) => (
-          <tr key={i} style={{ borderTop: `1px solid ${C.border}`, cursor: onRowClick ? 'pointer' : 'default' }} onClick={onRowClick ? () => onRowClick(i) : undefined}>
-            {row.map((cell, j) => <td key={j} className="py-2" style={{ color: C.text }}>{cell}</td>)}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr style={{ color: C.textMuted }}>{columns.map((c, i) => <th key={i} className="text-left font-normal pb-2 whitespace-nowrap">{c}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} style={{ borderTop: `1px solid ${C.border}`, cursor: onRowClick ? 'pointer' : 'default' }} onClick={onRowClick ? () => onRowClick(i) : undefined}>
+              {row.map((cell, j) => <td key={j} className="py-2" style={{ color: C.text }}>{cell}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -4145,7 +4150,7 @@ const NAV_GROUPS = [
     { id: 'securite-epi', label: 'Gestion EPI/EPC', icon: HardHat },
     { id: 'securite-hygiene', label: 'Hygiène au travail', icon: HeartPulse },
   ] },
-  { label: 'ENVIRONNEMENT (ISO 14001:2026)', items: [{ id: 'environnement', label: 'Environnement', icon: Leaf }] },
+  { label: 'ENVIRONNEMENT (ISO 14001:2015)', items: [{ id: 'environnement', label: 'Environnement', icon: Leaf }] },
   { label: 'RISQUES & AUDITS', items: [
     { id: 'risques', label: 'Registre des risques', icon: AlertTriangle },
     { id: 'audits', label: 'Audits', icon: ClipboardCheck },

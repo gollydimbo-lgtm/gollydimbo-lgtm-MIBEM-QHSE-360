@@ -28,6 +28,14 @@ services:
       REFRESH_SECRET: a53ef949757f3fa5d6c7c92eb964ee7723d47449f94152bd511946913e2b820b
       PORT: 3000
       UPLOAD_DIR: /app/uploads
+      # Liste blanche CORS (finding #3 de l'audit) — origines autorisées à
+      # appeler l'API depuis un navigateur, séparées par des virgules.
+      # Par défaut (non définie ici) : http://localhost:5173 et
+      # http://127.0.0.1:5173 uniquement. Si l'app web est un jour ouverte
+      # depuis une autre adresse (ex. IP réseau local), ajoutez-la ici,
+      # ex. CORS_ORIGINS: "http://localhost:5173,http://192.168.1.50:5173"
+      # CORS_ORIGINS: ""
+
     ports: ["3000:3000"]
     volumes:
       - qhse_uploads:/app/uploads

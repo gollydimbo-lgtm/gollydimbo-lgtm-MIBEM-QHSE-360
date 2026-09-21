@@ -755,6 +755,8 @@ model SafetyEvent {
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   equipment Equipment? @relation(fields:[equipmentId], references:[id], onDelete:SetNull)
   actions Action[]
+  @@index([statut])
+  @@index([occurredAt])
 }
 
 // Heures travaillées par période, nécessaires au calcul du Taux de Fréquence
@@ -1716,6 +1718,8 @@ model QhseAudit {
   programs AuditProgram[]
   responses AuditQuestionResponse[]
   signatures AuditSignature[]
+  @@index([status])
+  @@index([auditDate])
 }
 
 // Bibliothèque de types d'audit configurable — jamais une liste figée
@@ -2330,6 +2334,8 @@ model Equipment {
   calibrations EquipmentCalibration[]
   inspections EquipmentInspection[]
   consignations EquipmentConsignation[]
+  @@index([status])
+  @@index([nextInspectionAt])
 }
 
 // === MODULE ÉQUIPEMENTS — Phase 2 : maintenance préventive/corrective,
@@ -2861,6 +2867,8 @@ model Reclamation {
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   actionCurativeResponsable User? @relation(fields:[actionCurativeResponsableId], references:[id], onDelete:SetNull)
   actions Action[]
+  @@index([statut])
+  @@index([date])
 }
 
 model Fournisseur {
@@ -2927,6 +2935,8 @@ model Fournisseur {
   safetyEvents SafetyEvent[]
   produitsChimiques ProduitChimique[]
   equipments Equipment[]
+  @@index([statut])
+  @@index([createdAt])
 }
 
 // Certifications et documents réglementaires du fournisseur — jamais
@@ -3394,6 +3404,7 @@ model RegulatoryRequirement {
   requirementRisks RegulatoryRequirementRisk[]
   requirementDocuments RegulatoryRequirementDocument[]
   riskReevaluationRequests RegulatoryRiskReevaluationRequest[]
+  @@index([dateProchaineEvaluation])
 }
 
 // Historique des évaluations de conformité (point 7) — une ligne par
