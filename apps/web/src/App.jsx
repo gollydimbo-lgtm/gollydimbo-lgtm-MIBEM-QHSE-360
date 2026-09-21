@@ -4826,6 +4826,22 @@ function QualiteControlesPage() {
   const tauxConformite = soumis.length ? Math.round((conformes / soumis.length) * 100) : null;
   const sorted = [...list].sort((a, b) => new Date(b.controlDate) - new Date(a.controlDate));
   const domains = [...new Set(allList.map((c) => c.domain))];
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18) —
+  // recherche client (liste déjà chargée en mémoire), même principe que
+  // les exports déjà en place ailleurs (downloadWorkbook/downloadCsv).
+  const [search, setSearch] = useState('');
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filtered = search.trim()
+    ? sorted.filter((c) => norm([c.code, c.type?.name, c.domain, c.productRef?.name, c.productionLine?.name, c.lotNumber].join(' ')).includes(norm(search)))
+    : sorted;
+  function controlesExportRows() {
+    return [
+      ['Code', 'Type', 'Produit', 'Ligne', 'Lot', 'Date', 'Statut', 'Décision'],
+      ...filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '', c.productionLine?.name || '', c.lotNumber || '', new Date(c.controlDate).toLocaleDateString('fr-FR'), c.status, decisionLabels[c.finalDecision] || c.finalDecision || '']),
+    ];
+  }
+  function exportControlesExcel() { downloadWorkbook([['Contrôles qualité', controlesExportRows()]], `Controles-qualite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportControlesCsv() { downloadCsv(controlesExportRows(), `Controles-qualite-${new Date().toISOString().slice(0, 10)}.csv`); }
   const byDomain = groupCount(list, (c) => c.domain);
   const byType = groupCount(list.filter((c) => c.type), (c) => c.type?.name || 'Sans type');
   const buckets = scheduleBuckets.data || { overdue: [], dueSoon: [], upcoming: [] };
@@ -4885,12 +4901,17 @@ function QualiteControlesPage() {
       {tab === 'registre' && (
         <div className="space-y-4">
           <p className="text-xs" style={{ color: C.textMuted }}>Cliquez une ligne pour saisir les résultats et soumettre le contrôle.</p>
-          <Panel title="Registre des contrôles">
-            {sorted.length
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un contrôle (code, type, produit, lot...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportControlesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportControlesCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          </div>
+          <Panel title={search.trim() ? `Résultats de recherche (${filtered.length})` : 'Registre des contrôles'}>
+            {filtered.length
               ? <DataTable columns={['Code', 'Type', 'Produit', 'Ligne', 'Lot', 'Date', 'Statut', 'Décision']}
-                  rows={sorted.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '—', c.productionLine?.name || '—', c.lotNumber || '—', new Date(c.controlDate).toLocaleDateString('fr-FR'), <StatusChip statut={c.status === 'COMPLIANT' ? 'Conforme' : c.status === 'NON_COMPLIANT' ? 'Non conforme' : c.status} />, decisionLabels[c.finalDecision] || c.finalDecision || '—'])}
-                  onRowClick={(i) => setSelectedId(sorted[i].id)} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun contrôle enregistré pour le moment</p>}
+                  rows={filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '—', c.productionLine?.name || '—', c.lotNumber || '—', new Date(c.controlDate).toLocaleDateString('fr-FR'), <StatusChip statut={c.status === 'COMPLIANT' ? 'Conforme' : c.status === 'NON_COMPLIANT' ? 'Non conforme' : c.status} />, decisionLabels[c.finalDecision] || c.finalDecision || '—'])}
+                  onRowClick={(i) => setSelectedId(filtered[i].id)} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun contrôle enregistré pour le moment'}</p>}
           </Panel>
         </div>
       )}
@@ -5166,6 +5187,18 @@ function QualiteProcessusPage() {
     .filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
 
   const typeGroups = ['STRATEGIQUE', 'OPERATIONNEL', 'SUPPORT', 'AUTRE'];
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filteredProcList = search.trim()
+    ? procList.filter((p) => norm([p.nom, p.code, kProcessTypeLabels[p.type], p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : ''].join(' ')).includes(norm(search)))
+    : procList;
+  function exportProcessusRegistreExcel() {
+    downloadWorkbook([['Registre des processus', [
+      ['Processus', 'Type', 'Criticité', 'Pilote', 'NC ouvertes', 'Actions ouvertes', 'Maîtrise (%)', 'Complétude (%)'],
+      ...filteredProcList.map((p) => [p.nom, kProcessTypeLabels[p.type] || p.type, p.criticite ? kCriticiteLabel[p.criticite] : '', p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : '', p._count?.nonConformities || 0, p._count?.actions || 0, computeMaturityScore(p), computeCompleteness(p)]),
+    ]]], `Registre-processus-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
 
   return (
     <div className="space-y-6">
@@ -5242,17 +5275,23 @@ function QualiteProcessusPage() {
       )}
 
       {tab === 'registre' && (
-        <Panel title="Registre des processus">
-          {procList.length
-            ? <DataTable columns={['Processus', 'Type', 'Criticité', 'Pilote', 'NC ouvertes', 'Actions ouvertes', 'Maîtrise', 'Complétude', '']}
-                rows={procList.map((p) => {
-                  const score = computeMaturityScore(p); const lvl = maturityLevel(score);
-                  return [p.nom, kProcessTypeLabels[p.type] || p.type, p.criticite ? kCriticiteLabel[p.criticite] : '—', p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : '—', p._count?.nonConformities || 0, p._count?.actions || 0, `${lvl.emoji} ${lvl.label}`, `${computeCompleteness(p)}%`,
-                    <button onClick={(e) => { e.stopPropagation(); downloadProcessusReport(p); }} className="text-xs" style={{ color: C.blue }}>Rapport</button>];
-                })}
-                onRowClick={(i) => setSelected(procList[i])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun processus enregistré pour le moment</p>}
-        </Panel>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un processus (nom, type, pilote...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportProcessusRegistreExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+          </div>
+          <Panel title={search.trim() ? `Résultats de recherche (${filteredProcList.length})` : 'Registre des processus'}>
+            {filteredProcList.length
+              ? <DataTable columns={['Processus', 'Type', 'Criticité', 'Pilote', 'NC ouvertes', 'Actions ouvertes', 'Maîtrise', 'Complétude', '']}
+                  rows={filteredProcList.map((p) => {
+                    const score = computeMaturityScore(p); const lvl = maturityLevel(score);
+                    return [p.nom, kProcessTypeLabels[p.type] || p.type, p.criticite ? kCriticiteLabel[p.criticite] : '—', p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : '—', p._count?.nonConformities || 0, p._count?.actions || 0, `${lvl.emoji} ${lvl.label}`, `${computeCompleteness(p)}%`,
+                      <button onClick={(e) => { e.stopPropagation(); downloadProcessusReport(p); }} className="text-xs" style={{ color: C.blue }}>Rapport</button>];
+                  })}
+                  onRowClick={(i) => setSelected(filteredProcList[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun processus enregistré pour le moment'}</p>}
+          </Panel>
+        </div>
       )}
     </div>
   );
@@ -5426,6 +5465,13 @@ function IndicateursQualitePage() {
     try { await api.post('/business/indicateurs-ponderation', { autoKey, poids: Number(poids) }); ponderations.reload(); indice.reload(); }
     catch (e) { alert(e.message); }
   }
+  // Export harmonisé (audit priorité 7, finding #17).
+  function exportIndicateursExcel() {
+    downloadWorkbook([['Indicateurs qualité', [
+      ['Indicateur', 'Catégorie', 'Actuel', 'Cible', 'Unité', 'Statut'],
+      ...indList.map((i) => [i.indicateur, i.categorie || '', i.actuel, i.cible, i.unite || '', indicateurStatus(i.actuel, i.cible, i.sensInverse, i.seuilVert, i.seuilOrange).label]),
+    ]]], `Indicateurs-qualite-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
 
   return (
     <div className="space-y-6">
@@ -5481,11 +5527,16 @@ function IndicateursQualitePage() {
         </div>
       </Panel>
 
-      <Panel title="Indicateurs qualité vs cibles" right={categories.length > 0 && (
-        <select value={categorieFilter} onChange={(e) => setCategorieFilter(e.target.value)} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)}>
-          <option value="">Toutes catégories</option>{categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-        </select>
-      )}>
+      <Panel title="Indicateurs qualité vs cibles" right={
+        <div className="flex items-center gap-2">
+          {categories.length > 0 && (
+            <select value={categorieFilter} onChange={(e) => setCategorieFilter(e.target.value)} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+              <option value="">Toutes catégories</option>{categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          )}
+          <button onClick={exportIndicateursExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+        </div>
+      }>
         {indList.length === 0 ? <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun indicateur enregistré</p> : (
           <div className="space-y-4">
             {indList.map((i) => {
@@ -5547,6 +5598,18 @@ function QualiteReclamationsPage() {
     try { await api.post('/business/indicateurs-ponderation', { autoKey: key, poids: Number(poids) }); scoreQ.reload(); }
     catch (e) { alert(e.message); }
   }
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
+  const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filteredReclamations = search.trim() ? sorted.filter((r) => norm([r.client, r.motif, r.produitService].join(' ')).includes(norm(search))) : sorted;
+  function reclamationsExportRows() {
+    return [
+      ['Client', 'Motif', 'Produit/Service', 'Date', 'Gravité', 'Statut', 'Coût'],
+      ...filteredReclamations.map((r) => [r.client, r.motif, r.produitService || '', new Date(r.date).toLocaleDateString('fr-FR'), r.gravite || '', r.statut === 'OPEN' ? 'Ouverte' : 'Clôturée', r.coutTotal || 0]),
+    ];
+  }
+  function exportReclamationsExcel() { downloadWorkbook([['Réclamations', reclamationsExportRows()]], `Reclamations-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportReclamationsCsv() { downloadCsv(reclamationsExportRows(), `Reclamations-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -5667,13 +5730,20 @@ function QualiteReclamationsPage() {
       )}
 
       {tab === 'registre' && (
-        <Panel title="Registre des réclamations clients">
-          {sorted.length
-            ? <DataTable columns={['Client', 'Motif', 'Produit/Service', 'Date', 'Gravité', 'Statut', 'Coût']}
-                rows={sorted.map((r) => [r.client, r.motif, r.produitService || '—', new Date(r.date).toLocaleDateString('fr-FR'), <span style={{ color: graviteColor[r.gravite] || C.textMuted }}>{r.gravite}</span>, <StatusChip statut={r.statut === 'OPEN' ? 'Ouverte' : 'Clôturée'} />, r.coutTotal ? `${r.coutTotal.toLocaleString('fr-FR')} FCFA` : '—'])}
-                onRowClick={(i) => setDetailFor(sorted[i].id)} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune réclamation enregistrée pour le moment</p>}
-        </Panel>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une réclamation (client, motif, produit...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportReclamationsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportReclamationsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          </div>
+          <Panel title={search.trim() ? `Résultats de recherche (${filteredReclamations.length})` : 'Registre des réclamations clients'}>
+            {filteredReclamations.length
+              ? <DataTable columns={['Client', 'Motif', 'Produit/Service', 'Date', 'Gravité', 'Statut', 'Coût']}
+                  rows={filteredReclamations.map((r) => [r.client, r.motif, r.produitService || '—', new Date(r.date).toLocaleDateString('fr-FR'), <span style={{ color: graviteColor[r.gravite] || C.textMuted }}>{r.gravite}</span>, <StatusChip statut={r.statut === 'OPEN' ? 'Ouverte' : 'Clôturée'} />, r.coutTotal ? `${r.coutTotal.toLocaleString('fr-FR')} FCFA` : '—'])}
+                  onRowClick={(i) => setDetailFor(filteredReclamations[i].id)} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune réclamation enregistrée pour le moment'}</p>}
+          </Panel>
+        </div>
       )}
     </div>
   );
@@ -5816,6 +5886,18 @@ function QualiteFournisseursPage() {
     const scores = [f.scoreQualite, f.scoreLivraison, f.scoreQhse, f.scoreCommercial, f.scoreReactivite].filter((v) => v != null);
     return scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : null;
   }
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
+  const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filteredFournisseurs = search.trim() ? list.filter((f) => norm([f.nom, f.typeFournisseur, f.categorie].join(' ')).includes(norm(search))) : list;
+  function fournisseursExportRows() {
+    return [
+      ['Fournisseur', 'Type', 'Score global', 'NC ouvertes', 'Statut'],
+      ...filteredFournisseurs.map((f) => [f.nom, f.typeFournisseur || f.categorie || '', scoreGlobalApprox(f) ?? '', f._count?.nonConformities || 0, statutLabel[f.statut] || f.statut]),
+    ];
+  }
+  function exportFournisseursExcel() { downloadWorkbook([['Fournisseurs', fournisseursExportRows()]], `Fournisseurs-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportFournisseursCsv() { downloadCsv(fournisseursExportRows(), `Fournisseurs-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -5881,21 +5963,28 @@ function QualiteFournisseursPage() {
       )}
 
       {tab === 'registre' && (
-        <Panel title="Évaluation des fournisseurs">
-          {list.length
-            ? <DataTable columns={['Fournisseur', 'Type', 'Score global (moyenne)', 'NC ouvertes', 'Statut']}
-                rows={list.map((f) => {
-                  const score = scoreGlobalApprox(f);
-                  return [
-                    f.nom, f.typeFournisseur || f.categorie || '—',
-                    score != null ? <div className="flex items-center gap-2"><div className="w-20 h-1.5 rounded-full" style={{ backgroundColor: C.border }}><div className="h-1.5 rounded-full" style={{ width: `${score}%`, backgroundColor: score >= 85 ? C.green : score >= 70 ? C.amber : C.red }} /></div><span>{score}%</span></div> : '—',
-                    f._count?.nonConformities || 0,
-                    <StatusChip statut={statutLabel[f.statut] || f.statut} />,
-                  ];
-                })}
-                onRowClick={(i) => setDetailFor(list[i].id)} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun fournisseur enregistré pour le moment</p>}
-        </Panel>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un fournisseur (nom, type...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportFournisseursExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportFournisseursCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          </div>
+          <Panel title={search.trim() ? `Résultats de recherche (${filteredFournisseurs.length})` : 'Évaluation des fournisseurs'}>
+            {filteredFournisseurs.length
+              ? <DataTable columns={['Fournisseur', 'Type', 'Score global (moyenne)', 'NC ouvertes', 'Statut']}
+                  rows={filteredFournisseurs.map((f) => {
+                    const score = scoreGlobalApprox(f);
+                    return [
+                      f.nom, f.typeFournisseur || f.categorie || '—',
+                      score != null ? <div className="flex items-center gap-2"><div className="w-20 h-1.5 rounded-full" style={{ backgroundColor: C.border }}><div className="h-1.5 rounded-full" style={{ width: `${score}%`, backgroundColor: score >= 85 ? C.green : score >= 70 ? C.amber : C.red }} /></div><span>{score}%</span></div> : '—',
+                      f._count?.nonConformities || 0,
+                      <StatusChip statut={statutLabel[f.statut] || f.statut} />,
+                    ];
+                  })}
+                  onRowClick={(i) => setDetailFor(filteredFournisseurs[i].id)} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun fournisseur enregistré pour le moment'}</p>}
+          </Panel>
+        </div>
       )}
     </div>
   );
@@ -6254,6 +6343,18 @@ function SecuriteAccidentsPage() {
   const journeesPerdues = eventsThisYear.reduce((s, e) => s + (e.withLostTime ? (e.lostDays || 0) : 0), 0);
   const tf = totalHours > 0 ? (accidentsAvecArret * 1000000) / totalHours : null;
   const tg = totalHours > 0 ? (journeesPerdues * 1000) / totalHours : null;
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
+  const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filteredEvents = search.trim() ? sorted.filter((e) => norm([e.type, e.title, e.statut].join(' ')).includes(norm(search))) : sorted;
+  function safetyEventsExportRows() {
+    return [
+      ['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt (j)', 'Statut'],
+      ...filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? (e.lostDays || 0) : 0, e.statut || 'DECLARE']),
+    ];
+  }
+  function exportSafetyEventsExcel() { downloadWorkbook([['Événements sécurité', safetyEventsExportRows()]], `Evenements-securite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportSafetyEventsCsv() { downloadCsv(safetyEventsExportRows(), `Evenements-securite-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -6331,11 +6432,16 @@ function SecuriteAccidentsPage() {
           {bySeverity.length ? <HorizontalBars data={bySeverity} labelKey="name" valueKey="value" color={C.amber} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun événement enregistré</p>}
         </Panel>
       </div>
-      <Panel title="Registre des événements sécurité" subtitle="Cliquez une ligne pour ouvrir l'enquête et le plan d'actions.">
-        {sorted.length
-          ? <DataTable columns={['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt', 'Statut']} rows={sorted.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', e.statut || 'DECLARE'])}
-              onRowClick={(i) => setDetailFor(sorted[i].id)} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun événement enregistré pour le moment</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un événement (type, titre, statut...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+        <button onClick={exportSafetyEventsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+        <button onClick={exportSafetyEventsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+      </div>
+      <Panel title={search.trim() ? `Résultats de recherche (${filteredEvents.length})` : "Registre des événements sécurité"} subtitle="Cliquez une ligne pour ouvrir l'enquête et le plan d'actions.">
+        {filteredEvents.length
+          ? <DataTable columns={['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt', 'Statut']} rows={filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', e.statut || 'DECLARE'])}
+              onRowClick={(i) => setDetailFor(filteredEvents[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun événement enregistré pour le moment'}</p>}
       </Panel>
       <Panel title="Heures travaillées enregistrées">
         {hoursList.length
@@ -6408,6 +6514,14 @@ function SecuriteEpiPage() {
   const epcInspList = epcInspections.data || [];
   const reformedCount = [...epiInspList, ...epcInspList].filter((i) => i.result === 'A_REFORMER').length;
   const auditLogList = (auditLogs.data || []).filter((l) => ['Epi', 'Epc', 'EpiCategory', 'EpcCategory', 'EpiAssignment', 'EpiInspection', 'EpcInspection', 'EpcMaintenance', 'JobRiskProtection'].includes(l.module));
+  // Export harmonisé (audit priorité 7, finding #17) — registre des
+  // dotations, la donnée la plus consultée hors application pour ce module.
+  function exportDotationsExcel() {
+    downloadWorkbook([['Dotations EPI', [
+      ['Code', 'Employé', 'EPI', 'Quantité', 'Date', 'Renouvellement'],
+      ...assignmentList.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '']),
+    ]]], `Dotations-EPI-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
 
   return (
     <div className="space-y-6">
@@ -6584,7 +6698,12 @@ function SecuriteEpiPage() {
       )}
 
       {tab === 'attribution' && (
-        <Panel title="Registre des dotations" right={<button onClick={() => setShowAssignmentForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle dotation</button>}>
+        <Panel title="Registre des dotations" right={
+          <div className="flex items-center gap-2">
+            <button onClick={exportDotationsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={() => setShowAssignmentForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle dotation</button>
+          </div>
+        }>
           {assignmentList.length
             ? <DataTable columns={['Code', 'Employé', 'EPI', 'Quantité', 'Date', 'Renouvellement', 'Reçu']}
                 rows={assignmentList.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '—', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '—', <button onClick={(e) => { e.stopPropagation(); setReceiptFor(a); }} className="text-xs" style={{ color: C.blue }}>Voir le reçu</button>])} />
@@ -6675,6 +6794,25 @@ function SecuriteHygienePage() {
     try { await api.post('/business/penibilite-facteurs', { nom: nouveauFacteur.trim() }); setNouveauFacteur(''); facteursQ.reload(); }
     catch (e) { alert(e.message); }
   }
+  // Export harmonisé (audit priorité 7, finding #17).
+  function exportVisitesExcel() {
+    downloadWorkbook([['Visites médicales', [
+      ['Employé', 'Prochaine visite', 'Aptitude'],
+      ...sorted.map((v) => [v.employeNom, v.prochaineVisite ? new Date(v.prochaineVisite).toLocaleDateString('fr-FR') : '', v.aptitude || '']),
+    ]]], `Visites-medicales-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+  function exportRisquesSanitairesExcel() {
+    downloadWorkbook([['Risques sanitaires', [
+      ['Danger', 'Catégorie', 'Poste/Zone', 'Personnes exposées', 'Criticité', 'Statut'],
+      ...risqueList.map((r) => [r.danger, r.categorie || '', [r.poste, r.zone].filter(Boolean).join(' / '), r.nombrePersonnesExposees ?? '', r.criticite, r.statut]),
+    ]]], `Risques-sanitaires-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+  function exportTmsExcel() {
+    downloadWorkbook([['Signalements TMS', [
+      ['Zone corporelle', 'Poste', 'Activité', 'Date', 'Statut'],
+      ...tmsSignalements.map((t) => [t.zoneCorporelle, t.poste || '', t.activite || '', new Date(t.dateSignalement).toLocaleDateString('fr-FR'), t.statut]),
+    ]]], `Signalements-TMS-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
 
   return (
     <div className="space-y-6">
@@ -6701,6 +6839,9 @@ function SecuriteHygienePage() {
             <KpiCard label="En retard" value={enRetard} color={C.red} icon={AlertTriangle} />
             <KpiCard label="Aptitudes avec réserves" value={avecReserves} color={C.amber} icon={HeartPulse} />
             <KpiCard label="Inaptes" value={inaptes} color={C.red} icon={AlertTriangle} />
+          </div>
+          <div className="flex justify-end">
+            <button onClick={exportVisitesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Panel title="Répartition des aptitudes">{parAptitude.length ? <DonutChart data={parAptitude} colors={[C.green, C.amber, C.red]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune aptitude renseignée</p>}</Panel>
@@ -6734,6 +6875,9 @@ function SecuriteHygienePage() {
             <KpiCard label="Risques sanitaires" value={risqueList.length} color={C.blue} icon={HeartPulse} />
             <KpiCard label="Critiques" value={risquesCritiques} color={risquesCritiques > 0 ? C.red : C.green} icon={AlertTriangle} />
             <KpiCard label="Personnes exposées" value={risqueList.reduce((s, r) => s + (r.nombrePersonnesExposees || 0), 0)} color={C.amber} icon={ClipboardList} />
+          </div>
+          <div className="flex justify-end">
+            <button onClick={exportRisquesSanitairesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
           </div>
           <Panel title="Évaluation des risques sanitaires">
             {risqueList.length
@@ -6779,7 +6923,7 @@ function SecuriteHygienePage() {
             </Panel>
           </div>
           {tmsSignalements.length > 0 && (
-            <Panel title="Registre des signalements TMS">
+            <Panel title="Registre des signalements TMS" right={<button onClick={exportTmsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>}>
               <DataTable columns={['Zone corporelle', 'Poste', 'Activité', 'Date', 'Statut']}
                 rows={tmsSignalements.map((t) => [t.zoneCorporelle, t.poste || '—', t.activite || '—', new Date(t.dateSignalement).toLocaleDateString('fr-FR'), t.statut === 'SIGNALE' ? 'Signalé' : t.statut === 'EN_ANALYSE' ? 'En analyse' : 'Traité'])}
                 onRowClick={(i) => setSelectedTms(tmsSignalements[i])} />
