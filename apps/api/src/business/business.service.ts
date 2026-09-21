@@ -7,7 +7,7 @@ import { saveFile } from '../documents/file-storage.util';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
  qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
- ncList(status?:string){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,containmentActions:true,causes:true},orderBy:{createdAt:'desc'}})}
+ ncList(status?:string,take?:number,skip?:number){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,containmentActions:true,causes:true},orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  ncGet(id:string){return this.db.nonConformity.findUnique({where:{id},include:{actions:{include:{responsible:true}},epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,processus:true,fournisseur:true,containmentActions:{include:{responsable:true},orderBy:{date:'desc'}},causes:{orderBy:{createdAt:'asc'}},costs:{orderBy:{createdAt:'desc'}}}})}
 
  // === NON-CONFORMITÉS — moteur de criticité, paramétrage ==================
@@ -280,7 +280,7 @@ import { saveFile } from '../documents/file-storage.util';
   await this.db.safetyEvent.update({where:{id},data:{riskId:risk.id}});
   return risk;
  }
- actionList(status?:string){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true,responsible:true,workUnit:true,parentAction:true,subActions:true},orderBy:{dueDate:'asc'}})}
+ actionList(status?:string,take?:number,skip?:number){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true,responsible:true,workUnit:true,parentAction:true,subActions:true},orderBy:{dueDate:'asc'},take:take??500,skip:skip??0})}
  actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}},extensions:{include:{demandeur:true,validateur:true},orderBy:{createdAt:'desc'}},links:true}})}
  actionCreate(b:any){return this.db.action.create({data:b})}
  async actionUpdate(id:string,b:any){
@@ -764,7 +764,7 @@ import { saveFile } from '../documents/file-storage.util';
  workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:b})}
  async workUnitDelete(id:string){const row=await this.db.workUnit.update({where:{id},data:{active:false}});await writeAudit(this.db,'WORK_UNIT','UPDATE',id,null,row);return row;}
 
- riskList(){return this.db.risk.findMany({where:{archivedAt:null},include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},orderBy:{grossScore:'desc'}})}
+ riskList(take?:number,skip?:number){return this.db.risk.findMany({where:{archivedAt:null},include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},orderBy:{grossScore:'desc'},take:take??500,skip:skip??0})}
  riskGet(id:string){return this.db.risk.findUnique({where:{id},include:{workUnit:true,category:true,processus:true,fournisseur:true,riskMeasures:{include:{responsable:true,epi:true,training:true}},evaluations:{orderBy:{evaluatedAt:'desc'}},actions:{include:{responsible:true}}}})}
 
  // Recherche intelligente (point 20) — reste rapide même avec plusieurs
@@ -898,7 +898,7 @@ import { saveFile } from '../documents/file-storage.util';
  // Le module HACCP est désormais géré par HaccpModule (apps/api/src/haccp) —
  // les anciennes méthodes haccpList/haccpCreate/haccpUpdate/haccpDelete sur
  // haccpRecord ont été supprimées avec l'ancien modèle plat.
- auditList(){return this.db.qhseAudit.findMany({include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'}})}
+ auditList(take?:number,skip?:number){return this.db.qhseAudit.findMany({include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'},take:take??500,skip:skip??0})}
  async auditGet(id:string){
   const audit=await this.db.qhseAudit.findUnique({where:{id},include:{
    auditor:true,responsableAudite:true,fournisseur:true,type:true,referential:true,workUnit:true,
@@ -2078,7 +2078,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentConsignationDelete(id:string){const row=await this.db.equipmentConsignation.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CONSIGNATION','DELETE',id,row,null);return row;}
 
- events(){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'}})}
+ events(take?:number,skip?:number){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'},take:take??500,skip:skip??0})}
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
  eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
@@ -2276,8 +2276,8 @@ import { saveFile } from '../documents/file-storage.util';
   return {indice:sommePoids>0?Math.round((sommePonderee/sommePoids)*10)/10:null,detail};
  }
 
- async reclamationList(){
-  const list=await this.db.reclamation.findMany({include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:true},orderBy:{date:'desc'}});
+ async reclamationList(take?:number,skip?:number){
+  const list=await this.db.reclamation.findMany({include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:true},orderBy:{date:'desc'},take:take??500,skip:skip??0});
   return list.map(r=>({...r,coutTotal:[r.coutRemboursement,r.coutRemplacement,r.coutTransport,r.coutMainOeuvre,r.coutAutres,r.actionCurativeCout].reduce((s:number,v)=>s+(v||0),0)}));
  }
  reclamationGet(id:string){return this.db.reclamation.findUnique({where:{id},include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:{include:{responsible:true}}}})}
