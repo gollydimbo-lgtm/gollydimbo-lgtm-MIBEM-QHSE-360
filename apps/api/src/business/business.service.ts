@@ -281,6 +281,23 @@ import { saveFile } from '../documents/file-storage.util';
   return risk;
  }
  actionList(status?:string,take?:number,skip?:number){return this.db.action.findMany({where:status?{status}:undefined,include:{nonConformity:true,responsible:true,workUnit:true,parentAction:true,subActions:true},orderBy:{dueDate:'asc'},take:take??500,skip:skip??0})}
+ // Recherche texte harmonisée (audit priorité 7, finding #18) — même
+ // principe que riskSearch : filtre insensible à la casse sur les champs
+ // texte de l'action et les libellés liés, sans jointure lourde.
+ actionSearch(q:string){
+  if(!q||!q.trim()) return this.actionList();
+  const contains=(field:string)=>({[field]:{contains:q,mode:'insensitive'}});
+  return this.db.action.findMany({
+   where:{OR:[
+    contains('title'),contains('description'),contains('source'),
+    {responsible:{firstName:{contains:q,mode:'insensitive'}}},
+    {responsible:{lastName:{contains:q,mode:'insensitive'}}},
+    {workUnit:{name:{contains:q,mode:'insensitive'}}},
+   ]},
+   include:{nonConformity:true,responsible:true,workUnit:true,parentAction:true,subActions:true},
+   orderBy:{dueDate:'asc'},
+  });
+ }
  actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}},extensions:{include:{demandeur:true,validateur:true},orderBy:{createdAt:'desc'}},links:true}})}
  actionCreate(b:any){return this.db.action.create({data:b})}
  async actionUpdate(id:string,b:any){
@@ -899,6 +916,23 @@ import { saveFile } from '../documents/file-storage.util';
  // les anciennes méthodes haccpList/haccpCreate/haccpUpdate/haccpDelete sur
  // haccpRecord ont été supprimées avec l'ancien modèle plat.
  auditList(take?:number,skip?:number){return this.db.qhseAudit.findMany({include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},orderBy:{auditDate:'desc'},take:take??500,skip:skip??0})}
+ // Recherche texte harmonisée (audit priorité 7, finding #18).
+ auditSearch(q:string){
+  if(!q||!q.trim()) return this.auditList();
+  const contains=(field:string)=>({[field]:{contains:q,mode:'insensitive'}});
+  return this.db.qhseAudit.findMany({
+   where:{OR:[
+    contains('title'),contains('scope'),
+    {auditor:{firstName:{contains:q,mode:'insensitive'}}},
+    {auditor:{lastName:{contains:q,mode:'insensitive'}}},
+    {type:{label:{contains:q,mode:'insensitive'}}},
+    {referential:{label:{contains:q,mode:'insensitive'}}},
+    {workUnit:{name:{contains:q,mode:'insensitive'}}},
+   ]},
+   include:{auditor:true,responsableAudite:true,processus:true,type:true,referential:true,workUnit:true,auditFindings:{include:{nonConformity:true}}},
+   orderBy:{auditDate:'desc'},
+  });
+ }
  async auditGet(id:string){
   const audit=await this.db.qhseAudit.findUnique({where:{id},include:{
    auditor:true,responsableAudite:true,fournisseur:true,type:true,referential:true,workUnit:true,

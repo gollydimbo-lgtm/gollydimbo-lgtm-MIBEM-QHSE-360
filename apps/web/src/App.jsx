@@ -7829,6 +7829,15 @@ function AuditsPage() {
   const [editingChecklist, setEditingChecklist] = useState(null);
   const [editingAuditeur, setEditingAuditeur] = useState(null);
   const [generatingProgramId, setGeneratingProgramId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults(null); return; }
+    const t = setTimeout(() => {
+      api.get(`/business/audits-search?q=${encodeURIComponent(search.trim())}`).then(setSearchResults).catch(() => setSearchResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
   if (audits.loading || dashboardQ.loading) return <LoadingPanel />;
   if (audits.error) return <ErrorPanel message={audits.error} onRetry={audits.reload} />;
   const list = audits.data || [];
@@ -7840,6 +7849,15 @@ function AuditsPage() {
   const auditeurs = auditeursQ.data || [];
   const trends = trendsQ.data || [];
   const ncRecurrentes = ncRecurrentesQ.data || [];
+  // Export harmonisé (audit priorité 7, finding #17).
+  function auditsExportRows(rows) {
+    return [
+      ['Titre', 'Type', 'Référentiel', 'Date', 'Statut', 'Score', 'Constats'],
+      ...rows.map((a) => [a.title, a.type?.label || '', a.referential?.label || '', new Date(a.auditDate).toLocaleDateString('fr-FR'), a.status, a.score != null ? `${a.score}%` : '', (a.auditFindings || []).length]),
+    ];
+  }
+  function exportAuditsExcel(rows) { downloadWorkbook([['Audits', auditsExportRows(rows)]], `Audits-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportAuditsCsv(rows) { downloadCsv(auditsExportRows(rows), `Audits-${new Date().toISOString().slice(0, 10)}.csv`); }
   async function runComparaison() {
     const { debut1, fin1, debut2, fin2 } = comparaisonForm;
     if (!debut1 || !fin1 || !debut2 || !fin2) return;
@@ -7854,7 +7872,7 @@ function AuditsPage() {
     catch (err) { alert(err.message); }
     setSyntheseLoading(false);
   }
-  const sorted = [...list].sort((a, b) => new Date(b.auditDate) - new Date(a.auditDate));
+  const sorted = [...(searchResults ?? list)].sort((a, b) => new Date(b.auditDate) - new Date(a.auditDate));
   // Calendrier — regroupe audits et programme par mois calendaire.
   const calendrierEvents = [
     ...list.map((a) => ({ date: new Date(a.auditDate), label: a.title, type: 'audit', statut: a.status })),
@@ -7929,11 +7947,16 @@ function AuditsPage() {
             <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Planifier un audit</button>
           </div>
           <p className="text-xs" style={{ color: C.textMuted }}>Cliquez une ligne pour consulter et gérer ses constats.</p>
-          <Panel title="Programme d'audits">
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un audit (titre, périmètre, type, référentiel, auditeur...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={() => exportAuditsExcel(sorted)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={() => exportAuditsCsv(sorted)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          </div>
+          <Panel title={searchResults ? `Résultats de recherche (${sorted.length})` : "Programme d'audits"}>
             {sorted.length
               ? <DataTable columns={['Titre', 'Type', 'Référentiel', 'Date', 'Statut', 'Score', 'Constats']} rows={sorted.map((a) => [a.title, a.type?.label || '—', a.referential?.label || '—', new Date(a.auditDate).toLocaleDateString('fr-FR'), <StatusChip statut={a.status} />, a.score != null ? `${a.score}%` : '—', (a.auditFindings || []).length])}
                   onRowClick={(i) => setViewing(sorted[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun audit programmé pour le moment</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucun audit programmé pour le moment'}</p>}
           </Panel>
         </div>
       )}
@@ -9105,6 +9128,15 @@ function CapaPage() {
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [tab, setTab] = useState('apercu');
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults(null); return; }
+    const t = setTimeout(() => {
+      api.get(`/business/actions-search?q=${encodeURIComponent(search.trim())}`).then((r) => setSearchResults(r.filter((a) => !a.parentActionId))).catch(() => setSearchResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
   if (actions.loading || dashboardQ.loading) return <LoadingPanel />;
   if (actions.error) return <ErrorPanel message={actions.error} onRetry={actions.reload} />;
   const list = (actions.data || []).filter((a) => !a.parentActionId);
@@ -9112,13 +9144,23 @@ function CapaPage() {
   const alertes = alertesQ.data || [];
   const score = scoreQ.data || {};
   const trends = trendsQ.data || [];
-  const sorted = [...list].sort((a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity));
+  const sorted = [...(searchResults ?? list)].sort((a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity));
   const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
   const reloadAll = () => { actions.reload(); dashboardQ.reload(); alertesQ.reload(); scoreQ.reload(); };
   const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MINEURE: '#B45309', NON_CRITIQUE: C.green };
   const alerteColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber, INFORMATION: C.blue };
   const niveauColor = { EXCELLENT: C.green, BON: C.green, A_SURVEILLER: C.amber, INSUFFISANT: C.red, CRITIQUE: C.red };
   const niveauLabel = { EXCELLENT: 'Excellent', BON: 'Bon', A_SURVEILLER: 'À surveiller', INSUFFISANT: 'Insuffisant', CRITIQUE: 'Critique' };
+  // Export harmonisé (audit priorité 7, finding #17) — même principe que
+  // exportRisquesExcel/exportNcExcel : un tableau, deux formats.
+  function actionsExportRows() {
+    return [
+      ['Titre', 'Type', 'Source', 'Criticité', 'Priorité', 'Avancement (%)', 'Responsable', "Unité de travail", 'Échéance', 'Statut'],
+      ...sorted.map((a) => [a.title, a.actionType || '', a.source || '', a.criticite || '', a.priority || '', a.avancement || 0, a.responsible ? `${a.responsible.firstName} ${a.responsible.lastName}` : '', a.workUnit?.name || '', a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '', isOverdue(a.dueDate, a.status) ? 'En retard' : a.status]),
+    ];
+  }
+  function exportActionsExcel() { downloadWorkbook([['Actions CAPA', actionsExportRows()]], `Actions-CAPA-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportActionsCsv() { downloadCsv(actionsExportRows(), `Actions-CAPA-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -9181,7 +9223,12 @@ function CapaPage() {
             <LiveBadge />
             <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action CAPA</button>
           </div>
-          <Panel title="Plan d'actions CAPA (curatives, correctives, préventives, amélioration)">
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une action (titre, source, responsable, unité...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportActionsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportActionsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          </div>
+          <Panel title={searchResults ? `Résultats de recherche (${sorted.length})` : "Plan d'actions CAPA (curatives, correctives, préventives, amélioration)"}>
             {sorted.length
               ? <DataTable columns={['Action', 'Type', 'Criticité', 'Priorité', 'Avancement', 'Échéance', 'Statut']}
                   rows={sorted.map((a) => [
@@ -9192,7 +9239,7 @@ function CapaPage() {
                     <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : a.status} />,
                   ])}
                   onRowClick={(i) => setViewing(sorted[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucune action enregistrée pour le moment'}</p>}
           </Panel>
         </div>
       )}
