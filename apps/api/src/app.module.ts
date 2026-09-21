@@ -18,4 +18,5 @@ import { AttachmentsModule } from './attachments/attachments.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { HealthController } from './health.controller';
-@Module({imports:[ConfigModule.forRoot({isGlobal:true}),AuthModule,UsersModule,AuditModule,EpiModule,SyncModule,DocumentsModule,QhsModule,HaccpModule,BusinessModule,QualityModule,AttachmentsModule,DashboardModule,RecommendationsModule],controllers:[HealthController],providers:[PrismaService,{provide:APP_GUARD,useClass:JwtAuthGuard},{provide:APP_GUARD,useClass:RolesGuard}]}) export class AppModule {}
+import { NotificationsModule } from './notifications/notifications.module';
+@Module({imports:[ConfigModule.forRoot({isGlobal:true}),AuthModule,UsersModule,AuditModule,EpiModule,SyncModule,DocumentsModule,QhsModule,HaccpModule,BusinessModule,QualityModule,AttachmentsModule,DashboardModule,RecommendationsModule,NotificationsModule],controllers:[HealthController],providers:[PrismaService,{provide:APP_GUARD,useClass:JwtAuthGuard},{provide:APP_GUARD,useClass:RolesGuard}]}) export class AppModule {}

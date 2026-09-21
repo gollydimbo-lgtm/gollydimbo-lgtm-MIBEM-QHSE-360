@@ -3573,3 +3573,31 @@ model RapportDistribution {
   rapport RapportQhse @relation(fields:[rapportId], references:[id], onDelete:Cascade)
   destinataire User? @relation(fields:[destinataireId], references:[id], onDelete:SetNull)
 }
+
+// ============================================================================
+// Calendrier centralisé + notifications actives (chantier issu de l'audit) —
+// jusqu'ici les échéances (habilitations, maintenance, veille, audits...)
+// n'étaient visibles que sur le tableau de bord Pilotage, recalculées à
+// chaque affichage, sans trace persistée ni visibilité ailleurs dans
+// l'application. Notification les rend persistantes, consultables partout
+// (cloche dans l'en-tête) et marquables comme lues. Générée de façon
+// idempotente via sourceKey (même principe que BesoinFormation et
+// RegulatoryRiskReevaluationRequest) : relancer la génération ne duplique
+// jamais une notification déjà créée pour le même événement.
+// Ceci reste un système de notification INTERNE À L'APPLICATION : il n'y a
+// pas d'envoi e-mail/SMS (cela demanderait un service externe et des
+// identifiants que l'entreprise devra configurer séparément si souhaité).
+model Notification {
+  id String @id @default(cuid())
+  sourceKey String @unique
+  module String
+  niveau String @default("INFO")
+  titre String
+  detail String?
+  dueDate DateTime?
+  lienModule String?
+  lienEntityId String?
+  lu Boolean @default(false)
+  luLe DateTime?
+  createdAt DateTime @default(now())
+}

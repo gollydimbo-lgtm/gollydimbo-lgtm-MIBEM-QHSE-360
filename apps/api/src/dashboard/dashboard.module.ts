@@ -8,5 +8,6 @@ import { BusinessModule } from '../business/business.module';
   imports: [BusinessModule],
   controllers: [DashboardController],
   providers: [DashboardService, PrismaService],
+  exports: [DashboardService],
 })
 export class DashboardModule {}
