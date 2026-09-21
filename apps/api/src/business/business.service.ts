@@ -1378,7 +1378,148 @@ import { saveFile } from '../documents/file-storage.util';
    points:[...moisMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([mois,valeur])=>({mois,valeur:Math.round(valeur*100)/100})),
   }));
  }
- trainingList(){return this.db.training.findMany({include:{processus:true},orderBy:{scheduledAt:'desc'}})} trainingCreate(b:any){return this.db.training.create({data:b})} trainingUpdate(id:string,b:any){return this.db.training.update({where:{id},data:b})} trainingDelete(id:string){return this.db.training.delete({where:{id}})}
+ // === MODULE FORMATION — Phase 1 : fondations. Reprend le principe deja
+ // en place pour les Equipements (categories configurables, parametrage
+ // des seuils d'alerte, statut calcule jamais fabrique) applique au cycle
+ // Formation/Induction -> Habilitation -> Competence.
+ trainingInclude = { category:true, processus:true, participantsList:{include:{employee:true}}, habilitationsDelivrees:true, actions:{orderBy:{code:'desc' as const}} };
+ trainingList(){return this.db.training.findMany({include:this.trainingInclude,orderBy:{scheduledAt:'desc'}})}
+ trainingGet(id:string){return this.db.training.findUnique({where:{id},include:this.trainingInclude})}
+ async trainingCreate(b:any){
+  const t=await this.db.training.create({data:b});
+  await writeAudit(this.db,'TRAINING','CREATE',t.id,null,t);
+  return t;
+ }
+ async trainingUpdate(id:string,b:any){
+  const current=await this.db.training.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Formation introuvable');
+  const t=await this.db.training.update({where:{id},data:b});
+  await writeAudit(this.db,'TRAINING','UPDATE',id,current,t);
+  return t;
+ }
+ async trainingDelete(id:string){
+  const current=await this.db.training.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Formation introuvable');
+  await writeAudit(this.db,'TRAINING','DELETE',id,current,null);
+  return this.db.training.delete({where:{id}});
+ }
+ // Feuille de participants d'une session — remplace l'ensemble de la liste
+ // en une fois (upsert par collaborateur), plus simple pour l'UI que N appels.
+ async trainingParticipantsSet(trainingId:string,list:Array<{employeeId:string,present?:boolean,score?:number,seuilReussite?:number,resultat?:string,commentaire?:string}>){
+  const t=await this.db.training.findUnique({where:{id:trainingId}});
+  if(!t) throw new NotFoundException('Formation introuvable');
+  await this.db.trainingParticipant.deleteMany({where:{trainingId}});
+  if(list && list.length) await this.db.trainingParticipant.createMany({data:list.map(p=>({...p,trainingId}))});
+  return this.db.trainingParticipant.findMany({where:{trainingId},include:{employee:true}});
+ }
+ trainingCategoryList(){return this.db.trainingCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
+ trainingCategoryCreate(b:any){return this.db.trainingCategory.create({data:b})}
+ trainingCategoryUpdate(id:string,b:any){return this.db.trainingCategory.update({where:{id},data:b})}
+ trainingCategoryDelete(id:string){return this.db.trainingCategory.delete({where:{id}})}
+ async trainingSettingsGet(){
+  let s=await this.db.trainingSettings.findFirst();
+  if(!s) s=await this.db.trainingSettings.create({data:{}});
+  return s;
+ }
+ async trainingSettingsUpdate(b:any){
+  const current=await this.trainingSettingsGet();
+  return this.db.trainingSettings.update({where:{id:current.id},data:b});
+ }
+ // Statut d'une habilitation — calcule uniquement a partir de la date
+ // d'expiration reelle et des seuils configures, jamais suppose ni laisse
+ // a la seule saisie manuelle (coherent avec le reste de l'application).
+ private habilitationStatutCalcule(dateExpiration:Date|null|undefined,statutSaisi:string|undefined,settings:{alerteJ90:boolean,alerteJ60:boolean,alerteJ30:boolean,alerteJ15:boolean}):string{
+  if(statutSaisi==='SUSPENDUE'||statutSaisi==='EN_ATTENTE') return statutSaisi;
+  if(!dateExpiration) return 'VALIDE';
+  const now=new Date();
+  const joursRestants=Math.floor((new Date(dateExpiration).getTime()-now.getTime())/86400000);
+  if(joursRestants<0) return 'EXPIREE';
+  if(joursRestants<=15 && settings.alerteJ15) return 'A_RENOUVELER';
+  if(joursRestants<=30 && settings.alerteJ30) return 'A_RENOUVELER';
+  if(joursRestants<=60 && settings.alerteJ60) return 'EXPIRE_BIENTOT';
+  if(joursRestants<=90 && settings.alerteJ90) return 'EXPIRE_BIENTOT';
+  return 'VALIDE';
+ }
+ habilitationInclude = { employee:true, category:true, training:true };
+ async habilitationList(){
+  const settings=await this.trainingSettingsGet();
+  const rows=await this.db.habilitation.findMany({include:this.habilitationInclude,orderBy:{dateExpiration:'asc'}});
+  return rows.map(h=>({...h,statut:this.habilitationStatutCalcule(h.dateExpiration,h.statut,settings)}));
+ }
+ async habilitationGet(id:string){
+  const settings=await this.trainingSettingsGet();
+  const h=await this.db.habilitation.findUnique({where:{id},include:this.habilitationInclude});
+  if(!h) return null;
+  return {...h,statut:this.habilitationStatutCalcule(h.dateExpiration,h.statut,settings)};
+ }
+ async habilitationCreate(b:any){
+  const settings=await this.trainingSettingsGet();
+  const statut=this.habilitationStatutCalcule(b.dateExpiration?new Date(b.dateExpiration):null,b.statut,settings);
+  const h=await this.db.habilitation.create({data:{...b,statut}});
+  await writeAudit(this.db,'HABILITATION','CREATE',h.id,null,h);
+  return h;
+ }
+ async habilitationUpdate(id:string,b:any){
+  const current=await this.db.habilitation.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Habilitation introuvable');
+  const settings=await this.trainingSettingsGet();
+  const dateExpiration=b.dateExpiration!==undefined?(b.dateExpiration?new Date(b.dateExpiration):null):current.dateExpiration;
+  const statut=this.habilitationStatutCalcule(dateExpiration,b.statut??current.statut,settings);
+  const h=await this.db.habilitation.update({where:{id},data:{...b,statut}});
+  await writeAudit(this.db,'HABILITATION','UPDATE',id,current,h);
+  return h;
+ }
+ async habilitationDelete(id:string){
+  const current=await this.db.habilitation.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Habilitation introuvable');
+  await writeAudit(this.db,'HABILITATION','DELETE',id,current,null);
+  return this.db.habilitation.delete({where:{id}});
+ }
+ habilitationCategoryList(){return this.db.habilitationCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
+ habilitationCategoryCreate(b:any){return this.db.habilitationCategory.create({data:b})}
+ habilitationCategoryUpdate(id:string,b:any){return this.db.habilitationCategory.update({where:{id},data:b})}
+ habilitationCategoryDelete(id:string){return this.db.habilitationCategory.delete({where:{id}})}
+ // Tableau de bord FORMATION — uniquement des comptages et taux derives de
+ // donnees reellement saisies ; jamais de valeur par defaut quand
+ // l'echantillon est vide (cf. principe anti-fabrication du Cockpit QHSE 360).
+ async formationDashboard(){
+  const now=new Date();
+  const in30=new Date(now); in30.setDate(in30.getDate()+30);
+  const [trainings,habilitations]=await Promise.all([this.trainingList(),this.habilitationList()]);
+  const prevues=trainings.length;
+  const realisees=trainings.filter(t=>t.status==='REALISEE'||t.status==='CLOTUREE').length;
+  const enRetard=trainings.filter(t=>t.status!=='REALISEE'&&t.status!=='CLOTUREE'&&t.status!=='ANNULEE'&&new Date(t.scheduledAt)<now).length;
+  const obligatoiresNonRealisees=trainings.filter(t=>t.obligatoire&&t.status!=='REALISEE'&&t.status!=='CLOTUREE').length;
+  const inductions=trainings.filter(t=>t.type==='INDUCTION');
+  const formationsPures=trainings.filter(t=>t.type!=='INDUCTION');
+  let participantsAttendus=0,participantsPresents=0,evalues=0,reussis=0;
+  for(const t of trainings){
+   for(const p of (t.participantsList||[])){
+    participantsAttendus++;
+    if(p.present) participantsPresents++;
+    if(p.resultat&&p.resultat!=='NON_EVALUE'){evalues++; if(p.resultat==='REUSSI') reussis++;}
+   }
+  }
+  const habilitationsValides=habilitations.filter(h=>h.statut==='VALIDE').length;
+  const habilitationsExpirantBientot=habilitations.filter(h=>h.statut==='EXPIRE_BIENTOT'||h.statut==='A_RENOUVELER').length;
+  const habilitationsExpirees=habilitations.filter(h=>h.statut==='EXPIREE').length;
+  const budgetPrevu=trainings.reduce((s,t)=>s+(t.budgetAlloue||0),0);
+  const budgetConsomme=trainings.reduce((s,t)=>s+(t.coutReel||0),0);
+  return {
+   generatedAt:now,
+   plan:{ prevues, realisees, enRetard, annulees:trainings.filter(t=>t.status==='ANNULEE').length, obligatoiresNonRealisees,
+    tauxRealisation: prevues>0?Math.round((realisees/prevues)*100):null },
+   induction:{ total:inductions.length, realisees:inductions.filter(t=>t.status==='REALISEE'||t.status==='CLOTUREE').length },
+   formation:{ total:formationsPures.length },
+   participation:{ attendus:participantsAttendus, presents:participantsPresents,
+    tauxParticipation: participantsAttendus>0?Math.round((participantsPresents/participantsAttendus)*100):null },
+   evaluation:{ evalues, reussis,
+    tauxReussite: evalues>0?Math.round((reussis/evalues)*100):null },
+   habilitations:{ total:habilitations.length, valides:habilitationsValides, expirantBientot:habilitationsExpirantBientot, expirees:habilitationsExpirees },
+   budget:{ prevu:budgetPrevu, consomme:budgetConsomme, tauxConsommation: budgetPrevu>0?Math.round((budgetConsomme/budgetPrevu)*100):null },
+  };
+ }
+
 
  // === MODULE ÉQUIPEMENTS — Phase 1 : fondations, criticité, chaîne
  // Équipement -> Risque -> Contrôle -> NC -> CAPA ===

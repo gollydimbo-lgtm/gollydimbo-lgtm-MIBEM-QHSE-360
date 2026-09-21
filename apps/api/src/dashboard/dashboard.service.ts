@@ -45,6 +45,9 @@ export class DashboardService {
       equipmentOverdueInspection,
       epiRenewalsDue,
       environmentRecords30d,
+      formationsEnRetard,
+      formationsObligatoiresNonRealisees,
+      habilitationsExpirees,
     ] = await Promise.all([
       this.db.nonConformity.count({ where: { status: { not: 'CLOSED' } } }),
       this.db.nonConformity.count({ where: { status: { not: 'CLOSED' }, severity: { gte: 4 } } }),
@@ -64,6 +67,9 @@ export class DashboardService {
       this.db.equipment.count({ where: { nextInspectionAt: { lt: now } } }),
       this.db.epiAssignment.count({ where: { renewalAt: { gte: now, lte: in30Days } } }),
       this.db.environmentRecord.count({ where: { recordedAt: { gte: this.daysAgo(30) } } }),
+      this.db.training.count({ where: { status: { notIn: ['REALISEE', 'CLOTUREE', 'ANNULEE'] }, scheduledAt: { lt: now } } }),
+      this.db.training.count({ where: { obligatoire: true, status: { notIn: ['REALISEE', 'CLOTUREE'] } } }),
+      this.db.habilitation.count({ where: { dateExpiration: { lt: now } } }),
     ]);
 
     const qualityComplianceRate = qualityControlsSubmittedRange > 0
@@ -89,6 +95,9 @@ export class DashboardService {
         equipmentOverdueInspection,
         epiRenewalsDue30d: epiRenewalsDue,
         environmentRecords30d,
+        formationsEnRetard,
+        formationsObligatoiresNonRealisees,
+        habilitationsExpirees,
       },
       indicators: {
         qualite: {
@@ -146,8 +155,9 @@ export class DashboardService {
     const in3Days = new Date(now); in3Days.setDate(in3Days.getDate() + 3);
     const in7Days = new Date(now); in7Days.setDate(in7Days.getDate() + 7);
     const in15Days = new Date(now); in15Days.setDate(in15Days.getDate() + 15);
+    const in30Days = new Date(now); in30Days.setDate(in30Days.getDate() + 30);
 
-    const [overdueActions, dueSoonActions, criticalNc, upcomingAudits, epiDue, overdueEquipment, pendingDocs] = await Promise.all([
+    const [overdueActions, dueSoonActions, criticalNc, upcomingAudits, epiDue, overdueEquipment, pendingDocs, overdueTrainings, expiringHabilitations] = await Promise.all([
       this.db.action.findMany({ where: { status: { not: 'CLOSED' }, dueDate: { lt: now } }, orderBy: { dueDate: 'asc' }, take: 20 }),
       this.db.action.findMany({ where: { status: { not: 'CLOSED' }, dueDate: { gte: now, lte: in3Days } }, orderBy: { dueDate: 'asc' }, take: 20 }),
       this.db.nonConformity.findMany({ where: { status: { not: 'CLOSED' }, severity: { gte: 4 } }, orderBy: { occurredAt: 'desc' }, take: 20 }),
@@ -155,6 +165,8 @@ export class DashboardService {
       this.db.epiAssignment.findMany({ where: { renewalAt: { gte: now, lte: in15Days } }, include: { employee: true, epi: true }, orderBy: { renewalAt: 'asc' }, take: 20 }),
       this.db.equipment.findMany({ where: { nextInspectionAt: { lt: now } }, orderBy: { nextInspectionAt: 'asc' }, take: 20 }),
       this.db.document.findMany({ where: { status: DocumentStatus.REVIEW }, orderBy: { updatedAt: 'asc' }, take: 20 }),
+      this.db.training.findMany({ where: { status: { notIn: ['REALISEE', 'CLOTUREE', 'ANNULEE'] }, scheduledAt: { lt: now } }, orderBy: { scheduledAt: 'asc' }, take: 20 }),
+      this.db.habilitation.findMany({ where: { dateExpiration: { lte: in30Days } }, include: { employee: true }, orderBy: { dateExpiration: 'asc' }, take: 20 }),
     ]);
 
     const alerts: Alert[] = [];
@@ -180,6 +192,13 @@ export class DashboardService {
     }
     for (const d of pendingDocs) {
       alerts.push({ level: 'INFO', icon: '🔵', domain: 'DOCUMENT', code: d.code, title: d.title, detail: 'en attente de validation', dueDate: null });
+    }
+    for (const t of overdueTrainings) {
+      alerts.push({ level: t.obligatoire ? 'CRITICAL' : 'WARNING', icon: t.obligatoire ? '🔴' : '🟠', domain: 'FORMATION', code: t.code, title: t.title, detail: t.obligatoire ? 'formation obligatoire en retard' : 'formation en retard', dueDate: t.scheduledAt });
+    }
+    for (const h of expiringHabilitations) {
+      const late = h.dateExpiration && h.dateExpiration < now;
+      alerts.push({ level: late ? 'CRITICAL' : 'WARNING', icon: late ? '🔴' : '🟠', domain: 'HABILITATION', code: h.code, title: `${h.intitule} — ${h.employee.firstName} ${h.employee.lastName}`, detail: late ? 'habilitation expirée' : 'habilitation arrivant à échéance sous 30 jours', dueDate: h.dateExpiration });
     }
 
     const rank = { CRITICAL: 0, WARNING: 1, INFO: 2, SUCCESS: 3 } as const;

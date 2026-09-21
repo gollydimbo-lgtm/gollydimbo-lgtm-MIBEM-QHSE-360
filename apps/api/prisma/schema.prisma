@@ -518,6 +518,8 @@ model Employee {
   penibiliteExpositions PenibiliteExposition[]
   safetyTalkParticipations SafetyTalkParticipant[]
   haccpTeamMemberships HaccpTeamMember[]
+  habilitations Habilitation[]
+  trainingParticipations TrainingParticipant[]
 }
 
 model EpiAssignment {
@@ -920,6 +922,7 @@ model Action {
   equipmentId String?
   regulatoryRequirementId String?
   objectifQhseId String?
+  trainingId String?
   // --- Module Actions CAPA (Phases 1+2), additif ---
   // Distinction volontaire curative/corrective/préventive/amélioration —
   // jamais réduite au seul couple corrective/préventive, pour éviter la
@@ -959,6 +962,7 @@ model Action {
   links CapaLink[]
   regulatoryRequirement RegulatoryRequirement? @relation(fields:[regulatoryRequirementId], references:[id], onDelete:SetNull)
   objectifQhse ObjectifQhse? @relation(fields:[objectifQhseId], references:[id], onDelete:SetNull)
+  training Training? @relation(fields:[trainingId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status,dueDate])
@@ -1964,6 +1968,10 @@ model ProduitChimique {
   fournisseur Fournisseur? @relation(fields:[fournisseurId], references:[id], onDelete:SetNull)
 }
 
+// === MODULE FORMATION — Phase 1 : fondations. Distinction volontaire
+// INDUCTION (droit d'entree, accueil securite) / FORMATION (acquisition et
+// validation d'une competence), champs de planification, cout et lien
+// competence/reglementaire, additif — aucun champ existant modifie.
 model Training {
   id String @id @default(cuid())
   code String @unique
@@ -1977,6 +1985,114 @@ model Training {
   processusId String?
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
   riskMeasures RiskMeasure[]
+  // --- Phase 1 FORMATION ---
+  type String @default("FORMATION") // INDUCTION | FORMATION
+  categoryId String?
+  category TrainingCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
+  obligatoire Boolean @default(false)
+  domaine String?
+  publicCible String?
+  objectif String?
+  organisme String?
+  interneExterne String @default("INTERNE")
+  referenceReglementaire String?
+  competenceVisee String?
+  coutPrevu Float?
+  coutReel Float?
+  budgetAlloue Float?
+  priorite String?
+  motifBesoin String?
+  periodiciteMois Int?
+  recyclageNecessaire Boolean @default(false)
+  service String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  participantsList TrainingParticipant[]
+  habilitationsDelivrees Habilitation[]
+  actions Action[]
+}
+
+// Catalogue des categories/domaines de formation — configurable par
+// l'administrateur (INDUCTION, SST, HABILITATION, SENSIBILISATION...),
+// jamais une liste figee dans le code.
+model TrainingCategory {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  groupe String?
+  order Int @default(0)
+  active Boolean @default(true)
+  trainings Training[]
+}
+
+// Participation individuelle a une formation — table de liaison structuree
+// (plutot que le seul champ participants Json existant, conserve pour
+// compatibilite) : c'est elle qui permet de repondre "qui est forme ?" par
+// collaborateur et d'alimenter les taux de participation/reussite.
+model TrainingParticipant {
+  id String @id @default(cuid())
+  trainingId String
+  employeeId String
+  present Boolean?
+  score Float?
+  seuilReussite Float?
+  resultat String? // REUSSI | A_RENFORCER | ECHEC | NON_EVALUE
+  commentaire String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  training Training @relation(fields:[trainingId], references:[id], onDelete:Cascade)
+  employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade)
+  @@unique([trainingId,employeeId])
+}
+
+// Catalogue des types d'habilitation/certification — configurable,
+// jamais limite aux exemples du cahier des charges (SST, electrique,
+// hauteur, engins, pont roulant, espaces confines, HACCP...).
+model HabilitationCategory {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  dureeValiditeMois Int?
+  order Int @default(0)
+  active Boolean @default(true)
+  habilitations Habilitation[]
+}
+
+// Registre des habilitations/certifications par collaborateur. Statut
+// calcule (jamais fabrique) a partir de dateExpiration et des seuils
+// configures dans TrainingSettings : VALIDE / EXPIRE_BIENTOT /
+// A_RENOUVELER / EXPIREE / SUSPENDUE / EN_ATTENTE.
+model Habilitation {
+  id String @id @default(cuid())
+  code String @unique
+  employeeId String
+  categoryId String?
+  intitule String
+  organisme String?
+  numeroDocument String?
+  dateObtention DateTime?
+  dateExpiration DateTime?
+  statut String @default("VALIDE")
+  trainingId String?
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade)
+  category HabilitationCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
+  training Training? @relation(fields:[trainingId], references:[id], onDelete:SetNull)
+}
+
+// Parametrage global du module FORMATION — seuils d'alerte avant
+// expiration des habilitations et poids dans le score QHSE global,
+// jamais codes en dur (meme principe que EquipmentSettings).
+model TrainingSettings {
+  id String @id @default(cuid())
+  alerteJ90 Boolean @default(true)
+  alerteJ60 Boolean @default(true)
+  alerteJ30 Boolean @default(true)
+  alerteJ15 Boolean @default(false)
+  ponderationScoreGlobal Float @default(10)
+  updatedAt DateTime @updatedAt
 }
 
 // Catalogue de catégories d'équipements — configurable par l'administrateur,

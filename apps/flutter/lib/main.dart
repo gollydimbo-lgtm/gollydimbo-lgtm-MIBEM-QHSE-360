@@ -36,6 +36,7 @@ import 'pages/non_conformities_page.dart';
 import 'pages/quality_pages.dart';
 import 'pages/actions_page.dart';
 import 'pages/safety_talk_page.dart';
+import 'pages/formation_page.dart';
 import 'theme.dart';
 
 // Clé de navigation globale : permet à Api.onUnauthorized (statique, sans
@@ -163,6 +164,7 @@ class _HomeShellState extends State<HomeShell> {
     _NavGroup('SYSTÈME', [
       _NavItem('Documentation (GED)', Icons.folder_open_outlined, const GedPage()),
       _NavItem("Quart d'heure sécurité", Icons.shield_outlined, const SafetyTalkPage()),
+      _NavItem('Formation & Compétences', Icons.school_outlined, const FormationPage()),
       _NavItem('HACCP', Icons.restaurant_menu_outlined, const HaccpPage()),
       _NavItem('Équipements', Icons.precision_manufacturing_outlined, const EquipmentPage()),
       _NavItem('Veille réglementaire', Icons.search_outlined, const RegulatoryPage()),

@@ -10,7 +10,7 @@ import {
   FlaskConical, Users, Sun, Moon, Search, ClipboardCheck,
   FileWarning, Target, BookOpen, FolderOpen, Wrench, Menu, X, RefreshCw, LogOut, ChevronDown,
   Shield, UtensilsCrossed, Cog, Link2, Send, Copy, CheckCircle2, RotateCcw,
-  QrCode, Download, Printer,
+  QrCode, Download, Printer, GraduationCap, Award, UserCheck,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
@@ -4137,6 +4137,7 @@ const NAV_GROUPS = [
   { label: 'SYSTÈME', items: [
     { id: 'documentation', label: 'Documentation (GED)', icon: BookOpen },
     { id: 'quart-heure-securite', label: "Quart d'heure sécurité", icon: Shield },
+    { id: 'formation', label: 'Formation & Compétences', icon: GraduationCap },
     { id: 'haccp', label: 'HACCP', icon: UtensilsCrossed },
     { id: 'equipements', label: 'Équipements', icon: Cog },
     { id: 'veille', label: 'Veille réglementaire', icon: Search },
@@ -13012,6 +13013,405 @@ function exportEquipmentCsv(list) {
   downloadCsv(equipmentExportRows(list), `registre_equipements_${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
+// ============================================================================
+// FORMATION & COMPÉTENCES — Phase 1 : fondations. Distinction INDUCTION
+// (droit d'entrée) / FORMATION (compétence), plan de formation, registre
+// des habilitations avec alertes d'échéance configurables (mêmes seuils
+// que le module Équipements), centre d'alertes déjà alimenté côté Pilotage.
+// ============================================================================
+const TRAINING_TYPE_LABELS = { INDUCTION: 'Induction', FORMATION: 'Formation' };
+const TRAINING_STATUS_LABELS = { DRAFT: 'Brouillon', PLANNED: 'Planifiée', PROGRAMMED: 'Programmée', IN_PROGRESS: 'En cours', REALISEE: 'Réalisée', REPORTEE: 'Reportée', ANNULEE: 'Annulée', CLOTUREE: 'Clôturée' };
+function trainingStatusColor(C, s, scheduledAt) {
+  if (s === 'REALISEE' || s === 'CLOTUREE') return C.green;
+  if (s === 'ANNULEE') return C.textMuted;
+  if (s === 'REPORTEE') return C.amber;
+  if (scheduledAt && new Date(scheduledAt) < new Date() && s !== 'REALISEE' && s !== 'CLOTUREE') return C.red;
+  return C.blue;
+}
+function trainingStatusLabel(t) {
+  if (t.status !== 'REALISEE' && t.status !== 'CLOTUREE' && t.status !== 'ANNULEE' && new Date(t.scheduledAt) < new Date()) return 'En retard';
+  return TRAINING_STATUS_LABELS[t.status] || t.status;
+}
+const HABILITATION_STATUT_LABELS = { VALIDE: 'Valide', EXPIRE_BIENTOT: 'Expire bientôt', A_RENOUVELER: 'À renouveler', EXPIREE: 'Expirée', SUSPENDUE: 'Suspendue', EN_ATTENTE: 'En attente de renouvellement' };
+function habilitationStatutColor(C, s) { return { VALIDE: C.green, EXPIRE_BIENTOT: C.amber, A_RENOUVELER: C.amber, EXPIREE: C.red, SUSPENDUE: C.textMuted, EN_ATTENTE: C.blue }[s] || C.textMuted; }
+const RESULTAT_LABELS = { REUSSI: 'Réussi', A_RENFORCER: 'À renforcer', ECHEC: 'Échec', NON_EVALUE: 'Non évalué' };
+
+function FormationPage() {
+  const C = useTheme();
+  const dashQ = useCollection('/business/formation-dashboard');
+  const trainingsQ = useCollection('/business/trainings');
+  const habilitationsQ = useCollection('/business/habilitations');
+  const employeesQ = useCollection('/epi/employees');
+  const [tab, setTab] = useState('plan');
+  const [typeFilter, setTypeFilter] = useState('TOUS');
+  const [employeeFilter, setEmployeeFilter] = useState('');
+  const [showFormationTrainingForm, setShowFormationTrainingForm] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  const [showHabForm, setShowHabForm] = useState(false);
+  const [editingHab, setEditingHab] = useState(null);
+  const loading = dashQ.loading || trainingsQ.loading || habilitationsQ.loading || employeesQ.loading;
+  if (loading) return <LoadingPanel />;
+  if (dashQ.error) return <ErrorPanel message={dashQ.error} onRetry={dashQ.reload} />;
+  const dash = dashQ.data;
+  const trainings = trainingsQ.data || [];
+  const habilitations = habilitationsQ.data || [];
+  const reload = () => { dashQ.reload(); trainingsQ.reload(); habilitationsQ.reload(); };
+  const trainingsFiltered = trainings.filter((t) => {
+    if (typeFilter !== 'TOUS' && t.type !== typeFilter) return false;
+    if (employeeFilter && !(t.participantsList || []).some((p) => p.employeeId === employeeFilter)) return false;
+    return true;
+  });
+  const habilitationsFiltered = habilitations.filter((h) => !employeeFilter || h.employeeId === employeeFilter);
+
+  return (
+    <div className="space-y-6">
+      {showFormationTrainingForm && <FormationTrainingForm onClose={() => setShowFormationTrainingForm(false)} onCreated={reload} />}
+      {detailId && <TrainingDetailModal trainingId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />}
+      {(showHabForm || editingHab) && <HabilitationForm record={editingHab} onClose={() => { setShowHabForm(false); setEditingHab(null); }} onCreated={reload} />}
+
+      <div className="flex items-center justify-between">
+        <LiveBadge />
+        <div className="flex gap-2">
+          <button onClick={() => setShowFormationTrainingForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Formation / Induction</button>
+          <button onClick={() => setShowHabForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>+ Habilitation</button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Formations prévues" value={dash.plan.prevues} objectif={`${dash.plan.realisees} réalisée(s)`} color={C.blue} icon={GraduationCap} />
+        <KpiCard label="Taux de réalisation" value={dash.plan.tauxRealisation != null ? `${dash.plan.tauxRealisation}%` : '—'} objectif="plan de formation" color={C.green} icon={CheckCircle2} />
+        <KpiCard label="En retard" value={dash.plan.enRetard} color={dash.plan.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+        <KpiCard label="Obligatoires non réalisées" value={dash.plan.obligatoiresNonRealisees} color={dash.plan.obligatoiresNonRealisees > 0 ? C.red : C.green} icon={FileWarning} />
+        <KpiCard label="Taux de participation" value={dash.participation.tauxParticipation != null ? `${dash.participation.tauxParticipation}%` : '—'} objectif={`${dash.participation.presents}/${dash.participation.attendus}`} color={C.blue} icon={Users} />
+        <KpiCard label="Taux de réussite" value={dash.evaluation.tauxReussite != null ? `${dash.evaluation.tauxReussite}%` : '—'} objectif={dash.evaluation.evalues ? `${dash.evaluation.evalues} évalué(s)` : 'aucune évaluation'} color={C.green} icon={Award} />
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <KpiCard label="Habilitations valides" value={dash.habilitations.valides} objectif={`${dash.habilitations.total} au total`} color={C.green} icon={ShieldCheck} />
+        <KpiCard label="Expirant / à renouveler" value={dash.habilitations.expirantBientot} color={dash.habilitations.expirantBientot > 0 ? C.amber : C.green} icon={AlertTriangle} />
+        <KpiCard label="Expirées" value={dash.habilitations.expirees} color={dash.habilitations.expirees > 0 ? C.red : C.green} icon={FileWarning} />
+        <KpiCard label="Budget consommé" value={dash.budget.tauxConsommation != null ? `${dash.budget.tauxConsommation}%` : '—'} objectif={dash.budget.prevu ? `${dash.budget.consomme.toLocaleString('fr-FR')} / ${dash.budget.prevu.toLocaleString('fr-FR')} FCFA` : 'aucun budget prévu'} color={C.blue} icon={Wrench} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {[['plan', 'Plan de formation'], ['habilitations', 'Habilitations & certifications']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
+        ))}
+        <div className="flex-1" />
+        <select value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+          <option value="">Tous les collaborateurs</option>
+          {employeesQ.data.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+        </select>
+      </div>
+
+      {tab === 'plan' && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {[['TOUS', 'Tous'], ['INDUCTION', 'Induction'], ['FORMATION', 'Formation']].map(([id, label]) => (
+              <button key={id} onClick={() => setTypeFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: typeFilter === id ? C.blue : C.cardAlt, color: typeFilter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
+            ))}
+          </div>
+          <Panel title="Plan de formation" subtitle={`${trainingsFiltered.length} session(s)`}>
+            {trainingsFiltered.length ? (
+              <DataTable columns={['Code', 'Intitulé', 'Type', 'Domaine', 'Date prévue', 'Statut', 'Obligatoire']}
+                rows={trainingsFiltered.map((t) => [
+                  t.code, t.title, TRAINING_TYPE_LABELS[t.type] || t.type, t.domaine || '—',
+                  new Date(t.scheduledAt).toLocaleDateString('fr-FR'),
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${trainingStatusColor(C, t.status, t.scheduledAt)}22`, color: trainingStatusColor(C, t.status, t.scheduledAt) }}>{trainingStatusLabel(t)}</span>,
+                  t.obligatoire ? <span style={{ color: C.red }}>Oui</span> : 'Non',
+                ])} onRowClick={(i) => setDetailId(trainingsFiltered[i].id)} />
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune formation pour ce filtre</p>}
+          </Panel>
+        </>
+      )}
+
+      {tab === 'habilitations' && (
+        <Panel title="Registre des habilitations & certifications" subtitle={`${habilitationsFiltered.length} habilitation(s)`}>
+          {habilitationsFiltered.length ? (
+            <DataTable columns={['Code', 'Collaborateur', 'Intitulé', 'Catégorie', 'Expiration', 'Statut']}
+              rows={habilitationsFiltered.map((h) => [
+                h.code, `${h.employee.firstName} ${h.employee.lastName}`, h.intitule, h.category?.label || '—',
+                h.dateExpiration ? new Date(h.dateExpiration).toLocaleDateString('fr-FR') : '—',
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${habilitationStatutColor(C, h.statut)}22`, color: habilitationStatutColor(C, h.statut) }}>{HABILITATION_STATUT_LABELS[h.statut] || h.statut}</span>,
+              ])} onRowClick={(i) => setEditingHab(habilitationsFiltered[i])} />
+          ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune habilitation pour ce filtre</p>}
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+function FormationTrainingForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const categoriesQ = useCollection('/business/training-categories');
+  const [form, setForm] = useState({
+    title: record?.title || '', type: record?.type || 'FORMATION', categoryId: record?.categoryId || '',
+    obligatoire: record?.obligatoire || false, domaine: record?.domaine || '', publicCible: record?.publicCible || '',
+    objectif: record?.objectif || '', trainer: record?.trainer || '', organisme: record?.organisme || '',
+    interneExterne: record?.interneExterne || 'INTERNE', referenceReglementaire: record?.referenceReglementaire || '',
+    competenceVisee: record?.competenceVisee || '', scheduledAt: record?.scheduledAt ? new Date(record.scheduledAt).toISOString().slice(0, 10) : '',
+    durationHours: record?.durationHours ?? '', coutPrevu: record?.coutPrevu ?? '', coutReel: record?.coutReel ?? '',
+    budgetAlloue: record?.budgetAlloue ?? '', priorite: record?.priorite || 'MOYENNE', motifBesoin: record?.motifBesoin || '',
+    periodiciteMois: record?.periodiciteMois ?? '', recyclageNecessaire: record?.recyclageNecessaire || false,
+    service: record?.service || '', status: record?.status || 'PLANNED', expiryAt: record?.expiryAt ? new Date(record.expiryAt).toISOString().slice(0, 10) : '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      const payload = {
+        ...form,
+        categoryId: form.categoryId || null,
+        durationHours: form.durationHours === '' ? null : Number(form.durationHours),
+        coutPrevu: form.coutPrevu === '' ? null : Number(form.coutPrevu),
+        coutReel: form.coutReel === '' ? null : Number(form.coutReel),
+        budgetAlloue: form.budgetAlloue === '' ? null : Number(form.budgetAlloue),
+        periodiciteMois: form.periodiciteMois === '' ? null : Number(form.periodiciteMois),
+        scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
+        expiryAt: form.expiryAt ? new Date(form.expiryAt).toISOString() : null,
+      };
+      if (editing) await api.patch(`/business/trainings/${record.id}`, payload);
+      else await api.post('/business/trainings', { code: genCode(form.type === 'INDUCTION' ? 'IND' : 'FOR'), ...payload });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? 'Modifier la formation' : 'Nouvelle formation / induction'} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Intitulé"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Type">
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="FORMATION">Formation</option>
+              <option value="INDUCTION">Induction (accueil sécurité)</option>
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Catégorie (optionnel)">
+            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(categoriesQ.data || []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Domaine (optionnel)"><input value={form.domaine} onChange={(e) => setForm({ ...form, domaine: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Public cible (optionnel)"><input value={form.publicCible} onChange={(e) => setForm({ ...form, publicCible: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Service concerné (optionnel)"><input value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Objectif (optionnel)"><textarea rows={2} value={form.objectif} onChange={(e) => setForm({ ...form, objectif: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Formateur (optionnel)"><input value={form.trainer} onChange={(e) => setForm({ ...form, trainer: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Interne / externe">
+            <select value={form.interneExterne} onChange={(e) => setForm({ ...form, interneExterne: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="INTERNE">Interne</option><option value="EXTERNE">Externe</option>
+            </select>
+          </FormField>
+          <FormField label="Organisme (optionnel)"><input value={form.organisme} onChange={(e) => setForm({ ...form, organisme: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Référence réglementaire (optionnel)"><input value={form.referenceReglementaire} onChange={(e) => setForm({ ...form, referenceReglementaire: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Compétence visée (optionnel)"><input value={form.competenceVisee} onChange={(e) => setForm({ ...form, competenceVisee: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Date prévue"><input required type="date" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Durée (heures, optionnel)"><input type="number" step="0.5" value={form.durationHours} onChange={(e) => setForm({ ...form, durationHours: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Statut">
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              {Object.entries(TRAINING_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Coût prévu (optionnel)"><input type="number" value={form.coutPrevu} onChange={(e) => setForm({ ...form, coutPrevu: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Coût réel (optionnel)"><input type="number" value={form.coutReel} onChange={(e) => setForm({ ...form, coutReel: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Budget alloué (optionnel)"><input type="number" value={form.budgetAlloue} onChange={(e) => setForm({ ...form, budgetAlloue: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Priorité">
+            <select value={form.priorite} onChange={(e) => setForm({ ...form, priorite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="CRITIQUE">Critique</option><option value="ELEVEE">Élevée</option><option value="MOYENNE">Moyenne</option><option value="FAIBLE">Faible</option>
+            </select>
+          </FormField>
+          <FormField label="Périodicité de recyclage, en mois (optionnel)"><input type="number" value={form.periodiciteMois} onChange={(e) => setForm({ ...form, periodiciteMois: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Échéance / expiration liée (optionnel)"><input type="date" value={form.expiryAt} onChange={(e) => setForm({ ...form, expiryAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Motif du besoin (optionnel)"><input value={form.motifBesoin} onChange={(e) => setForm({ ...form, motifBesoin: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="flex items-center gap-4 mt-2">
+          <label className="flex items-center gap-2 text-sm" style={{ color: C.text }}><input type="checkbox" checked={form.obligatoire} onChange={(e) => setForm({ ...form, obligatoire: e.target.checked })} /> Formation obligatoire</label>
+          <label className="flex items-center gap-2 text-sm" style={{ color: C.text }}><input type="checkbox" checked={form.recyclageNecessaire} onChange={(e) => setForm({ ...form, recyclageNecessaire: e.target.checked })} /> Recyclage nécessaire</label>
+        </div>
+        {error && <p className="text-sm mt-2" style={{ color: C.red }}>{error}</p>}
+        <div className="flex justify-end gap-2 mt-4">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function TrainingDetailModal({ trainingId, onClose, onChanged }) {
+  const C = useTheme();
+  const trainingQ = useCollection(`/business/trainings/${trainingId}`);
+  const employeesQ = useCollection('/epi/employees');
+  const [showEdit, setShowEdit] = useState(false);
+  const [rows, setRows] = useState(null);
+  const [addEmployeeId, setAddEmployeeId] = useState('');
+  const [saving, setSaving] = useState(false);
+  if (trainingQ.loading || employeesQ.loading) return <LoadingPanel />;
+  if (trainingQ.error || !trainingQ.data) return <ErrorPanel message={trainingQ.error || 'Formation introuvable'} onRetry={trainingQ.reload} />;
+  const t = trainingQ.data;
+  const participants = rows || (t.participantsList || []).map((p) => ({ employeeId: p.employeeId, present: p.present ?? false, score: p.score ?? '', resultat: p.resultat || 'NON_EVALUE', commentaire: p.commentaire || '' }));
+  const already = new Set(participants.map((p) => p.employeeId));
+  const candidates = (employeesQ.data || []).filter((e) => !already.has(e.id));
+  function setRow(idx, patch) { const next = participants.map((p, i) => (i === idx ? { ...p, ...patch } : p)); setRows(next); }
+  function addParticipant() { if (!addEmployeeId) return; setRows([...participants, { employeeId: addEmployeeId, present: true, score: '', resultat: 'NON_EVALUE', commentaire: '' }]); setAddEmployeeId(''); }
+  function removeParticipant(idx) { setRows(participants.filter((_, i) => i !== idx)); }
+  async function saveParticipants() {
+    setSaving(true);
+    try {
+      const payload = participants.map((p) => ({ employeeId: p.employeeId, present: !!p.present, score: p.score === '' ? null : Number(p.score), resultat: p.resultat, commentaire: p.commentaire || null }));
+      await api.patch(`/business/trainings/${trainingId}/participants`, { participants: payload });
+      setRows(null); trainingQ.reload(); onChanged();
+    } catch (err) { alert(err.message); }
+    setSaving(false);
+  }
+  async function del() {
+    try { await confirmAndDelete(t.title, `/business/trainings/${trainingId}`, () => { onChanged(); onClose(); }); }
+    catch (err) { alert(err.message); }
+  }
+  return (
+    <>
+      {showEdit && <FormationTrainingForm record={t} onClose={() => setShowEdit(false)} onCreated={() => { trainingQ.reload(); onChanged(); }} />}
+      <Modal title={`${t.code} — ${t.title}`} onClose={onClose} wide>
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button onClick={() => setShowEdit(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Modifier</button>
+          <button onClick={del} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.red, color: '#fff' }}>Supprimer</button>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-sm mb-4" style={{ color: C.text }}>
+          <div><span style={{ color: C.textMuted }}>Type : </span>{TRAINING_TYPE_LABELS[t.type] || t.type}{t.obligatoire ? ' (obligatoire)' : ''}</div>
+          <div><span style={{ color: C.textMuted }}>Date : </span>{new Date(t.scheduledAt).toLocaleDateString('fr-FR')}</div>
+          <div><span style={{ color: C.textMuted }}>Statut : </span><span style={{ color: trainingStatusColor(C, t.status, t.scheduledAt) }}>{trainingStatusLabel(t)}</span></div>
+          <div><span style={{ color: C.textMuted }}>Domaine : </span>{t.domaine || '—'}</div>
+          <div><span style={{ color: C.textMuted }}>Compétence visée : </span>{t.competenceVisee || '—'}</div>
+          <div><span style={{ color: C.textMuted }}>Organisme : </span>{t.organisme || '—'}</div>
+        </div>
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Participants & évaluation</p>
+        {participants.length ? (
+          <div className="space-y-2 mb-3">
+            {participants.map((p, i) => {
+              const emp = (employeesQ.data || []).find((e) => e.id === p.employeeId);
+              return (
+                <div key={p.employeeId} className="flex flex-wrap items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                  <span className="text-sm flex-1 min-w-[140px]" style={{ color: C.text }}>{emp ? `${emp.firstName} ${emp.lastName}` : p.employeeId}</span>
+                  <label className="flex items-center gap-1 text-xs" style={{ color: C.textMuted }}><input type="checkbox" checked={!!p.present} onChange={(e) => setRow(i, { present: e.target.checked })} /> Présent</label>
+                  <input type="number" placeholder="Score" value={p.score} onChange={(e) => setRow(i, { score: e.target.value })} className="w-20 px-2 py-1 rounded text-xs outline-none" style={inputStyle(C)} />
+                  <select value={p.resultat} onChange={(e) => setRow(i, { resultat: e.target.value })} className="px-2 py-1 rounded text-xs outline-none" style={inputStyle(C)}>
+                    {Object.entries(RESULTAT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                  <button onClick={() => removeParticipant(i)} className="text-xs px-2 py-1 rounded" style={{ color: C.red }}>Retirer</button>
+                </div>
+              );
+            })}
+          </div>
+        ) : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucun participant enregistré</p>}
+        <div className="flex flex-wrap gap-2 items-center">
+          <select value={addEmployeeId} onChange={(e) => setAddEmployeeId(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
+            <option value="">Ajouter un collaborateur…</option>
+            {candidates.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+          </select>
+          <button onClick={addParticipant} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Ajouter</button>
+          <div className="flex-1" />
+          <button onClick={saveParticipants} disabled={saving} className="px-4 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{saving ? 'Enregistrement…' : 'Enregistrer les participants'}</button>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function HabilitationForm({ record, onClose, onCreated }) {
+  const C = useTheme();
+  const editing = !!record;
+  const employeesQ = useCollection('/epi/employees');
+  const categoriesQ = useCollection('/business/habilitation-categories');
+  const [form, setForm] = useState({
+    employeeId: record?.employeeId || '', categoryId: record?.categoryId || '', intitule: record?.intitule || '',
+    organisme: record?.organisme || '', numeroDocument: record?.numeroDocument || '',
+    dateObtention: record?.dateObtention ? new Date(record.dateObtention).toISOString().slice(0, 10) : '',
+    dateExpiration: record?.dateExpiration ? new Date(record.dateExpiration).toISOString().slice(0, 10) : '',
+    statut: record?.statut || 'VALIDE', notes: record?.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      const payload = {
+        ...form, categoryId: form.categoryId || null,
+        dateObtention: form.dateObtention ? new Date(form.dateObtention).toISOString() : null,
+        dateExpiration: form.dateExpiration ? new Date(form.dateExpiration).toISOString() : null,
+      };
+      if (editing) await api.patch(`/business/habilitations/${record.id}`, payload);
+      else await api.post('/business/habilitations', { code: genCode('HAB'), ...payload });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  async function del() {
+    setSaving(true);
+    try { await confirmAndDelete(record.intitule, `/business/habilitations/${record.id}`, () => { onCreated(); onClose(); }); }
+    catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title={editing ? "Modifier l'habilitation" : 'Nouvelle habilitation / certification'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Collaborateur">
+          <select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{(employeesQ.data || []).map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+          </select>
+        </FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Intitulé"><input required value={form.intitule} onChange={(e) => setForm({ ...form, intitule: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Catégorie (optionnel)">
+            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{(categoriesQ.data || []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Organisme (optionnel)"><input value={form.organisme} onChange={(e) => setForm({ ...form, organisme: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="N° de document (optionnel)"><input value={form.numeroDocument} onChange={(e) => setForm({ ...form, numeroDocument: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Date d'obtention (optionnel)"><input type="date" value={form.dateObtention} onChange={(e) => setForm({ ...form, dateObtention: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Date d'expiration (optionnel)"><input type="date" value={form.dateExpiration} onChange={(e) => setForm({ ...form, dateExpiration: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Statut">
+          <select value={form.statut} onChange={(e) => setForm({ ...form, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="VALIDE">Valide (calculé automatiquement selon l'échéance)</option>
+            <option value="SUSPENDUE">Suspendue</option>
+            <option value="EN_ATTENTE">En attente de renouvellement</option>
+          </select>
+        </FormField>
+        <FormField label="Notes (optionnel)"><textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-sm mt-2" style={{ color: C.red }}>{error}</p>}
+        <div className="flex justify-between gap-2 mt-4">
+          {editing ? <button type="button" onClick={del} className="px-4 py-2 rounded-lg text-sm" style={{ color: C.red }}>Supprimer</button> : <span />}
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+
 function EquipmentPage() {
   const C = useTheme();
   const equipment = useCollection('/business/equipment');
@@ -13797,7 +14197,7 @@ const PAGES = {
   pilotage: PilotagePage, 'qualite-controles': QualiteControlesPage, 'qualite-processus': QualiteProcessusPage, 'qualite-indicateurs': IndicateursQualitePage, 'qualite-reclamations': QualiteReclamationsPage, 'qualite-fournisseurs': QualiteFournisseursPage,
   'securite-accidents': SecuriteAccidentsPage, 'securite-epi': SecuriteEpiPage, 'securite-hygiene': SecuriteHygienePage,
   environnement: EnvironnementPage, risques: RisquesPage, audits: AuditsPage, 'non-conformites': NonConformitesPage, capa: CapaPage,
-  documentation: DocumentationPage, 'quart-heure-securite': SafetyTalkPage, haccp: HaccpPage, equipements: EquipmentPage, veille: VeilleReglementairePage, objectifs: ObjectifsPage, rapports: RapportsPage, utilisateurs: UtilisateursPage,
+  documentation: DocumentationPage, 'quart-heure-securite': SafetyTalkPage, formation: FormationPage, haccp: HaccpPage, equipements: EquipmentPage, veille: VeilleReglementairePage, objectifs: ObjectifsPage, rapports: RapportsPage, utilisateurs: UtilisateursPage,
 };
 
 // ============================================================================
