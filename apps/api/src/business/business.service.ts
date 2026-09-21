@@ -63,7 +63,17 @@ import { saveFile } from '../documents/file-storage.util';
   return nc;
  }
  async ncDelete(id:string){
-  const current=await this.db.nonConformity.findUnique({where:{id}});
+  // Jamais de suppression définitive d'un historique QHSE significatif —
+  // on archive plutôt que de supprimer dès qu'une non-conformité a un
+  // historique lié (actions, confinement, causes, coûts) — finding #5.
+  const current=await this.db.nonConformity.findUnique({where:{id},include:{actions:true,containmentActions:true,causes:true,costs:true}});
+  if(!current) throw new NotFoundException('Non-conformité introuvable');
+  const aHistorique=current.actions.length||current.containmentActions.length||current.causes.length||current.costs.length;
+  if(aHistorique){
+   const archived=await this.db.nonConformity.update({where:{id},data:{archivedAt:new Date()}});
+   await writeAudit(this.db,'NC','UPDATE',id,current,archived);
+   return archived;
+  }
   const nc=await this.db.nonConformity.delete({where:{id}});
   await writeAudit(this.db,'NC','DELETE',id,current,null);
   return nc;
@@ -310,7 +320,22 @@ import { saveFile } from '../documents/file-storage.util';
   if(current.parentActionId) await this.actionRecalcAvancement(current.parentActionId);
   return action;
  }
- async actionDelete(id:string){const row=await this.db.action.delete({where:{id}});await writeAudit(this.db,'ACTION','DELETE',id,row,null);return row;}
+ async actionDelete(id:string){
+  // Jamais de suppression définitive d'un historique QHSE significatif —
+  // on archive plutôt que de supprimer dès qu'une action a un historique
+  // lié (causes, prolongations, liens CAPA, sous-actions) — finding #5.
+  const current=await this.db.action.findUnique({where:{id},include:{causes:true,extensions:true,links:true,subActions:true}});
+  if(!current) throw new NotFoundException('Action introuvable');
+  const aHistorique=current.causes.length||current.extensions.length||current.links.length||current.subActions.length;
+  if(aHistorique){
+   const archived=await this.db.action.update({where:{id},data:{archivedAt:new Date()}});
+   await writeAudit(this.db,'ACTION','UPDATE',id,current,archived);
+   return archived;
+  }
+  const row=await this.db.action.delete({where:{id}});
+  await writeAudit(this.db,'ACTION','DELETE',id,current,null);
+  return row;
+ }
  private async actionRecalcAvancement(parentId:string){
   const subs=await this.db.action.findMany({where:{parentActionId:parentId},select:{avancement:true}});
   if(!subs.length) return;
@@ -947,7 +972,22 @@ import { saveFile } from '../documents/file-storage.util';
   const independenceWarning=!!(audit.processus&&audit.auditorId&&(audit.processus.piloteId===audit.auditorId||audit.processus.suppleantId===audit.auditorId));
   return {...audit,independenceWarning};
  }
- auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} async auditDelete(id:string){const row=await this.db.qhseAudit.delete({where:{id}});await writeAudit(this.db,'AUDIT','DELETE',id,row,null);return row;}
+ auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} async auditDelete(id:string){
+  // Jamais de suppression définitive d'un historique QHSE significatif —
+  // on archive plutôt que de supprimer dès qu'un audit a des constats,
+  // programmes, réponses ou signatures liés — finding #5.
+  const current=await this.db.qhseAudit.findUnique({where:{id},include:{auditFindings:true,programs:true,responses:true,signatures:true}});
+  if(!current) throw new NotFoundException('Audit introuvable');
+  const aHistorique=current.auditFindings.length||current.programs.length||current.responses.length||current.signatures.length;
+  if(aHistorique){
+   const archived=await this.db.qhseAudit.update({where:{id},data:{archivedAt:new Date()}});
+   await writeAudit(this.db,'AUDIT','UPDATE',id,current,archived);
+   return archived;
+  }
+  const row=await this.db.qhseAudit.delete({where:{id}});
+  await writeAudit(this.db,'AUDIT','DELETE',id,current,null);
+  return row;
+ }
 
  auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{
   auditId,description:b.description,classification:b.classification,criticite:b.criticite,critical:!!b.critical,
@@ -2116,7 +2156,21 @@ import { saveFile } from '../documents/file-storage.util';
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
  eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
- async eventDelete(id:string){const row=await this.db.safetyEvent.delete({where:{id}});await writeAudit(this.db,'SAFETY_EVENT','DELETE',id,row,null);return row;}
+ async eventDelete(id:string){
+  // Jamais de suppression définitive d'un historique QHSE significatif —
+  // on archive plutôt que de supprimer dès qu'un événement a des actions
+  // liées — finding #5.
+  const current=await this.db.safetyEvent.findUnique({where:{id},include:{actions:true}});
+  if(!current) throw new NotFoundException('Événement introuvable');
+  if(current.actions.length){
+   const archived=await this.db.safetyEvent.update({where:{id},data:{archivedAt:new Date()}});
+   await writeAudit(this.db,'SAFETY_EVENT','UPDATE',id,current,archived);
+   return archived;
+  }
+  const row=await this.db.safetyEvent.delete({where:{id}});
+  await writeAudit(this.db,'SAFETY_EVENT','DELETE',id,current,null);
+  return row;
+ }
 
  // Statistiques Phase 2 — répartitions et Pareto des causes, calculés à
  // la demande depuis les événements déjà enregistrés.
@@ -2317,7 +2371,21 @@ import { saveFile } from '../documents/file-storage.util';
  reclamationGet(id:string){return this.db.reclamation.findUnique({where:{id},include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:{include:{responsible:true}}}})}
  reclamationCreate(b:any){return this.db.reclamation.create({data:b})}
  reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})}
- async reclamationDelete(id:string){const row=await this.db.reclamation.delete({where:{id}});await writeAudit(this.db,'RECLAMATION','DELETE',id,row,null);return row;}
+ async reclamationDelete(id:string){
+  // Jamais de suppression définitive d'un historique QHSE significatif —
+  // on archive plutôt que de supprimer dès qu'une réclamation a des
+  // actions liées — finding #5.
+  const current=await this.db.reclamation.findUnique({where:{id},include:{actions:true}});
+  if(!current) throw new NotFoundException('Réclamation introuvable');
+  if(current.actions.length){
+   const archived=await this.db.reclamation.update({where:{id},data:{archivedAt:new Date()}});
+   await writeAudit(this.db,'RECLAMATION','UPDATE',id,current,archived);
+   return archived;
+  }
+  const row=await this.db.reclamation.delete({where:{id}});
+  await writeAudit(this.db,'RECLAMATION','DELETE',id,current,null);
+  return row;
+ }
 
  // Tableau de bord Phase 2 — tout calculé à la demande depuis les
  // réclamations déjà enregistrées, rien de nouveau à saisir.

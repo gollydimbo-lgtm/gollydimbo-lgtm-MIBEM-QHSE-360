@@ -734,6 +734,9 @@ model SafetyEvent {
   // Workflow — jamais de clôture sans passer par les étapes.
   statut String @default("DECLARE")
   dateCloture DateTime?
+  // --- Cycle de vie (jamais de suppression définitive, cf. exigence
+  // "préférer l'archivage à la suppression") ---
+  archivedAt DateTime?
   // Liens universels vers les modules déjà existants.
   riskId String?
   epiId String?
@@ -824,6 +827,9 @@ model NonConformity {
   haccpMonitoringRecordId String?
   // --- Lien Veille réglementaire (additif) ---
   regulatoryRequirementId String?
+  // --- Cycle de vie (jamais de suppression définitive, cf. exigence
+  // "préférer l'archivage à la suppression") ---
+  archivedAt DateTime?
   actions Action[]
   qualityControl QualityControl? @relation(fields:[qualityControlId], references:[id], onDelete:SetNull)
   haccpMonitoringRecord HaccpMonitoringRecord? @relation(fields:[haccpMonitoringRecordId], references:[id], onDelete:SetNull)
@@ -949,6 +955,9 @@ model Action {
   effectivenessCheckedAt DateTime?
   effectivenessNotes String?
   reopenedCount Int @default(0)
+  // --- Cycle de vie (jamais de suppression définitive, cf. exigence
+  // "préférer l'archivage à la suppression") ---
+  archivedAt DateTime?
   responsible User? @relation(fields:[responsibleId], references:[id], onDelete:SetNull)
   nonConformity NonConformity? @relation(fields:[nonConformityId], references:[id], onDelete:SetNull)
   processus Processus? @relation(fields:[processusId], references:[id], onDelete:SetNull)
@@ -1705,6 +1714,9 @@ model QhseAudit {
   scoringMethod String @default("CONFORME_NON_CONFORME")
   scoreObtenu Float?
   scorePondere Float?
+  // --- Cycle de vie (jamais de suppression définitive, cf. exigence
+  // "préférer l'archivage à la suppression") ---
+  archivedAt DateTime?
   createdAt DateTime @default(now())
   auditor User? @relation("AuditAuditor", fields:[auditorId], references:[id], onDelete:SetNull)
   responsableAudite User? @relation("AuditResponsable", fields:[responsableAuditeId], references:[id], onDelete:SetNull)
@@ -2859,6 +2871,9 @@ model Reclamation {
   // être confirmée manuellement par l'utilisateur
   recurrente Boolean @default(false)
   nonConformityId String?
+  // --- Cycle de vie (jamais de suppression définitive, cf. exigence
+  // "préférer l'archivage à la suppression") ---
+  archivedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
