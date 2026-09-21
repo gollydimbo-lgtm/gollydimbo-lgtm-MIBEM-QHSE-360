@@ -27,6 +27,16 @@ const ENTITY_CREATE: Record<string, (db: PrismaService, business: BusinessServic
   // ici (générer une NC depuis un contrôle non conforme reste une action
   // manuelle explicite côté back-office, jamais automatique).
   equipmentControl: (db, business, haccp, p) => db.equipmentControl.create({ data: p }),
+  // Chantier priorité 6 de l'audit (offline étendu Sécurité/Hygiène/
+  // Environnement/Formation) : create Prisma direct pour ces quatre
+  // entités, sur le même principe que "action"/"equipmentControl" —
+  // aucune n'a de moteur de calcul dédié à réutiliser côté serveur, le
+  // payload envoyé par le mobile (déjà complet, code inclus) suffit.
+  epiInspection: (db, business, haccp, p) => db.epiInspection.create({ data: p }),
+  epcInspection: (db, business, haccp, p) => db.epcInspection.create({ data: p }),
+  tmsSignalement: (db, business, haccp, p) => db.tmsSignalement.create({ data: p }),
+  environmentRecord: (db, business, haccp, p) => db.environmentRecord.create({ data: p }),
+  training: (db, business, haccp, p) => db.training.create({ data: p }),
 };
 
 const ENTITY_UPDATE: Record<string, (db: PrismaService, business: BusinessService, haccp: HaccpService, id: string, payload: any) => Promise<any>> = {

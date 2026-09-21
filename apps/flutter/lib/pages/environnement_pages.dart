@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
+import '../services/sync_queue.dart';
 import '../theme.dart';
 
 Color _niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
@@ -332,6 +333,17 @@ Future<void> showReleveDialog(BuildContext context, Api api, {Map? record, requi
           else await api.post('/business/environment', {'code': 'ENV-${DateTime.now().millisecondsSinceEpoch}', ...payload, 'recordedAt': DateTime.now().toIso8601String()});
           if (context.mounted) Navigator.pop(c);
           onSaved();
+        } on ApiException catch (e) {
+          if (e.networkError && record == null) {
+            await SyncQueue.enqueue('environmentRecord', 'CREATE', {'code': 'ENV-${DateTime.now().millisecondsSinceEpoch}', ...payload, 'recordedAt': DateTime.now().toIso8601String()});
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : relevé enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+              Navigator.pop(c);
+            }
+            onSaved();
+          } else {
+            setD(() { saving = false; formError = '$e'; });
+          }
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
       }, child: Text(saving ? '…' : 'Enregistrer')),
     ],

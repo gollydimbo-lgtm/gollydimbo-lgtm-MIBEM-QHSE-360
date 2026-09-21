@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 
@@ -454,7 +455,16 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
         if (editing) {
           await api.patch('/business/trainings/${widget.record!['id']}', payload);
         } else {
-          await api.post('/business/trainings', {'code': genCode(form['type'] == 'INDUCTION' ? 'IND' : 'FOR'), ...payload});
+          try {
+            await api.post('/business/trainings', {'code': genCode(form['type'] == 'INDUCTION' ? 'IND' : 'FOR'), ...payload});
+          } on ApiException catch (e) {
+            if (e.networkError) {
+              await SyncQueue.enqueue('training', 'CREATE', {'code': genCode(form['type'] == 'INDUCTION' ? 'IND' : 'FOR'), ...payload});
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : formation enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+            } else {
+              rethrow;
+            }
+          }
         }
       }
       if (mounted) Navigator.pop(context);

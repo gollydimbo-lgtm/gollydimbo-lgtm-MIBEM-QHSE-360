@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../services/api.dart';
+import '../services/sync_queue.dart';
 import '../theme.dart';
 
 // --- Catégories (réutilisé pour EPI et EPC — une seule entrée : le nom) ---
@@ -505,12 +506,24 @@ class _InspectionsTabState extends State<InspectionsTab> {
           FilledButton(
             onPressed: () async {
               if (targetId == null) { setD(() => formError = 'Sélectionnez un équipement'); return; }
+              final endpoint = isEpi ? '/epi/epi-inspections' : '/epi/epc-inspections';
+              final key = isEpi ? 'epiId' : 'epcId';
+              final payload = {key: targetId, 'result': result, 'observations': observations.text};
               try {
-                final endpoint = isEpi ? '/epi/epi-inspections' : '/epi/epc-inspections';
-                final key = isEpi ? 'epiId' : 'epcId';
-                await api.post(endpoint, {key: targetId, 'result': result, 'observations': observations.text});
+                await api.post(endpoint, payload);
                 if (context.mounted) Navigator.pop(c);
                 load();
+              } on ApiException catch (e) {
+                if (e.networkError) {
+                  await SyncQueue.enqueue(isEpi ? 'epiInspection' : 'epcInspection', 'CREATE', payload);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : inspection enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+                    Navigator.pop(c);
+                  }
+                  load();
+                } else {
+                  setD(() => formError = '$e');
+                }
               } catch (e) { setD(() => formError = '$e'); }
             },
             child: const Text('Enregistrer'),

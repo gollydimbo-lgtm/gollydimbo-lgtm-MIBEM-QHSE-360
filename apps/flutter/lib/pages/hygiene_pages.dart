@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/sync_queue.dart';
 import '../theme.dart';
 
 Color _niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
@@ -437,6 +438,17 @@ Future<void> showTmsSignalementDialog(BuildContext context, Api api, {Map? recor
           else await api.post('/business/tms-signalements', {'code': 'TMS-${DateTime.now().millisecondsSinceEpoch}', ...payload});
           if (context.mounted) Navigator.pop(c);
           onSaved();
+        } on ApiException catch (e) {
+          if (e.networkError && record == null) {
+            await SyncQueue.enqueue('tmsSignalement', 'CREATE', {'code': 'TMS-${DateTime.now().millisecondsSinceEpoch}', ...payload});
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : signalement enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+              Navigator.pop(c);
+            }
+            onSaved();
+          } else {
+            setD(() { saving = false; formError = '$e'; });
+          }
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
       }, child: Text(saving ? '…' : 'Enregistrer')),
     ],
