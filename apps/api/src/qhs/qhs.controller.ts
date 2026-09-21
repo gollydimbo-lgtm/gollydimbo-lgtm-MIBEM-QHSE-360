@@ -1,3 +1,5 @@
+import { Roles } from '../common/roles.decorator';
+import { RoleName } from '@prisma/client';
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { QhsService } from './qhs.service';
 
@@ -8,7 +10,7 @@ export class QhsController {
   @Get() list() { return this.s.list(); }
   @Post(':id/approve') approve(@Param('id') id: string) { return this.s.approve(id); }
   @Post(':id/deliver') deliver(@Param('id') id: string) { return this.s.deliver(id); }
-  @Delete(':id') remove(@Param('id') id: string) { return this.s.remove(id); }
+  @Delete(':id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) remove(@Param('id') id: string) { return this.s.remove(id); }
 
   // --- Dashboard / matrice / bibliothèque / règles (routes littérales avant :id) ---
   @Get('dashboard') dashboard() { return this.s.dashboard(); }
@@ -16,7 +18,7 @@ export class QhsController {
   @Get('library') library() { return this.s.themeLibrary(); }
   @Get('rules') rulesList() { return this.s.rulesList(); }
   @Post('rules') rulesUpsert(@Body() b: any) { return this.s.rulesUpsert(b); }
-  @Delete('rules/:id') rulesDelete(@Param('id') id: string) { return this.s.rulesDelete(id); }
+  @Delete('rules/:id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) rulesDelete(@Param('id') id: string) { return this.s.rulesDelete(id); }
 
   // --- Moteur de recommandation ---
   @Get('recommendations') recommendationsList() { return this.s.recommendationsList(); }
@@ -50,6 +52,6 @@ export class QhsController {
   // Nichées sous /safety-talks (plutôt que les chemins top-level du cahier des
   // charges) pour ne pas devoir enregistrer un second contrôleur dans
   // qhs.module.ts, fichier volontairement non modifié par cette tâche.
-  @Delete('participants/:participantId') removeParticipant(@Param('participantId') participantId: string) { return this.s.removeParticipant(participantId); }
+  @Delete('participants/:participantId') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) removeParticipant(@Param('participantId') participantId: string) { return this.s.removeParticipant(participantId); }
   @Post('feedbacks/:feedbackId/transform') transformFeedback(@Param('feedbackId') feedbackId: string, @Body() b: any) { return this.s.transformFeedback(feedbackId, b); }
 }

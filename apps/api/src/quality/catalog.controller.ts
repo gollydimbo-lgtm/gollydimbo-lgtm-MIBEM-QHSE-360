@@ -1,5 +1,8 @@
+import { Roles } from '../common/roles.decorator';
+import { RoleName } from '@prisma/client';
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { writeAudit } from '../common/audit-log.helper';
 @Controller('quality/catalog')
 export class QualityCatalogController {
   constructor(private db:PrismaService){}
@@ -12,5 +15,5 @@ export class QualityCatalogController {
   @Post('shifts') shift(@Body() b:any){return this.db.shift.create({data:{code:b.code,name:b.name,startTime:b.startTime,endTime:b.endTime}})}
   @Get('shifts') shifts(){return this.db.shift.findMany({where:{active:true},orderBy:{name:'asc'}})}
   @Patch('lines/:id') updateLine(@Param('id')id:string,@Body()b:any){return this.db.productionLine.update({where:{id},data:b})}
-  @Delete('lines/:id') deleteLine(@Param('id')id:string){return this.db.productionLine.delete({where:{id}})}
+  @Delete('lines/:id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) async deleteLine(@Param('id')id:string){const row=await this.db.productionLine.delete({where:{id}});await writeAudit(this.db,'PRODUCTION_LINE','DELETE',id,row,null);return row;}
 }

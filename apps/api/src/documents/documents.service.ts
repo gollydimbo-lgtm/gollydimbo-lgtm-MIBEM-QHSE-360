@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { writeAudit } from '../common/audit-log.helper';
 import { DocumentGroup } from '@prisma/client';
 import { existsSync, unlinkSync } from 'fs';
 import { randomUUID } from 'crypto';
@@ -307,8 +308,10 @@ export class DocumentsService {
     });
   }
 
-  linkDelete(linkId: string) {
-    return this.db.documentLink.delete({ where: { id: linkId } });
+  async linkDelete(linkId: string) {
+    const row = await this.db.documentLink.delete({ where: { id: linkId } });
+    await writeAudit(this.db, 'DOCUMENT_LINK', 'DELETE', linkId, row, null);
+    return row;
   }
 
   async requestRevision(id: string, b: { sourceModule: string; sourceEntityId: string; motif: string; createdById?: string }) {
@@ -354,8 +357,10 @@ export class DocumentsService {
   typeUpdate(id: string, b: any) {
     return this.db.documentType.update({ where: { id }, data: b });
   }
-  typeDelete(id: string) {
-    return this.db.documentType.delete({ where: { id } });
+  async typeDelete(id: string) {
+    const row = await this.db.documentType.delete({ where: { id } });
+    await writeAudit(this.db, 'DOCUMENT_TYPE', 'DELETE', id, row, null);
+    return row;
   }
 
   categoryList() {
@@ -367,8 +372,10 @@ export class DocumentsService {
   categoryUpdate(id: string, b: any) {
     return this.db.documentCategoryNode.update({ where: { id }, data: b });
   }
-  categoryDelete(id: string) {
-    return this.db.documentCategoryNode.delete({ where: { id } });
+  async categoryDelete(id: string) {
+    const row = await this.db.documentCategoryNode.delete({ where: { id } });
+    await writeAudit(this.db, 'DOCUMENT_CATEGORY', 'DELETE', id, row, null);
+    return row;
   }
 
   // ---------------------------------------------------------------------

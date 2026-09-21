@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { writeAudit } from '../common/audit-log.helper';
 import { currentAuditUserId } from '../common/audit-context';
 
 const CONTROL_INCLUDE = {
@@ -27,7 +28,7 @@ export class QualityService {
     return this.db.controlType.create({data:{code:data.code,name:data.name,domain:data.domain||'QUALITE',description:data.description,active:data.active??true}});
   }
   updateType(id:string,data:any) { return this.db.controlType.update({where:{id},data}); }
-  deleteType(id:string) { return this.db.controlType.delete({where:{id}}); }
+  async deleteType(id:string) { const row = await this.db.controlType.delete({where:{id}}); await writeAudit(this.db,'CONTROL_TYPE','DELETE',id,row,null); return row; }
 
   listTemplates(domain?:string) { return this.db.controlTemplate.findMany({ where:{active:true,...(domain?{domain}:{})}, include:{points:{orderBy:{order:'asc'}},type:true}, orderBy:{name:'asc'} }); }
 
@@ -153,8 +154,10 @@ export class QualityService {
     });
   }
 
-  removeControl(id: string) {
-    return this.db.qualityControl.delete({ where: { id } });
+  async removeControl(id: string) {
+    const row = await this.db.qualityControl.delete({ where: { id } });
+    await writeAudit(this.db, 'QUALITY_CONTROL', 'DELETE', id, row, null);
+    return row;
   }
 
   // --- Planification des contrôles récurrents ---
@@ -179,7 +182,7 @@ export class QualityService {
     }});
   }
 
-  deleteSchedule(id:string) { return this.db.controlSchedule.delete({where:{id}}); }
+  async deleteSchedule(id:string) { const row = await this.db.controlSchedule.delete({where:{id}}); await writeAudit(this.db,'CONTROL_SCHEDULE','DELETE',id,row,null); return row; }
 
   private advanceDueDate(from:Date, frequency:string, intervalDays?:number|null) {
     const next = new Date(from);

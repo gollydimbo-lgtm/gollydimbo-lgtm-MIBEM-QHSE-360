@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { writeAudit } from '../common/audit-log.helper';
 
 @Injectable()
 export class QhsService {
@@ -570,8 +571,10 @@ export class QhsService {
     });
   }
 
-  rulesDelete(id: string) {
-    return this.db.safetyTalkRule.delete({ where: { id } });
+  async rulesDelete(id: string) {
+    const row = await this.db.safetyTalkRule.delete({ where: { id } });
+    await writeAudit(this.db, 'SAFETY_TALK_RULE', 'DELETE', id, row, null);
+    return row;
   }
 
   private labelType(t: string) {

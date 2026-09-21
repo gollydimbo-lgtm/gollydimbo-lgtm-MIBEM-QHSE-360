@@ -6,7 +6,7 @@ import { writeAudit } from '../common/audit-log.helper';
 import { saveFile } from '../documents/file-storage.util';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
- qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} qualityDelete(id:string){return this.db.qualityControl.delete({where:{id}})}
+ qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
  ncList(status?:string){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,containmentActions:true,causes:true},orderBy:{createdAt:'desc'}})}
  ncGet(id:string){return this.db.nonConformity.findUnique({where:{id},include:{actions:{include:{responsible:true}},epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,processus:true,fournisseur:true,containmentActions:{include:{responsable:true},orderBy:{date:'desc'}},causes:{orderBy:{createdAt:'asc'}},costs:{orderBy:{createdAt:'desc'}}}})}
 
@@ -74,7 +74,7 @@ import { saveFile } from '../documents/file-storage.util';
  ncContainmentActionList(nonConformityId:string){return this.db.ncContainmentAction.findMany({where:{nonConformityId},include:{responsable:true},orderBy:{date:'desc'}})}
  ncContainmentActionCreate(b:any){return this.db.ncContainmentAction.create({data:b})}
  ncContainmentActionUpdate(id:string,b:any){return this.db.ncContainmentAction.update({where:{id},data:b})}
- ncContainmentActionDelete(id:string){return this.db.ncContainmentAction.delete({where:{id}})}
+ async ncContainmentActionDelete(id:string){const row=await this.db.ncContainmentAction.delete({where:{id}});await writeAudit(this.db,'NC_CONTAINMENT_ACTION','DELETE',id,row,null);return row;}
 
  // === NON-CONFORMITÉS — analyse des causes et vérification d'efficacité ===
 
@@ -188,7 +188,7 @@ import { saveFile } from '../documents/file-storage.util';
  ncCostList(nonConformityId:string){return this.db.ncCost.findMany({where:{nonConformityId},orderBy:{createdAt:'desc'}})}
  ncCostCreate(b:any){return this.db.ncCost.create({data:b})}
  ncCostUpdate(id:string,b:any){return this.db.ncCost.update({where:{id},data:b})}
- ncCostDelete(id:string){return this.db.ncCost.delete({where:{id}})}
+ async ncCostDelete(id:string){const row=await this.db.ncCost.delete({where:{id}});await writeAudit(this.db,'NC_COST','DELETE',id,row,null);return row;}
  private async ncCoutStats(){
   const costs=await this.db.ncCost.findMany({select:{montant:true,nonConformityId:true}});
   const coutTotal=costs.reduce((s,c)=>s+c.montant,0);
@@ -293,7 +293,7 @@ import { saveFile } from '../documents/file-storage.util';
   if(current.parentActionId) await this.actionRecalcAvancement(current.parentActionId);
   return action;
  }
- actionDelete(id:string){return this.db.action.delete({where:{id}})}
+ async actionDelete(id:string){const row=await this.db.action.delete({where:{id}});await writeAudit(this.db,'ACTION','DELETE',id,row,null);return row;}
  private async actionRecalcAvancement(parentId:string){
   const subs=await this.db.action.findMany({where:{parentActionId:parentId},select:{avancement:true}});
   if(!subs.length) return;
@@ -425,7 +425,7 @@ import { saveFile } from '../documents/file-storage.util';
  capaLinkAdd(actionId:string,b:any){
   return this.db.capaLink.create({data:{actionId,sourceModule:b.sourceModule,sourceEntityId:b.sourceEntityId,relationType:b.relationType||'GENEREE_PAR',metadata:b.metadata,createdById:b.createdById||null}});
  }
- capaLinkDelete(id:string){return this.db.capaLink.delete({where:{id}})}
+ async capaLinkDelete(id:string){const row=await this.db.capaLink.delete({where:{id}});await writeAudit(this.db,'CAPA_LINK','DELETE',id,row,null);return row;}
 
  // Détecte les CAPA déjà liées à cette source, via la matrice générique ET
  // via la colonne dédiée quand ce module en possède une — pour ne jamais
@@ -664,7 +664,7 @@ import { saveFile } from '../documents/file-storage.util';
  // « cause racine identifiée ? » — pas besoin d'un champ dupliqué sur Action.
  actionCauseCreate(b:any){return this.db.actionCause.create({data:b})}
  actionCauseUpdate(id:string,b:any){return this.db.actionCause.update({where:{id},data:b})}
- actionCauseDelete(id:string){return this.db.actionCause.delete({where:{id}})}
+ async actionCauseDelete(id:string){const row=await this.db.actionCause.delete({where:{id}});await writeAudit(this.db,'ACTION_CAUSE','DELETE',id,row,null);return row;}
 
  // Tableau de bord réel (point 1) — chaque KPI reste `null` si non calculable.
  async actionDashboard(){
@@ -757,12 +757,12 @@ import { saveFile } from '../documents/file-storage.util';
  riskCategoryList(){return this.db.riskCategory.findMany({orderBy:{order:'asc'}})}
  riskCategoryCreate(b:any){return this.db.riskCategory.create({data:b})}
  riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:b})}
- riskCategoryDelete(id:string){return this.db.riskCategory.delete({where:{id}})}
+ async riskCategoryDelete(id:string){const row=await this.db.riskCategory.delete({where:{id}});await writeAudit(this.db,'RISK_CATEGORY','DELETE',id,row,null);return row;}
 
  workUnitList(){return this.db.workUnit.findMany({include:{site:true},orderBy:{name:'asc'}})}
  workUnitCreate(b:any){return this.db.workUnit.create({data:b})}
  workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:b})}
- workUnitDelete(id:string){return this.db.workUnit.update({where:{id},data:{active:false}})}
+ async workUnitDelete(id:string){const row=await this.db.workUnit.update({where:{id},data:{active:false}});await writeAudit(this.db,'WORK_UNIT','UPDATE',id,null,row);return row;}
 
  riskList(){return this.db.risk.findMany({where:{archivedAt:null},include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},orderBy:{grossScore:'desc'}})}
  riskGet(id:string){return this.db.risk.findUnique({where:{id},include:{workUnit:true,category:true,processus:true,fournisseur:true,riskMeasures:{include:{responsable:true,epi:true,training:true}},evaluations:{orderBy:{evaluatedAt:'desc'}},actions:{include:{responsible:true}}}})}
@@ -830,7 +830,7 @@ import { saveFile } from '../documents/file-storage.util';
  riskMeasureList(riskId:string){return this.db.riskMeasure.findMany({where:{riskId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
  riskMeasureCreate(b:any){return this.db.riskMeasure.create({data:b})}
  riskMeasureUpdate(id:string,b:any){return this.db.riskMeasure.update({where:{id},data:b})}
- riskMeasureDelete(id:string){return this.db.riskMeasure.delete({where:{id}})}
+ async riskMeasureDelete(id:string){const row=await this.db.riskMeasure.delete({where:{id}});await writeAudit(this.db,'RISK_MEASURE','DELETE',id,row,null);return row;}
 
  // Tableau de bord réel : chaque KPI reste `null` si la donnée n'existe pas.
  async riskDashboard(){
@@ -913,7 +913,7 @@ import { saveFile } from '../documents/file-storage.util';
   const independenceWarning=!!(audit.processus&&audit.auditorId&&(audit.processus.piloteId===audit.auditorId||audit.processus.suppleantId===audit.auditorId));
   return {...audit,independenceWarning};
  }
- auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} auditDelete(id:string){return this.db.qhseAudit.delete({where:{id}})}
+ auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} async auditDelete(id:string){const row=await this.db.qhseAudit.delete({where:{id}});await writeAudit(this.db,'AUDIT','DELETE',id,row,null);return row;}
 
  auditFindingCreate(auditId:string,b:any){return this.db.auditFinding.create({data:{
   auditId,description:b.description,classification:b.classification,criticite:b.criticite,critical:!!b.critical,
@@ -932,7 +932,7 @@ import { saveFile } from '../documents/file-storage.util';
   else if(b.status) data.closedAt=null;
   return this.db.auditFinding.update({where:{id},data});
  }
- auditFindingDelete(id:string){return this.db.auditFinding.delete({where:{id}})}
+ async auditFindingDelete(id:string){const row=await this.db.auditFinding.delete({where:{id}});await writeAudit(this.db,'AUDIT_FINDING','DELETE',id,row,null);return row;}
  // Un constat nécessitant une action peut en générer une directement,
  // sans passer obligatoirement par une NC (point 12 du cahier des charges).
  async auditFindingGenerateAction(id:string,b:any){
@@ -952,10 +952,10 @@ import { saveFile } from '../documents/file-storage.util';
  auditChecklistList(){return this.db.auditChecklist.findMany({include:{items:{orderBy:{order:'asc'}},referential:true,type:true},orderBy:{title:'asc'}})}
  auditChecklistCreate(b:any){return this.db.auditChecklist.create({data:b})}
  auditChecklistUpdate(id:string,b:any){return this.db.auditChecklist.update({where:{id},data:b})}
- auditChecklistDelete(id:string){return this.db.auditChecklist.delete({where:{id}})}
+ async auditChecklistDelete(id:string){const row=await this.db.auditChecklist.delete({where:{id}});await writeAudit(this.db,'AUDIT_CHECKLIST','DELETE',id,row,null);return row;}
  auditChecklistItemCreate(b:any){return this.db.auditChecklistItem.create({data:b})}
  auditChecklistItemUpdate(id:string,b:any){return this.db.auditChecklistItem.update({where:{id},data:b})}
- auditChecklistItemDelete(id:string){return this.db.auditChecklistItem.delete({where:{id}})}
+ async auditChecklistItemDelete(id:string){const row=await this.db.auditChecklistItem.delete({where:{id}});await writeAudit(this.db,'AUDIT_CHECKLIST_ITEM','DELETE',id,row,null);return row;}
 
  // Valeur numérique (0 à 1) attribuée à chaque résultat possible — les
  // résultats non évaluables (non applicable, non évalué, à vérifier) sont
@@ -1036,7 +1036,7 @@ import { saveFile } from '../documents/file-storage.util';
  // Signer, c'est enregistrer qui a signé et quand — jamais un simple
  // changement de statut sans identité ni horodatage.
  auditSignatureSign(id:string,signataireId:string){return this.db.auditSignature.update({where:{id},data:{signataireId,signedAt:new Date(),statut:'SIGNE'}})}
- auditSignatureDelete(id:string){return this.db.auditSignature.delete({where:{id}})}
+ async auditSignatureDelete(id:string){const row=await this.db.auditSignature.delete({where:{id}});await writeAudit(this.db,'AUDIT_SIGNATURE','DELETE',id,row,null);return row;}
  // Génère une non-conformité (et son action corrective) à partir d'un
  // constat d'audit — même principe que l'échec d'un point de contrôle
  // critique dans le moteur de contrôle universel. Le constat hérite du
@@ -1079,20 +1079,20 @@ import { saveFile } from '../documents/file-storage.util';
  auditTypeList(){return this.db.auditType.findMany({orderBy:{order:'asc'}})}
  auditTypeCreate(b:any){return this.db.auditType.create({data:b})}
  auditTypeUpdate(id:string,b:any){return this.db.auditType.update({where:{id},data:b})}
- auditTypeDelete(id:string){return this.db.auditType.delete({where:{id}})}
+ async auditTypeDelete(id:string){const row=await this.db.auditType.delete({where:{id}});await writeAudit(this.db,'AUDIT_TYPE','DELETE',id,row,null);return row;}
 
  auditReferentialList(){return this.db.auditReferential.findMany({include:{items:{orderBy:{order:'asc'}}},orderBy:{label:'asc'}})}
  auditReferentialCreate(b:any){return this.db.auditReferential.create({data:b})}
  auditReferentialUpdate(id:string,b:any){return this.db.auditReferential.update({where:{id},data:b})}
- auditReferentialDelete(id:string){return this.db.auditReferential.delete({where:{id}})}
+ async auditReferentialDelete(id:string){const row=await this.db.auditReferential.delete({where:{id}});await writeAudit(this.db,'AUDIT_REFERENTIAL','DELETE',id,row,null);return row;}
  auditReferentialItemCreate(b:any){return this.db.auditReferentialItem.create({data:b})}
  auditReferentialItemUpdate(id:string,b:any){return this.db.auditReferentialItem.update({where:{id},data:b})}
- auditReferentialItemDelete(id:string){return this.db.auditReferentialItem.delete({where:{id}})}
+ async auditReferentialItemDelete(id:string){const row=await this.db.auditReferentialItem.delete({where:{id}});await writeAudit(this.db,'AUDIT_REFERENTIAL_ITEM','DELETE',id,row,null);return row;}
 
  auditProgramList(){return this.db.auditProgram.findMany({include:{type:true,referential:true,workUnit:true,processus:true,auditeurPrincipal:true,audit:true},orderBy:{datePrevue:'asc'}})}
  auditProgramCreate(b:any){return this.db.auditProgram.create({data:b})}
  auditProgramUpdate(id:string,b:any){return this.db.auditProgram.update({where:{id},data:b})}
- auditProgramDelete(id:string){return this.db.auditProgram.delete({where:{id}})}
+ async auditProgramDelete(id:string){const row=await this.db.auditProgram.delete({where:{id}});await writeAudit(this.db,'AUDIT_PROGRAM','DELETE',id,row,null);return row;}
  // Génère l'audit réel à partir d'une ligne de programme, préremplie,
  // jamais ressaisie — même principe que pour le Registre des risques.
  async auditProgramGenerateAudit(id:string){
@@ -1233,7 +1233,7 @@ import { saveFile } from '../documents/file-storage.util';
    genereLe:new Date(),
   };
  }
- envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} envDelete(id:string){return this.db.environmentRecord.delete({where:{id}})}
+ envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} async envDelete(id:string){const row=await this.db.environmentRecord.delete({where:{id}});await writeAudit(this.db,'ENVIRONMENT_RECORD','DELETE',id,row,null);return row;}
 
  // Aspects & impacts environnementaux — la criticité et le caractère
  // significatif se recalculent à chaque écriture depuis la méthode de
@@ -1251,7 +1251,7 @@ import { saveFile } from '../documents/file-storage.util';
   const merged={...current,...b};
   return this.db.environnementAspect.update({where:{id},data:{...b,...this.calculerAspect(merged)}});
  }
- environnementAspectDelete(id:string){return this.db.environnementAspect.delete({where:{id}})}
+ async environnementAspectDelete(id:string){const row=await this.db.environnementAspect.delete({where:{id}});await writeAudit(this.db,'ENVIRONNEMENT_ASPECT','DELETE',id,row,null);return row;}
 
  // Environnement — tableau de bord réel : chaque valeur reste `null`
  // si la donnée n'existe pas, jamais une valeur inventée à la place.
@@ -1359,7 +1359,7 @@ import { saveFile } from '../documents/file-storage.util';
  produitChimiqueList(){return this.db.produitChimique.findMany({include:{fournisseur:true},orderBy:{nom:'asc'}})}
  produitChimiqueCreate(b:any){return this.db.produitChimique.create({data:b})}
  produitChimiqueUpdate(id:string,b:any){return this.db.produitChimique.update({where:{id},data:b})}
- produitChimiqueDelete(id:string){return this.db.produitChimique.delete({where:{id}})}
+ async produitChimiqueDelete(id:string){const row=await this.db.produitChimique.delete({where:{id}});await writeAudit(this.db,'PRODUIT_CHIMIQUE','DELETE',id,row,null);return row;}
 
  // Tendances mensuelles — calculées uniquement sur les mois où des
  // relevés existent réellement, jamais une valeur comblée à zéro.
@@ -1415,7 +1415,7 @@ import { saveFile } from '../documents/file-storage.util';
  trainingCategoryList(){return this.db.trainingCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  trainingCategoryCreate(b:any){return this.db.trainingCategory.create({data:b})}
  trainingCategoryUpdate(id:string,b:any){return this.db.trainingCategory.update({where:{id},data:b})}
- trainingCategoryDelete(id:string){return this.db.trainingCategory.delete({where:{id}})}
+ async trainingCategoryDelete(id:string){const row=await this.db.trainingCategory.delete({where:{id}});await writeAudit(this.db,'TRAINING_CATEGORY','DELETE',id,row,null);return row;}
  async trainingSettingsGet(){
   let s=await this.db.trainingSettings.findFirst();
   if(!s) s=await this.db.trainingSettings.create({data:{}});
@@ -1478,7 +1478,7 @@ import { saveFile } from '../documents/file-storage.util';
  habilitationCategoryList(){return this.db.habilitationCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  habilitationCategoryCreate(b:any){return this.db.habilitationCategory.create({data:b})}
  habilitationCategoryUpdate(id:string,b:any){return this.db.habilitationCategory.update({where:{id},data:b})}
- habilitationCategoryDelete(id:string){return this.db.habilitationCategory.delete({where:{id}})}
+ async habilitationCategoryDelete(id:string){const row=await this.db.habilitationCategory.delete({where:{id}});await writeAudit(this.db,'HABILITATION_CATEGORY','DELETE',id,row,null);return row;}
  // Tableau de bord FORMATION — uniquement des comptages et taux derives de
  // donnees reellement saisies ; jamais de valeur par defaut quand
  // l'echantillon est vide (cf. principe anti-fabrication du Cockpit QHSE 360).
@@ -1529,11 +1529,11 @@ import { saveFile } from '../documents/file-storage.util';
  competenceNiveauList(){return this.db.competenceNiveau.findMany({orderBy:{ordre:'asc'}})}
  competenceNiveauCreate(b:any){return this.db.competenceNiveau.create({data:b})}
  competenceNiveauUpdate(id:string,b:any){return this.db.competenceNiveau.update({where:{id},data:b})}
- competenceNiveauDelete(id:string){return this.db.competenceNiveau.delete({where:{id}})}
+ async competenceNiveauDelete(id:string){const row=await this.db.competenceNiveau.delete({where:{id}});await writeAudit(this.db,'COMPETENCE_NIVEAU','DELETE',id,row,null);return row;}
  competenceList(){return this.db.competence.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  competenceCreate(b:any){return this.db.competence.create({data:b})}
  competenceUpdate(id:string,b:any){return this.db.competence.update({where:{id},data:b})}
- competenceDelete(id:string){return this.db.competence.delete({where:{id}})}
+ async competenceDelete(id:string){const row=await this.db.competence.delete({where:{id}});await writeAudit(this.db,'COMPETENCE','DELETE',id,row,null);return row;}
 
  employeeCompetenceInclude = { employee:true, competence:true, niveauRequis:true, niveauActuel:true, formationAssociee:true, habilitationAssociee:true };
  // Ecart = ordre(niveau requis) - ordre(niveau actuel), calcule a la lecture
@@ -1877,7 +1877,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentCategoryList(){return this.db.equipmentCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  equipmentCategoryCreate(b:any){return this.db.equipmentCategory.create({data:b})}
  equipmentCategoryUpdate(id:string,b:any){return this.db.equipmentCategory.update({where:{id},data:b})}
- equipmentCategoryDelete(id:string){return this.db.equipmentCategory.delete({where:{id}})}
+ async equipmentCategoryDelete(id:string){const row=await this.db.equipmentCategory.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CATEGORY','DELETE',id,row,null);return row;}
  // Phase 4C — analytics avancées : répartitions, indice de conformité
  // (même calcul que dans la bibliothèque indicateursAuto(), jamais un
  // second calcul divergent), coûts de maintenance/étalonnage/contrôle et
@@ -1967,7 +1967,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentMaintenancePlanList(equipmentId?:string){return this.db.equipmentMaintenancePlan.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true,equipment:true},orderBy:{dateProchaine:'asc'}})}
  equipmentMaintenancePlanCreate(b:any){return this.db.equipmentMaintenancePlan.create({data:b})}
  equipmentMaintenancePlanUpdate(id:string,b:any){return this.db.equipmentMaintenancePlan.update({where:{id},data:b})}
- equipmentMaintenancePlanDelete(id:string){return this.db.equipmentMaintenancePlan.delete({where:{id}})}
+ async equipmentMaintenancePlanDelete(id:string){const row=await this.db.equipmentMaintenancePlan.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_MAINTENANCE_PLAN','DELETE',id,row,null);return row;}
 
  equipmentMaintenanceRecordList(equipmentId?:string){return this.db.equipmentMaintenanceRecord.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true,plan:true},orderBy:{createdAt:'desc'}})}
  async equipmentMaintenanceRecordCreate(b:any){
@@ -1986,7 +1986,7 @@ import { saveFile } from '../documents/file-storage.util';
   return record;
  }
  equipmentMaintenanceRecordUpdate(id:string,b:any){return this.db.equipmentMaintenanceRecord.update({where:{id},data:b})}
- equipmentMaintenanceRecordDelete(id:string){return this.db.equipmentMaintenanceRecord.delete({where:{id}})}
+ async equipmentMaintenanceRecordDelete(id:string){const row=await this.db.equipmentMaintenanceRecord.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_MAINTENANCE_RECORD','DELETE',id,row,null);return row;}
 
  // MTBF/MTTR/disponibilité calculés à la demande depuis l'historique réel des
  // pannes — jamais des champs ressaisis, pour rester toujours exacts.
@@ -2009,7 +2009,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentControlList(equipmentId?:string){return this.db.equipmentControl.findMany({where:equipmentId?{equipmentId}:undefined,include:{controleur:true,nonConformity:true},orderBy:{dateProchainControle:'asc'}})}
  equipmentControlCreate(b:any){return this.db.equipmentControl.create({data:b})}
  equipmentControlUpdate(id:string,b:any){return this.db.equipmentControl.update({where:{id},data:b})}
- equipmentControlDelete(id:string){return this.db.equipmentControl.delete({where:{id}})}
+ async equipmentControlDelete(id:string){const row=await this.db.equipmentControl.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CONTROL','DELETE',id,row,null);return row;}
  async equipmentControlGenerateNc(id:string,b?:any){
   const control=await this.db.equipmentControl.findUnique({where:{id},include:{equipment:true}});
   if(!control) throw new Error('Contrôle introuvable');
@@ -2034,7 +2034,7 @@ import { saveFile } from '../documents/file-storage.util';
   const nePasUtiliser=b.resultat!=null?(b.resultat!=='CONFORME'):undefined;
   return this.db.equipmentCalibration.update({where:{id},data:{...b,...(nePasUtiliser!=null?{nePasUtiliser}:{})}});
  }
- equipmentCalibrationDelete(id:string){return this.db.equipmentCalibration.delete({where:{id}})}
+ async equipmentCalibrationDelete(id:string){const row=await this.db.equipmentCalibration.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CALIBRATION','DELETE',id,row,null);return row;}
  // Un étalonnage non conforme n'est jamais transformé en NC automatiquement —
  // seule une proposition explicite (bouton) le fait, jamais une décision prise
  // à la place du responsable QHSE.
@@ -2056,7 +2056,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentInspectionList(equipmentId?:string){return this.db.equipmentInspection.findMany({where:equipmentId?{equipmentId}:undefined,include:{inspecteur:true},orderBy:{date:'desc'}})}
  equipmentInspectionCreate(b:any){return this.db.equipmentInspection.create({data:b})}
  equipmentInspectionUpdate(id:string,b:any){return this.db.equipmentInspection.update({where:{id},data:b})}
- equipmentInspectionDelete(id:string){return this.db.equipmentInspection.delete({where:{id}})}
+ async equipmentInspectionDelete(id:string){const row=await this.db.equipmentInspection.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_INSPECTION','DELETE',id,row,null);return row;}
 
  equipmentConsignationList(equipmentId?:string){return this.db.equipmentConsignation.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true},orderBy:{dateDebut:'desc'}})}
  async equipmentConsignationCreate(b:any){
@@ -2076,13 +2076,13 @@ import { saveFile } from '../documents/file-storage.util';
    return updated;
   });
  }
- equipmentConsignationDelete(id:string){return this.db.equipmentConsignation.delete({where:{id}})}
+ async equipmentConsignationDelete(id:string){const row=await this.db.equipmentConsignation.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CONSIGNATION','DELETE',id,row,null);return row;}
 
  events(){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'}})}
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
  eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
- eventDelete(id:string){return this.db.safetyEvent.delete({where:{id}})}
+ async eventDelete(id:string){const row=await this.db.safetyEvent.delete({where:{id}});await writeAudit(this.db,'SAFETY_EVENT','DELETE',id,row,null);return row;}
 
  // Statistiques Phase 2 — répartitions et Pareto des causes, calculés à
  // la demande depuis les événements déjà enregistrés.
@@ -2156,12 +2156,12 @@ import { saveFile } from '../documents/file-storage.util';
  processusGet(id:string){return this.db.processus.findUnique({where:{id},include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:{include:{user:true}},responsible:true},orderBy:{order:'asc'}},exigences:{include:{responsable:true}},risks:true,actions:{include:{responsible:true}},nonConformities:true,audits:true,documents:true,trainings:true,objectifsQhse:true,qualityControls:true}})}
  processusCreate(b:any){return this.db.processus.create({data:b})}
  processusUpdate(id:string,b:any){return this.db.processus.update({where:{id},data:b})}
- processusDelete(id:string){return this.db.processus.delete({where:{id}})}
+ async processusDelete(id:string){const row=await this.db.processus.delete({where:{id}});await writeAudit(this.db,'PROCESSUS','DELETE',id,row,null);return row;}
 
  processusActivityList(processusId:string){return this.db.processusActivity.findMany({where:{processusId},include:{responsible:true,racis:{include:{user:true}}},orderBy:{order:'asc'}})}
  processusActivityCreate(b:any){return this.db.processusActivity.create({data:b})}
  processusActivityUpdate(id:string,b:any){return this.db.processusActivity.update({where:{id},data:b})}
- processusActivityDelete(id:string){return this.db.processusActivity.delete({where:{id}})}
+ async processusActivityDelete(id:string){const row=await this.db.processusActivity.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_ACTIVITY','DELETE',id,row,null);return row;}
 
  processusRaciUpsert(activityId:string,b:any){
   // Une seule ligne RACI par (activité, utilisateur ou libellé de rôle) —
@@ -2169,17 +2169,17 @@ import { saveFile } from '../documents/file-storage.util';
   if(b.id) return this.db.processusRaci.update({where:{id:b.id},data:{raci:b.raci,userId:b.userId,roleLabel:b.roleLabel}});
   return this.db.processusRaci.create({data:{activityId,userId:b.userId,roleLabel:b.roleLabel,raci:b.raci}});
  }
- processusRaciDelete(id:string){return this.db.processusRaci.delete({where:{id}})}
+ async processusRaciDelete(id:string){const row=await this.db.processusRaci.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_RACI','DELETE',id,row,null);return row;}
 
  processusExigenceList(processusId:string){return this.db.processusExigence.findMany({where:{processusId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
  processusExigenceCreate(b:any){return this.db.processusExigence.create({data:b})}
  processusExigenceUpdate(id:string,b:any){return this.db.processusExigence.update({where:{id},data:b})}
- processusExigenceDelete(id:string){return this.db.processusExigence.delete({where:{id}})}
+ async processusExigenceDelete(id:string){const row=await this.db.processusExigence.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_EXIGENCE','DELETE',id,row,null);return row;}
 
  processusLinkList(){return this.db.processusLink.findMany()}
  processusLinkCreate(b:any){return this.db.processusLink.create({data:{sourceId:b.sourceId,targetId:b.targetId,label:b.label}})}
- processusLinkDelete(id:string){return this.db.processusLink.delete({where:{id}})}
- indicateurList(domaine?:string){return this.db.indicateurQualite.findMany({where:domaine?{domaine}:undefined,include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} indicateurDelete(id:string){return this.db.indicateurQualite.delete({where:{id}})}
+ async processusLinkDelete(id:string){const row=await this.db.processusLink.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_LINK','DELETE',id,row,null);return row;}
+ indicateurList(domaine?:string){return this.db.indicateurQualite.findMany({where:domaine?{domaine}:undefined,include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} async indicateurDelete(id:string){const row=await this.db.indicateurQualite.delete({where:{id}});await writeAudit(this.db,'INDICATEUR_QUALITE','DELETE',id,row,null);return row;}
 
  // Ajouter une mesure met aussi à jour la valeur actuelle affichée sur
  // la fiche — pas besoin de le faire deux fois séparément.
@@ -2283,7 +2283,7 @@ import { saveFile } from '../documents/file-storage.util';
  reclamationGet(id:string){return this.db.reclamation.findUnique({where:{id},include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:{include:{responsible:true}}}})}
  reclamationCreate(b:any){return this.db.reclamation.create({data:b})}
  reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})}
- reclamationDelete(id:string){return this.db.reclamation.delete({where:{id}})}
+ async reclamationDelete(id:string){const row=await this.db.reclamation.delete({where:{id}});await writeAudit(this.db,'RECLAMATION','DELETE',id,row,null);return row;}
 
  // Tableau de bord Phase 2 — tout calculé à la demande depuis les
  // réclamations déjà enregistrées, rien de nouveau à saisir.
@@ -2392,12 +2392,12 @@ import { saveFile } from '../documents/file-storage.util';
  fournisseurGet(id:string){return this.db.fournisseur.findUnique({where:{id},include:{responsableInterne:true,certifications:true,nonConformities:true,actions:{include:{responsible:true}},audits:true,risks:true,qualityControls:true,reclamations:true}})}
  fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})}
  fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})}
- fournisseurDelete(id:string){return this.db.fournisseur.delete({where:{id}})}
+ async fournisseurDelete(id:string){const row=await this.db.fournisseur.delete({where:{id}});await writeAudit(this.db,'FOURNISSEUR','DELETE',id,row,null);return row;}
 
  fournisseurCertificationList(fournisseurId:string){return this.db.fournisseurCertification.findMany({where:{fournisseurId},orderBy:{dateExpiration:'asc'}})}
  fournisseurCertificationCreate(b:any){return this.db.fournisseurCertification.create({data:b})}
  fournisseurCertificationUpdate(id:string,b:any){return this.db.fournisseurCertification.update({where:{id},data:b})}
- fournisseurCertificationDelete(id:string){return this.db.fournisseurCertification.delete({where:{id}})}
+ async fournisseurCertificationDelete(id:string){const row=await this.db.fournisseurCertification.delete({where:{id}});await writeAudit(this.db,'FOURNISSEUR_CERTIFICATION','DELETE',id,row,null);return row;}
 
  // Score global pondéré — même principe que l'indice qualité et le
  // score réclamations : moyenne pondérée des scores par domaine,
@@ -2474,7 +2474,7 @@ import { saveFile } from '../documents/file-storage.util';
   const risks=await this.db.risk.findMany({where:{fournisseurId:{not:null},status:'ACTIVE'},include:{fournisseur:true},orderBy:{score:'desc'}});
   return risks.map(r=>({id:r.id,fournisseur:r.fournisseur?.nom,hazard:r.hazard,severity:r.severity,probability:r.probability,score:r.score}));
  }
- visiteMedicaleList(){return this.db.visiteMedicale.findMany({include:{employee:true},orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} visiteMedicaleDelete(id:string){return this.db.visiteMedicale.delete({where:{id}})}
+ visiteMedicaleList(){return this.db.visiteMedicale.findMany({include:{employee:true},orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} async visiteMedicaleDelete(id:string){const row=await this.db.visiteMedicale.delete({where:{id}});await writeAudit(this.db,'VISITE_MEDICALE','DELETE',id,row,null);return row;}
 
  // Risques sanitaires — la criticité se recalcule à chaque écriture,
  // jamais ressaisie séparément par l'utilisateur.
@@ -2490,10 +2490,10 @@ import { saveFile } from '../documents/file-storage.util';
   const probabilite=b.probabilite!==undefined?Number(b.probabilite):current?.probabilite??1;
   return this.db.risqueSanitaire.update({where:{id},data:{...b,gravite,probabilite,criticite:gravite*probabilite}});
  }
- risqueSanitaireDelete(id:string){return this.db.risqueSanitaire.delete({where:{id}})}
+ async risqueSanitaireDelete(id:string){const row=await this.db.risqueSanitaire.delete({where:{id}});await writeAudit(this.db,'RISQUE_SANITAIRE','DELETE',id,row,null);return row;}
 
  expositionCreate(b:any){return this.db.expositionSurveillance.create({data:{...b,valeurMesuree:b.valeurMesuree!==undefined?Number(b.valeurMesuree):undefined,valeurLimite:b.valeurLimite!==undefined?Number(b.valeurLimite):undefined,conforme:b.valeurMesuree!=null&&b.valeurLimite!=null?Number(b.valeurMesuree)<=Number(b.valeurLimite):b.conforme}})}
- expositionDelete(id:string){return this.db.expositionSurveillance.delete({where:{id}})}
+ async expositionDelete(id:string){const row=await this.db.expositionSurveillance.delete({where:{id}});await writeAudit(this.db,'EXPOSITION_SURVEILLANCE','DELETE',id,row,null);return row;}
 
  // Ergonomie — le score se recalcule depuis les facteurs cochés à
  // chaque écriture, jamais ressaisi séparément par l'utilisateur.
@@ -2510,20 +2510,20 @@ import { saveFile } from '../documents/file-storage.util';
   const merged={...current,...b};
   return this.db.analyseErgonomique.update({where:{id},data:{...b,scoreErgonomique:this.calculerScoreErgonomique(merged)}});
  }
- analyseErgonomiqueDelete(id:string){return this.db.analyseErgonomique.delete({where:{id}})}
+ async analyseErgonomiqueDelete(id:string){const row=await this.db.analyseErgonomique.delete({where:{id}});await writeAudit(this.db,'ANALYSE_ERGONOMIQUE','DELETE',id,row,null);return row;}
 
  tmsSignalementList(){return this.db.tmsSignalement.findMany({include:{employee:true,analyseErgonomique:true},orderBy:{dateSignalement:'desc'}})}
  tmsSignalementCreate(b:any){return this.db.tmsSignalement.create({data:b})}
  tmsSignalementUpdate(id:string,b:any){return this.db.tmsSignalement.update({where:{id},data:b})}
- tmsSignalementDelete(id:string){return this.db.tmsSignalement.delete({where:{id}})}
+ async tmsSignalementDelete(id:string){const row=await this.db.tmsSignalement.delete({where:{id}});await writeAudit(this.db,'TMS_SIGNALEMENT','DELETE',id,row,null);return row;}
 
  penibiliteFactorList(){return this.db.penibiliteFactor.findMany({where:{actif:true},orderBy:{nom:'asc'}})}
  penibiliteFactorCreate(b:any){return this.db.penibiliteFactor.create({data:b})}
- penibiliteFactorDelete(id:string){return this.db.penibiliteFactor.update({where:{id},data:{actif:false}})}
+ async penibiliteFactorDelete(id:string){const row=await this.db.penibiliteFactor.update({where:{id},data:{actif:false}});await writeAudit(this.db,'PENIBILITE_FACTOR','UPDATE',id,null,row);return row;}
 
  penibiliteExpositionList(){return this.db.penibiliteExposition.findMany({include:{employee:true,facteur:true},orderBy:{dateEvaluation:'desc'}})}
  penibiliteExpositionCreate(b:any){return this.db.penibiliteExposition.create({data:b})}
- penibiliteExpositionDelete(id:string){return this.db.penibiliteExposition.delete({where:{id}})}
+ async penibiliteExpositionDelete(id:string){const row=await this.db.penibiliteExposition.delete({where:{id}});await writeAudit(this.db,'PENIBILITE_EXPOSITION','DELETE',id,row,null);return row;}
 
  // Alertes automatiques hygiène au travail — chaque critère est
  // indépendant, avec un niveau de sévérité propre.
@@ -2591,7 +2591,7 @@ import { saveFile } from '../documents/file-storage.util';
   });
   return {indice:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
- veilleList(){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} veilleDelete(id:string){return this.db.veilleReglementaire.delete({where:{id}})}
+ veilleList(){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} async veilleDelete(id:string){const row=await this.db.veilleReglementaire.delete({where:{id}});await writeAudit(this.db,'VEILLE_REGLEMENTAIRE','DELETE',id,row,null);return row;}
 
  // === MODULE VEILLE RÉGLEMENTAIRE — Phase 1 : fondations et chaîne centrale
  // (Texte → Exigence → Applicabilité → Évaluation → Preuve → NC → CAPA →
@@ -2601,7 +2601,7 @@ import { saveFile } from '../documents/file-storage.util';
  async regulatoryDomainList(){return this.db.regulatoryDomain.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  regulatoryDomainCreate(b:any){return this.db.regulatoryDomain.create({data:b})}
  regulatoryDomainUpdate(id:string,b:any){return this.db.regulatoryDomain.update({where:{id},data:b})}
- regulatoryDomainDelete(id:string){return this.db.regulatoryDomain.delete({where:{id}})}
+ async regulatoryDomainDelete(id:string){const row=await this.db.regulatoryDomain.delete({where:{id}});await writeAudit(this.db,'REGULATORY_DOMAIN','DELETE',id,row,null);return row;}
 
  async regulatorySettingsGet(){
   let s=await this.db.regulatorySettings.findFirst();
@@ -2717,7 +2717,7 @@ import { saveFile } from '../documents/file-storage.util';
  async regulatoryEvidenceList(requirementId?:string){const list=await this.db.regulatoryEvidence.findMany({where:requirementId?{requirementId}:undefined,include:{document:true,responsable:true},orderBy:{dateExpiration:'asc'}});return this.regulatoryDecorateEvidences(list)}
  regulatoryEvidenceCreate(requirementId:string,b:any){return this.db.regulatoryEvidence.create({data:{...b,requirementId}})}
  regulatoryEvidenceUpdate(id:string,b:any){return this.db.regulatoryEvidence.update({where:{id},data:b})}
- regulatoryEvidenceDelete(id:string){return this.db.regulatoryEvidence.delete({where:{id}})}
+ async regulatoryEvidenceDelete(id:string){const row=await this.db.regulatoryEvidence.delete({where:{id}});await writeAudit(this.db,'REGULATORY_EVIDENCE','DELETE',id,row,null);return row;}
 
  // Liaison exigence ↔ risque et ↔ document GED — tables de jointure,
  // jamais de duplication de la fiche risque/document.
@@ -3399,7 +3399,7 @@ import { saveFile } from '../documents/file-storage.util';
   await writeAudit(this.db,'OBJECTIF_RECETTE','UPDATE',id,current,updated);
   return updated;
  }
- workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} workedHoursDelete(id:string){return this.db.workedHours.delete({where:{id}})}
+ workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} async workedHoursDelete(id:string){const row=await this.db.workedHours.delete({where:{id}});await writeAudit(this.db,'WORKED_HOURS','DELETE',id,row,null);return row;}
 
  // ============================================================================
  // RAPPORTS QHSE — Phase 1 : identite de l'entreprise + moteur de
