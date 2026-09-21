@@ -55,7 +55,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async ncUpdate(id:string,b:any){
   const current=await this.db.nonConformity.findUnique({where:{id}});
-  if(!current) throw new Error('Non-conformité introuvable');
+  if(!current) throw new NotFoundException('Non-conformité introuvable');
   if(b.status==='CLOSED'&&current.status!=='CLOSED') throw new Error('Utilisez la clôture dédiée (vérification d\'efficacité requise) plutôt qu\'une modification directe du statut.');
   const calc=await this.calculerCriticiteNc({...current,...b,id});
   const nc=await this.db.nonConformity.update({where:{id},data:{...b,...calc}});
@@ -100,7 +100,7 @@ import { saveFile } from '../documents/file-storage.util';
  // renvoie vers une nouvelle analyse plutôt que de clore silencieusement.
  async ncClose(id:string,b:any){
   const nc=await this.db.nonConformity.findUnique({where:{id}});
-  if(!nc) throw new Error('Non-conformité introuvable');
+  if(!nc) throw new NotFoundException('Non-conformité introuvable');
   if(nc.effectivenessResult!=='EFFICACE'){
    throw new Error("Clôture impossible : la vérification d'efficacité doit d'abord conclure à une action efficace.");
   }
@@ -110,7 +110,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async ncReopen(id:string){
   const nc=await this.db.nonConformity.findUnique({where:{id}});
-  if(!nc) throw new Error('Non-conformité introuvable');
+  if(!nc) throw new NotFoundException('Non-conformité introuvable');
   const reopened=await this.db.nonConformity.update({where:{id},data:{status:'OPEN',closedAt:null,reopenedCount:{increment:1}}});
   await writeAudit(this.db,'NC','UPDATE',id,nc,reopened);
   return reopened;
@@ -251,7 +251,7 @@ import { saveFile } from '../documents/file-storage.util';
  // vide, et jamais de doublon si un risque est déjà relié.
  async nonConformityGenerateRisk(id:string){
   const nc=await this.db.nonConformity.findUnique({where:{id}});
-  if(!nc) throw new Error('Non-conformité introuvable');
+  if(!nc) throw new NotFoundException('Non-conformité introuvable');
   if(nc.riskId) throw new Error('Cette non-conformité est déjà reliée à un risque');
   const calc=await this.calculerRisque({severity:nc.severity||3,probability:3});
   const risk=await this.db.risk.create({data:{
@@ -268,7 +268,7 @@ import { saveFile } from '../documents/file-storage.util';
  // ensuite comme tout autre risque.
  async safetyEventGenerateRisk(id:string){
   const ev=await this.db.safetyEvent.findUnique({where:{id}});
-  if(!ev) throw new Error('Événement introuvable');
+  if(!ev) throw new NotFoundException('Événement introuvable');
   if(ev.riskId) throw new Error('Cet événement est déjà relié à un risque');
   const calc=await this.calculerRisque({severity:ev.severity||3,probability:4});
   const risk=await this.db.risk.create({data:{
@@ -302,7 +302,7 @@ import { saveFile } from '../documents/file-storage.util';
  actionCreate(b:any){return this.db.action.create({data:b})}
  async actionUpdate(id:string,b:any){
   const current=await this.db.action.findUnique({where:{id}});
-  if(!current) throw new Error('Action introuvable');
+  if(!current) throw new NotFoundException('Action introuvable');
   if(b.status==='CLOSED'&&current.status!=='CLOSED') throw new Error('Utilisez la clôture dédiée (vérification d\'efficacité requise) plutôt qu\'une modification directe du statut.');
   const action=await this.db.action.update({where:{id},data:b});
   // La progression d'une CAPA peut se déduire de ses sous-actions plutôt
@@ -328,7 +328,7 @@ import { saveFile } from '../documents/file-storage.util';
  // d'efficacité n'a pas conclu à une action efficace.
  async actionClose(id:string,b:any){
   const action=await this.db.action.findUnique({where:{id}});
-  if(!action) throw new Error('Action introuvable');
+  if(!action) throw new NotFoundException('Action introuvable');
   if(action.effectivenessResult!=='EFFICACE'){
    throw new Error("Clôture impossible : la vérification d'efficacité doit d'abord conclure à une action efficace.");
   }
@@ -338,14 +338,14 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async actionReopen(id:string){
   const action=await this.db.action.findUnique({where:{id}});
-  if(!action) throw new Error('Action introuvable');
+  if(!action) throw new NotFoundException('Action introuvable');
   return this.db.action.update({where:{id},data:{status:'OPEN',dateCloture:null,reopenedCount:{increment:1}}});
  }
  // Une prolongation ne remplace jamais silencieusement l'échéance : l'ancienne
  // reste tracée dans ActionExtension (point 26).
  async actionExtensionCreate(id:string,b:any){
   const action=await this.db.action.findUnique({where:{id}});
-  if(!action) throw new Error('Action introuvable');
+  if(!action) throw new NotFoundException('Action introuvable');
   const extension=await this.db.actionExtension.create({data:{
    actionId:id, ancienneEcheance:action.dueDate, nouvelleEcheance:new Date(b.nouvelleEcheance),
    motif:b.motif, demandeurId:b.demandeurId||null, validateurId:b.validateurId||null,
@@ -515,7 +515,7 @@ import { saveFile } from '../documents/file-storage.util';
   switch(sourceModule){
    case 'NON_CONFORMITY':{
     const nc=await this.db.nonConformity.findUnique({where:{id:sourceEntityId},include:{workUnit:true,processus:true}});
-    if(!nc) throw new Error('Non-conformité introuvable');
+    if(!nc) throw new NotFoundException('Non-conformité introuvable');
     return {
      title:`Traiter — ${nc.title}`, description:nc.description||nc.title, date:nc.occurredAt,
      processusId:nc.processusId, workUnitId:nc.workUnitId, departement:nc.workUnit?.department||null, service:nc.workUnit?.service||null,
@@ -527,7 +527,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'RISK':{
     const r=await this.db.risk.findUnique({where:{id:sourceEntityId},include:{workUnit:true,processus:true}});
-    if(!r) throw new Error('Risque introuvable');
+    if(!r) throw new NotFoundException('Risque introuvable');
     return {
      title:`Maîtriser le risque — ${r.hazard}`, description:r.hazardousEvent||r.potentialDamage||r.hazard, date:new Date(),
      processusId:r.processusId, workUnitId:r.workUnitId, departement:r.workUnit?.department||null, service:r.workUnit?.service||null,
@@ -539,7 +539,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'AUDIT': case 'AUDIT_FINDING':{
     const f=await this.db.auditFinding.findUnique({where:{id:sourceEntityId},include:{audit:{include:{workUnit:true}},responsable:true}});
-    if(!f) throw new Error('Constat introuvable');
+    if(!f) throw new NotFoundException('Constat introuvable');
     return {
      title:`Traiter le constat — ${f.audit.title}`, description:f.description, date:f.audit.auditDate,
      processusId:f.audit.processusId, workUnitId:f.audit.workUnitId, departement:f.audit.workUnit?.department||null, service:f.audit.workUnit?.service||null,
@@ -550,7 +550,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'SAFETY_EVENT':{
     const ev=await this.db.safetyEvent.findUnique({where:{id:sourceEntityId}});
-    if(!ev) throw new Error('Événement introuvable');
+    if(!ev) throw new NotFoundException('Événement introuvable');
     const niveau=ev.severity>=4?'CRITIQUE':ev.severity===3?'MAJEURE':ev.severity===2?'MODEREE':'MINEURE';
     const preventif=/PRESQUE|SITUATION/i.test(`${ev.categorie||''} ${ev.type||''}`);
     return {
@@ -562,7 +562,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'SAFETY_TALK':{
     const st=await this.db.safetyTalk.findUnique({where:{id:sourceEntityId}});
-    if(!st) throw new Error('Quart d\'heure sécurité introuvable');
+    if(!st) throw new NotFoundException('Quart d\'heure sécurité introuvable');
     const niveau=st.priorite||(st.status==='DELIVERED'?'MODEREE':'MODEREE');
     return {
      title:`Action — ${st.theme||st.title}`, description:st.messagePrincipal||st.summary||st.title, date:st.realisedAt||st.scheduledAt||st.weekStart,
@@ -573,7 +573,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'FOURNISSEUR':{
     const f=await this.db.fournisseur.findUnique({where:{id:sourceEntityId}});
-    if(!f) throw new Error('Fournisseur introuvable');
+    if(!f) throw new NotFoundException('Fournisseur introuvable');
     const niveau=f.criticite?'ELEVEE':f.niveauRisque;
     return {
      title:`Plan de progrès — ${f.nom}`, description:`Écart constaté chez le fournisseur ${f.nom}`, date:new Date(),
@@ -583,7 +583,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'RECLAMATION':{
     const r=await this.db.reclamation.findUnique({where:{id:sourceEntityId}});
-    if(!r) throw new Error('Réclamation introuvable');
+    if(!r) throw new NotFoundException('Réclamation introuvable');
     return {
      title:`Traiter la réclamation — ${r.client}`, description:r.description||r.motif, date:r.date,
      processusId:r.processusId, criticite:r.gravite, priority:this.capaPrioriteProposee(r.gravite),
@@ -592,7 +592,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'CONTROLE':{
     const c=await this.db.qualityControl.findUnique({where:{id:sourceEntityId}});
-    if(!c) throw new Error('Contrôle introuvable');
+    if(!c) throw new NotFoundException('Contrôle introuvable');
     const niveau=c.result==='NON_COMPLIANT'?'MAJEURE':'MODEREE';
     return {
      title:`Traiter le contrôle non conforme — ${c.code}`, description:`${c.finalDecision||c.result||'Non conforme'}${c.line?` — ${c.line}`:''}${c.product?` — ${c.product}`:''}`.trim(),
@@ -603,7 +603,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'ENVIRONNEMENT_ASPECT':{
     const a=await this.db.environnementAspect.findUnique({where:{id:sourceEntityId}});
-    if(!a) throw new Error('Aspect environnemental introuvable');
+    if(!a) throw new NotFoundException('Aspect environnemental introuvable');
     const niveau=a.criticite>=15?'CRITIQUE':a.criticite>=8?'MAJEURE':'MODEREE';
     return {
      title:`Maîtriser l'aspect — ${a.aspect}`, description:a.impact||a.aspect, date:new Date(),
@@ -620,7 +620,7 @@ import { saveFile } from '../documents/file-storage.util';
     // (voir HaccpService.declencherNonConformite) — ce préremplissage sert
     // pour l'étape humaine suivante : la création explicite de l'Action CAPA.
     const m=await this.db.haccpMonitoringRecord.findUnique({where:{id:sourceEntityId},include:{ccp:true}});
-    if(!m) throw new Error('Relevé de surveillance CCP introuvable');
+    if(!m) throw new NotFoundException('Relevé de surveillance CCP introuvable');
     const niveau=m.ccp.type==='CCP'?'CRITIQUE':'MAJEURE';
     const detail=[m.ccp.limiteCritique?`limite critique : ${m.ccp.limiteCritique}`:null, m.valeur!=null?`valeur mesurée : ${m.valeur}${m.ccp.unite||''}`:null, m.valeurTexte].filter(Boolean).join(', ');
     return {
@@ -633,7 +633,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'INDICATEUR':{
     const i=await this.db.indicateurQualite.findUnique({where:{id:sourceEntityId}});
-    if(!i) throw new Error('Indicateur introuvable');
+    if(!i) throw new NotFoundException('Indicateur introuvable');
     const ecart=i.sensInverse?i.actuel-i.cible:i.cible-i.actuel;
     return {
      title:`Redresser l'indicateur — ${i.indicateur}`, description:`Valeur actuelle ${i.actuel}${i.unite||''} vs cible ${i.cible}${i.unite||''} (écart ${ecart})`,
@@ -643,7 +643,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'PROCESSUS':{
     const p=await this.db.processus.findUnique({where:{id:sourceEntityId}});
-    if(!p) throw new Error('Processus introuvable');
+    if(!p) throw new NotFoundException('Processus introuvable');
     return {
      title:`Améliorer le processus — ${p.nom}`, description:p.objectifPrincipal||p.finalite||p.nom, date:new Date(),
      processusId:p.id, criticite:p.criticite, priority:this.capaPrioriteProposee(p.criticite),
@@ -653,7 +653,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'EPI':{
     const e=await this.db.epi.findUnique({where:{id:sourceEntityId}});
-    if(!e) throw new Error('EPI introuvable');
+    if(!e) throw new NotFoundException('EPI introuvable');
     return {
      title:`Traiter l'anomalie EPI — ${e.name}`, description:`Statut : ${e.status}`, date:new Date(),
      criticite:'MODEREE', priority:this.capaPrioriteProposee('MODEREE'), actionType:'CORRECTIVE',
@@ -662,7 +662,7 @@ import { saveFile } from '../documents/file-storage.util';
    }
    case 'DOCUMENT':{
     const doc=await this.db.document.findUnique({where:{id:sourceEntityId},include:{versions:{orderBy:{version:'desc'},take:1}}});
-    if(!doc) throw new Error('Document introuvable');
+    if(!doc) throw new NotFoundException('Document introuvable');
     const niveau=doc.criticite==='CRITIQUE'?'CRITIQUE':'MINEURE';
     return {
      title:`Réviser — ${doc.title}`, description:doc.description||doc.title, date:new Date(),
@@ -813,7 +813,7 @@ import { saveFile } from '../documents/file-storage.util';
 
  async riskUpdate(id:string,b:any){
   const current=await this.db.risk.findUnique({where:{id}});
-  if(!current) throw new Error('Risque introuvable');
+  if(!current) throw new NotFoundException('Risque introuvable');
   const calc=await this.calculerRisque({...current,...b});
   const risk=await this.db.risk.update({where:{id},data:{...b,...calc}});
   await writeAudit(this.db,'RISK','UPDATE',id,current,risk);
@@ -825,7 +825,7 @@ import { saveFile } from '../documents/file-storage.util';
  // lieu de simplement écraser les valeurs précédentes.
  async riskReevaluate(id:string,b:any){
   const current=await this.db.risk.findUnique({where:{id}});
-  if(!current) throw new Error('Risque introuvable');
+  if(!current) throw new NotFoundException('Risque introuvable');
   const merged={...current,...b};
   const calc=await this.calculerRisque(merged);
   const risk=await this.db.risk.update({where:{id},data:{...b,...calc,reviewedAt:new Date()}});
@@ -971,7 +971,7 @@ import { saveFile } from '../documents/file-storage.util';
  // sans passer obligatoirement par une NC (point 12 du cahier des charges).
  async auditFindingGenerateAction(id:string,b:any){
   const finding=await this.db.auditFinding.findUnique({where:{id},include:{audit:true}});
-  if(!finding) throw new Error('Constat introuvable');
+  if(!finding) throw new NotFoundException('Constat introuvable');
   return this.db.action.create({data:{
    code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
    title:b?.title||`Traiter le constat — ${finding.audit.title}`,
@@ -1077,7 +1077,7 @@ import { saveFile } from '../documents/file-storage.util';
  // lien processus de l'audit qui l'a produit.
  async auditFindingGenerateNc(id:string){
   const finding=await this.db.auditFinding.findUnique({where:{id},include:{audit:true}});
-  if(!finding) throw new Error('Constat introuvable');
+  if(!finding) throw new NotFoundException('Constat introuvable');
   if(finding.nonConformityId) throw new Error('Une non-conformité a déjà été générée pour ce constat');
   return this.db.$transaction(async(tx)=>{
    const nc=await tx.nonConformity.create({data:{
@@ -1095,7 +1095,7 @@ import { saveFile } from '../documents/file-storage.util';
  // Registre — même principe que pour une non-conformité ou un accident.
  async auditFindingGenerateRisk(id:string){
   const finding=await this.db.auditFinding.findUnique({where:{id},include:{audit:true}});
-  if(!finding) throw new Error('Constat introuvable');
+  if(!finding) throw new NotFoundException('Constat introuvable');
   if(finding.riskId) throw new Error('Un risque a déjà été généré pour ce constat');
   const calc=await this.calculerRisque({severity:finding.critical?4:2,probability:3});
   const risk=await this.db.risk.create({data:{
@@ -1131,7 +1131,7 @@ import { saveFile } from '../documents/file-storage.util';
  // jamais ressaisie — même principe que pour le Registre des risques.
  async auditProgramGenerateAudit(id:string){
   const program=await this.db.auditProgram.findUnique({where:{id}});
-  if(!program) throw new Error('Programme introuvable');
+  if(!program) throw new NotFoundException('Programme introuvable');
   if(program.auditId) throw new Error('Un audit a déjà été généré pour ce programme');
   const audit=await this.db.qhseAudit.create({data:{
    code:`AUD-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
@@ -1882,7 +1882,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentUpdate(id:string,b:any){
   const current=await this.db.equipment.findUnique({where:{id}});
-  if(!current) throw new Error('Équipement introuvable');
+  if(!current) throw new NotFoundException('Équipement introuvable');
   const hasCriticite=b.criticiteSecurite!=null||b.criticiteQualite!=null||b.criticiteEnvironnement!=null||b.criticiteProduction!=null;
   const calc=hasCriticite?await this.calculerCriticiteEquipement({
    criticiteSecurite:b.criticiteSecurite??current.criticiteSecurite,
@@ -1898,7 +1898,7 @@ import { saveFile } from '../documents/file-storage.util';
   // Jamais de suppression définitive d'un historique QHSE significatif —
   // on archive plutôt que de supprimer dès que l'équipement a un historique lié.
   const eq=await this.db.equipment.findUnique({where:{id},include:{risks:true,nonConformities:true,actions:true,safetyEvents:true}});
-  if(!eq) throw new Error('Équipement introuvable');
+  if(!eq) throw new NotFoundException('Équipement introuvable');
   const aHistorique=eq.risks.length||eq.nonConformities.length||eq.actions.length||eq.safetyEvents.length;
   if(aHistorique){
    const archived=await this.db.equipment.update({where:{id},data:{etat:'MIS_AU_REBUT',archivedAt:new Date()}});
@@ -1960,7 +1960,7 @@ import { saveFile } from '../documents/file-storage.util';
  // reste du système QHSE (registre des risques, NC, CAPA).
  async equipmentGenerateRisk(id:string,b?:any){
   const eq=await this.db.equipment.findUnique({where:{id}});
-  if(!eq) throw new Error('Équipement introuvable');
+  if(!eq) throw new NotFoundException('Équipement introuvable');
   const calc=await this.calculerRisque({severity:b?.severity||(eq.criticiteNiveau==='CRITIQUE'?5:eq.criticiteNiveau==='ELEVE'?4:3),probability:b?.probability||3});
   const risk=await this.db.risk.create({data:{
    code:`RISK-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
@@ -1972,7 +1972,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentGenerateNc(id:string,b?:any){
   const eq=await this.db.equipment.findUnique({where:{id}});
-  if(!eq) throw new Error('Équipement introuvable');
+  if(!eq) throw new NotFoundException('Équipement introuvable');
   return this.db.$transaction(async(tx)=>{
    const nc=await tx.nonConformity.create({data:{
     code:`NC-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
@@ -1987,7 +1987,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentGenerateAction(id:string,b:any){
   const eq=await this.db.equipment.findUnique({where:{id}});
-  if(!eq) throw new Error('Équipement introuvable');
+  if(!eq) throw new NotFoundException('Équipement introuvable');
   return this.db.action.create({data:{
    code:`ACT-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
    title:b?.title||`Action CAPA — ${eq.name}`, description:b?.description,
@@ -2046,7 +2046,7 @@ import { saveFile } from '../documents/file-storage.util';
  async equipmentControlDelete(id:string){const row=await this.db.equipmentControl.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CONTROL','DELETE',id,row,null);return row;}
  async equipmentControlGenerateNc(id:string,b?:any){
   const control=await this.db.equipmentControl.findUnique({where:{id},include:{equipment:true}});
-  if(!control) throw new Error('Contrôle introuvable');
+  if(!control) throw new NotFoundException('Contrôle introuvable');
   if(control.nonConformityId) throw new Error('Une non-conformité a déjà été générée pour ce contrôle');
   return this.db.$transaction(async(tx)=>{
    const nc=await tx.nonConformity.create({data:{
@@ -2074,7 +2074,7 @@ import { saveFile } from '../documents/file-storage.util';
  // à la place du responsable QHSE.
  async equipmentCalibrationGenerateNc(id:string,b?:any){
   const calib=await this.db.equipmentCalibration.findUnique({where:{id},include:{equipment:true}});
-  if(!calib) throw new Error('Étalonnage introuvable');
+  if(!calib) throw new NotFoundException('Étalonnage introuvable');
   if(calib.nonConformityId) throw new Error('Une non-conformité a déjà été générée pour cet étalonnage');
   return this.db.$transaction(async(tx)=>{
    const nc=await tx.nonConformity.create({data:{
@@ -2102,7 +2102,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentConsignationLever(id:string,b?:any){
   const c=await this.db.equipmentConsignation.findUnique({where:{id}});
-  if(!c) throw new Error('Consignation introuvable');
+  if(!c) throw new NotFoundException('Consignation introuvable');
   if(c.statut==='LEVEE') throw new Error('Cette consignation est déjà levée');
   return this.db.$transaction(async(tx)=>{
    const updated=await tx.equipmentConsignation.update({where:{id},data:{statut:'LEVEE',dateFinReelle:new Date()}});
@@ -2452,7 +2452,7 @@ import { saveFile } from '../documents/file-storage.util';
  // pondérations réutilisant la même table de configuration.
  async fournisseurScoreGlobal(id:string){
   const f=await this.db.fournisseur.findUnique({where:{id}});
-  if(!f) throw new Error('Fournisseur introuvable');
+  if(!f) throw new NotFoundException('Fournisseur introuvable');
   const depuis12Mois=new Date();depuis12Mois.setMonth(depuis12Mois.getMonth()-12);
   const ncs=await this.db.nonConformity.findMany({where:{fournisseurId:id,occurredAt:{gte:depuis12Mois}},select:{severity:true,status:true}});
   const scoreQualiteAuto=this.scoreQualiteAutoFromNcs(ncs);
