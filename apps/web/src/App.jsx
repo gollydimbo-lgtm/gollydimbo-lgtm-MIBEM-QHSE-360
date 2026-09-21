@@ -14627,6 +14627,94 @@ const PAGES = {
 // ============================================================================
 // Application
 // ============================================================================
+// Cloche de notifications — chantier "calendrier centralisé / notifications
+// actives" de l'audit. Jusqu'ici les échéances n'étaient visibles que sur
+// le tableau de bord Pilotage ; ceci les rend visibles partout dans
+// l'application, en s'appuyant sur les endpoints /notifications déjà
+// construits côté API (idempotents, jamais de doublon).
+const NOTIF_MODULE_PAGE = {
+  ACTION: 'capa', AUDIT: 'audits', NON_CONFORMITE: 'non-conformites', EPI: 'securite-epi',
+  EQUIPEMENT: 'equipements', DOCUMENT: 'documentation', FORMATION: 'formation',
+  HABILITATION: 'formation', MAINTENANCE: 'equipements', VEILLE_REGLEMENTAIRE: 'veille',
+  VISITE_MEDICALE: 'securite-hygiene', RISQUE: 'risques', FOURNISSEUR: 'qualite-fournisseurs',
+};
+function notifNiveauColor(C, n) { return { CRITICAL: C.red, WARNING: C.amber, INFO: C.blue, SUCCESS: C.green }[n] || C.textMuted; }
+
+function NotificationBell() {
+  const C = useTheme();
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(0);
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const refreshCount = () => { api.get('/notifications/compteur').then((d) => setCount(d.nonLues)).catch(() => {}); };
+    refreshCount();
+    const t = setInterval(refreshCount, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    api.get('/notifications').then((d) => { setItems(d); setLoading(false); }).catch(() => setLoading(false));
+    function onClickOutside(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  async function ouvrirNotification(n) {
+    if (!n.lu) {
+      api.patch(`/notifications/${n.id}/lue`, {}).catch(() => {});
+      setItems((cur) => (cur || []).map((x) => (x.id === n.id ? { ...x, lu: true } : x)));
+      setCount((c) => Math.max(0, c - 1));
+    }
+    const cible = NOTIF_MODULE_PAGE[n.module];
+    if (cible && window.__qhseGoTo) window.__qhseGoTo(cible);
+    setOpen(false);
+  }
+
+  async function marquerToutesLues(e) {
+    e.stopPropagation();
+    await api.patch('/notifications/marquer-toutes-lues', {}).catch(() => {});
+    setItems((cur) => (cur || []).map((x) => ({ ...x, lu: true })));
+    setCount(0);
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen((o) => !o)} className="relative p-2 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }} title="Notifications">
+        <Bell size={16} color={count > 0 ? C.amber : C.textMuted} />
+        {count > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] flex items-center justify-center font-semibold" style={{ backgroundColor: C.red, color: '#fff' }}>
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-lg shadow-lg z-40" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: `1px solid ${C.border}` }}>
+            <span className="text-xs font-semibold" style={{ color: C.text }}>Notifications</span>
+            <button onClick={marquerToutesLues} className="text-[10px]" style={{ color: C.blue }}>Tout marquer lu</button>
+          </div>
+          {loading && <div className="p-3 text-xs" style={{ color: C.textMuted }}>Chargement…</div>}
+          {!loading && items && items.length === 0 && <div className="p-3 text-xs" style={{ color: C.textMuted }}>Aucune notification.</div>}
+          {!loading && items && items.map((n) => (
+            <button key={n.id} onClick={() => ouvrirNotification(n)} className="w-full text-left px-3 py-2 flex gap-2 items-start" style={{ borderBottom: `1px solid ${C.border}`, backgroundColor: n.lu ? 'transparent' : `${C.blue}11`, opacity: n.lu ? 0.85 : 1 }}>
+              <span className="w-2 h-2 rounded-full mt-1 shrink-0" style={{ backgroundColor: notifNiveauColor(C, n.niveau) }} />
+              <span className="min-w-0">
+                <span className="block text-xs" style={{ color: C.text }}>{n.titre}</span>
+                {n.detail && <span className="block text-[10px] truncate" style={{ color: C.textMuted }}>{n.detail}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function QhseDashboard() {
   const [user, setUser] = useState(getStoredUser());
   const [page, setPage] = useState('pilotage');
@@ -14733,8 +14821,9 @@ export default function QhseDashboard() {
               <button onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')} className="p-2 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }} title="Changer de thème">
                 {themeMode === 'dark' ? <Sun size={16} color={C.amber} /> : <Moon size={16} color={C.blue} />}
               </button>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-                <Bell size={16} color={C.amber} /><span className="text-xs" style={{ color: C.text }}>{capaStats.enRetard} action(s) CAPA en retard</span>
+              <NotificationBell />
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <AlertTriangle size={16} color={C.amber} /><span className="text-xs" style={{ color: C.text }}>{capaStats.enRetard} action(s) CAPA en retard</span>
               </div>
             </div>
           </header>
