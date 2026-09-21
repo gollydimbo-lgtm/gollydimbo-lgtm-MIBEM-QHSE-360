@@ -2399,16 +2399,34 @@ import { saveFile } from '../documents/file-storage.util';
  fournisseurCertificationUpdate(id:string,b:any){return this.db.fournisseurCertification.update({where:{id},data:b})}
  async fournisseurCertificationDelete(id:string){const row=await this.db.fournisseurCertification.delete({where:{id}});await writeAudit(this.db,'FOURNISSEUR_CERTIFICATION','DELETE',id,row,null);return row;}
 
+ // Composante "Qualité (auto)" — recalculée à chaque lecture depuis les
+ // non-conformités réellement rattachées au fournisseur sur les 12
+ // derniers mois (jamais stockée, jamais resaisie à la main), pour que
+ // le score ne reste plus figé quand personne ne repasse le corriger —
+ // silo identifié à l'audit : un fournisseur pouvait accumuler des NC
+ // ouvertes sans que sa note baisse tant qu'un humain ne la ressaisissait
+ // pas. Vient compléter les scores saisis manuellement (jamais les
+ // remplacer), avec le même mécanisme de pondération déjà en place.
+ private scoreQualiteAutoFromNcs(ncs:{severity:number,status:string}[]):number{
+  let deduction=0;
+  for(const nc of ncs) deduction += nc.status==='CLOSED' ? nc.severity*3 : nc.severity*8;
+  return Math.max(0,Math.round(100-deduction));
+ }
+
  // Score global pondéré — même principe que l'indice qualité et le
  // score réclamations : moyenne pondérée des scores par domaine,
  // pondérations réutilisant la même table de configuration.
  async fournisseurScoreGlobal(id:string){
   const f=await this.db.fournisseur.findUnique({where:{id}});
   if(!f) throw new Error('Fournisseur introuvable');
+  const depuis12Mois=new Date();depuis12Mois.setMonth(depuis12Mois.getMonth()-12);
+  const ncs=await this.db.nonConformity.findMany({where:{fournisseurId:id,occurredAt:{gte:depuis12Mois}},select:{severity:true,status:true}});
+  const scoreQualiteAuto=this.scoreQualiteAutoFromNcs(ncs);
   const ponderations=await this.indicateurPonderationList();
   const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
   const composantes=[
-   {key:'fourn_qualite',nom:'Qualité',valeur:f.scoreQualite},
+   {key:'fourn_qualite',nom:'Qualité (saisie manuelle)',valeur:f.scoreQualite},
+   {key:'fourn_qualite_auto',nom:'Qualité (auto, NC des 12 derniers mois)',valeur:scoreQualiteAuto},
    {key:'fourn_livraison',nom:'Livraison',valeur:f.scoreLivraison},
    {key:'fourn_qhse',nom:'QHSE',valeur:f.scoreQhse},
    {key:'fourn_commercial',nom:'Commercial',valeur:f.scoreCommercial},
@@ -2427,11 +2445,21 @@ import { saveFile } from '../documents/file-storage.util';
  // score renseigné, triés du meilleur au moins bon.
  async fournisseursClassement(){
   const list=await this.db.fournisseur.findMany();
+  const depuis12Mois=new Date();depuis12Mois.setMonth(depuis12Mois.getMonth()-12);
+  const ncsRecentes=await this.db.nonConformity.findMany({where:{fournisseurId:{not:null},occurredAt:{gte:depuis12Mois}},select:{fournisseurId:true,severity:true,status:true}});
+  const ncsParFournisseur=new Map<string,{severity:number,status:string}[]>();
+  for(const nc of ncsRecentes){
+   if(!nc.fournisseurId) continue;
+   if(!ncsParFournisseur.has(nc.fournisseurId)) ncsParFournisseur.set(nc.fournisseurId,[]);
+   ncsParFournisseur.get(nc.fournisseurId)!.push(nc);
+  }
   const ponderations=await this.indicateurPonderationList();
   const poidsMap=Object.fromEntries(ponderations.map(p=>[p.autoKey,p.poids]));
   const withScore=list.map(f=>{
    const composantes=[
-    {key:'fourn_qualite',valeur:f.scoreQualite},{key:'fourn_livraison',valeur:f.scoreLivraison},
+    {key:'fourn_qualite',valeur:f.scoreQualite},
+    {key:'fourn_qualite_auto',valeur:this.scoreQualiteAutoFromNcs(ncsParFournisseur.get(f.id)||[])},
+    {key:'fourn_livraison',valeur:f.scoreLivraison},
     {key:'fourn_qhse',valeur:f.scoreQhse},{key:'fourn_commercial',valeur:f.scoreCommercial},{key:'fourn_reactivite',valeur:f.scoreReactivite},
    ];
    let somme=0,poidsTotal=0;
