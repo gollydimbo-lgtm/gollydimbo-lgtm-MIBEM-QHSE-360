@@ -14646,6 +14646,7 @@ function NotificationBell() {
   const [count, setCount] = useState(0);
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -14682,6 +14683,18 @@ function NotificationBell() {
     setCount(0);
   }
 
+  async function genererNotifications(e) {
+    e.stopPropagation();
+    setGenerating(true);
+    try {
+      await api.post('/notifications/generer', {});
+      const [list, c] = await Promise.all([api.get('/notifications'), api.get('/notifications/compteur')]);
+      setItems(list);
+      setCount(c.nonLues);
+    } catch (_) { /* silencieux : la cloche reste utilisable même si la génération échoue */ }
+    setGenerating(false);
+  }
+
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)} className="relative p-2 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }} title="Notifications">
@@ -14696,7 +14709,12 @@ function NotificationBell() {
         <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-lg shadow-lg z-40" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
           <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: `1px solid ${C.border}` }}>
             <span className="text-xs font-semibold" style={{ color: C.text }}>Notifications</span>
-            <button onClick={marquerToutesLues} className="text-[10px]" style={{ color: C.blue }}>Tout marquer lu</button>
+            <div className="flex items-center gap-2">
+              <button onClick={genererNotifications} disabled={generating} className="text-[10px] flex items-center gap-1" style={{ color: C.textMuted }} title="Rescanner les échéances">
+                <RefreshCw size={10} className={generating ? 'animate-spin' : ''} />{generating ? '...' : 'Générer'}
+              </button>
+              <button onClick={marquerToutesLues} className="text-[10px]" style={{ color: C.blue }}>Tout marquer lu</button>
+            </div>
           </div>
           {loading && <div className="p-3 text-xs" style={{ color: C.textMuted }}>Chargement…</div>}
           {!loading && items && items.length === 0 && <div className="p-3 text-xs" style={{ color: C.textMuted }}>Aucune notification.</div>}
