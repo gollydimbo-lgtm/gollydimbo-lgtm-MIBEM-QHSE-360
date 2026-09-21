@@ -125,6 +125,7 @@ model User {
   updatedAt DateTime @updatedAt
   auditLogs AuditLog[]
   besoinsFormationTraites BesoinFormation[]
+  evaluationsEfficaciteRealisees TrainingEfficaciteEvaluation[]
   attachments Attachment[]
   documentsCreated Document[] @relation("DocumentCreator")
   documentsResponsable Document[] @relation("DocumentResponsable")
@@ -523,6 +524,7 @@ model Employee {
   trainingParticipations TrainingParticipant[]
   competences EmployeeCompetence[]
   besoinsFormation BesoinFormation[]
+  evaluationsEfficacite TrainingEfficaciteEvaluation[]
 }
 
 model EpiAssignment {
@@ -2008,6 +2010,8 @@ model Training {
   periodiciteMois Int?
   recyclageNecessaire Boolean @default(false)
   service String?
+  evaluationType String?
+  delaiEvaluationEfficaciteJours Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   participantsList TrainingParticipant[]
@@ -2015,6 +2019,7 @@ model Training {
   actions Action[]
   competencesAssociees EmployeeCompetence[]
   besoinsTransformes BesoinFormation[]
+  evaluationsEfficacite TrainingEfficaciteEvaluation[]
 }
 
 // Catalogue des categories/domaines de formation — configurable par
@@ -2043,6 +2048,11 @@ model TrainingParticipant {
   seuilReussite Float?
   resultat String? // REUSSI | A_RENFORCER | ECHEC | NON_EVALUE
   commentaire String?
+  // --- Phase 3 : preuve de presence par signature electronique, meme
+  // principe que EpiAssignment (image PNG en base64, jamais un simple
+  // champ texte "signe par") ---
+  employeeSignature String?
+  responsableSignature String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   training Training @relation(fields:[trainingId], references:[id], onDelete:Cascade)
@@ -2182,6 +2192,38 @@ model BesoinFormation {
   employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
   training Training? @relation(fields:[trainingId], references:[id], onDelete:SetNull)
   traitePar User? @relation(fields:[traiteParId], references:[id], onDelete:SetNull)
+  efficaciteOrigine TrainingEfficaciteEvaluation[]
+}
+
+// === MODULE FORMATION — Phase 3 : evaluation de l'efficacite a froid.
+// Realisee un delai configurable apres la formation (30/60/90 jours ou
+// personnalise). Si jugee inefficace, propose automatiquement (comme le
+// moteur de detection de la phase 2, jamais sans le meme garde-fou) un
+// nouveau besoin de formation — jamais une formation recreee directement.
+model TrainingEfficaciteEvaluation {
+  id String @id @default(cuid())
+  code String @unique
+  trainingId String
+  employeeId String?
+  delaiJours Int
+  dateEvaluation DateTime @default(now())
+  niveauEfficacite String @default("NON_EVALUEE")
+  applicationConnaissances Boolean?
+  respectProcedures Boolean?
+  changementComportement Boolean?
+  autonomie Boolean?
+  reductionErreurs Boolean?
+  reductionNc Boolean?
+  reductionIncidents Boolean?
+  commentaire String?
+  evaluateurId String?
+  besoinGenereId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  training Training @relation(fields:[trainingId], references:[id], onDelete:Cascade)
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  evaluateur User? @relation(fields:[evaluateurId], references:[id], onDelete:SetNull)
+  besoinGenere BesoinFormation? @relation(fields:[besoinGenereId], references:[id], onDelete:SetNull)
 }
 
 // Catalogue de catégories d'équipements — configurable par l'administrateur,

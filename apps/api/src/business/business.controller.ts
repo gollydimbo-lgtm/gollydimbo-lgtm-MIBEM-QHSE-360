@@ -59,6 +59,10 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Get('competence-matrice') competenceMatrice(){return this.s.competenceMatrice()}
 @Get('besoins-formation') besoinFormationList(){return this.s.besoinFormationList()} @Patch('besoins-formation/:id') besoinFormationUpdate(@Param('id')id:string,@Body()b:any){return this.s.besoinFormationUpdate(id,b)} @Post('besoins-formation/:id/transformer') besoinFormationTransformer(@Param('id')id:string,@Body()b:any){return this.s.besoinFormationTransformer(id,b)}
 @Post('besoins-formation-detecter') detecterBesoinsFormation(){return this.s.detecterBesoinsFormation()}
+@Get('efficacite-evaluations') efficaciteEvaluationList(){return this.s.efficaciteEvaluationList()} @Post('efficacite-evaluations') efficaciteEvaluationCreate(@Body()b:any){return this.s.efficaciteEvaluationCreate(b)} @Patch('efficacite-evaluations/:id') efficaciteEvaluationUpdate(@Param('id')id:string,@Body()b:any){return this.s.efficaciteEvaluationUpdate(id,b)} @Delete('efficacite-evaluations/:id') efficaciteEvaluationDelete(@Param('id')id:string){return this.s.efficaciteEvaluationDelete(id)}
+@Get('formations-a-evaluer-efficacite') formationsAEvaluerEfficacite(){return this.s.formationsAEvaluerEfficacite()}
+@Get('formation-budget-detail') formationBudgetDetail(){return this.s.formationBudgetDetail()}
+@Get('accueil-securite-stats') accueilSecuriteStats(){return this.s.accueilSecuriteStats()}
 @Get('equipment') equipmentList(){return this.s.equipmentList()} @Post('equipment') equipmentCreate(@Body()b:any){return this.s.equipmentCreate(b)} @Patch('equipment/:id') equipmentUpdate(@Param('id')id:string,@Body()b:any){return this.s.equipmentUpdate(id,b)} @Delete('equipment/:id') equipmentDelete(@Param('id')id:string){return this.s.equipmentDelete(id)}
 @Get('equipment-dashboard') equipmentDashboard(){return this.s.equipmentDashboard()}
 @Get('equipment/qr/:token') equipmentByQrToken(@Param('token')token:string){return this.s.equipmentByQrToken(token)}

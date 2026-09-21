@@ -1405,7 +1405,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  // Feuille de participants d'une session — remplace l'ensemble de la liste
  // en une fois (upsert par collaborateur), plus simple pour l'UI que N appels.
- async trainingParticipantsSet(trainingId:string,list:Array<{employeeId:string,present?:boolean,score?:number,seuilReussite?:number,resultat?:string,commentaire?:string}>){
+ async trainingParticipantsSet(trainingId:string,list:Array<{employeeId:string,present?:boolean,score?:number,seuilReussite?:number,resultat?:string,commentaire?:string,employeeSignature?:string,responsableSignature?:string}>){
   const t=await this.db.training.findUnique({where:{id:trainingId}});
   if(!t) throw new NotFoundException('Formation introuvable');
   await this.db.trainingParticipant.deleteMany({where:{trainingId}});
@@ -1694,6 +1694,111 @@ import { saveFile } from '../documents/file-storage.util';
    crees.push(row);
   }
   return {analyses:candidats.length, nouveauxBesoins:crees.length, besoins:crees};
+ }
+
+ // === MODULE FORMATION — Phase 3 : evaluation de l'efficacite a froid.
+ // Boucle complete du point 27 : Formation -> Evaluation (connaissances,
+ // deja en place) -> Application terrain -> Mesure d'efficacite (ici,
+ // a J+30/60/90) -> Analyse QHSE -> Action si inefficace.
+ async efficaciteEvaluationList(){return this.db.trainingEfficaciteEvaluation.findMany({include:{training:true,employee:true,evaluateur:true},orderBy:{dateEvaluation:'desc'}})}
+ async efficaciteEvaluationCreate(b:any){
+  const training=await this.db.training.findUnique({where:{id:b.trainingId}});
+  if(!training) throw new NotFoundException('Formation introuvable');
+  const data:any={...b, code:b.code||`EFF-${Date.now().toString().slice(-8)}`};
+  let besoinGenereId:string|undefined;
+  // Une formation jugee inefficace declenche automatiquement une proposition
+  // de besoin de formation complementaire (jamais une formation recreee
+  // directement) — meme garde-fou humain que le moteur de detection.
+  if(b.niveauEfficacite==='INEFFICACE'){
+   const sourceKey=`FORMATION_INEFFICACE::${b.trainingId}::${b.employeeId||'global'}`;
+   let besoin=await this.db.besoinFormation.findUnique({where:{sourceKey}});
+   if(!besoin){
+    besoin=await this.db.besoinFormation.create({data:{
+     code:`BF-${Date.now().toString().slice(-8)}`, sourceModule:'FORMATION_INEFFICACE', sourceKey, sourceEntityId:b.trainingId,
+     titre:`Formation complémentaire suite à : ${training.title}`,
+     description:b.commentaire||"Évaluation d'efficacité à froid jugée inefficace.",
+     employeeId:b.employeeId||null, competenceVisee:training.competenceVisee||null,
+     priorite:'ELEVEE', motif:"Formation initiale jugée inefficace lors de l'évaluation à froid.",
+    }});
+   }
+   besoinGenereId=besoin.id;
+  }
+  const row=await this.db.trainingEfficaciteEvaluation.create({data:{...data,besoinGenereId}});
+  await writeAudit(this.db,'TRAINING_EFFICACITE','CREATE',row.id,null,row);
+  return row;
+ }
+ async efficaciteEvaluationUpdate(id:string,b:any){
+  const current=await this.db.trainingEfficaciteEvaluation.findUnique({where:{id}});
+  if(!current) throw new NotFoundException("Évaluation d'efficacité introuvable");
+  const row=await this.db.trainingEfficaciteEvaluation.update({where:{id},data:b});
+  await writeAudit(this.db,'TRAINING_EFFICACITE','UPDATE',id,current,row);
+  return row;
+ }
+ async efficaciteEvaluationDelete(id:string){
+  const current=await this.db.trainingEfficaciteEvaluation.findUnique({where:{id}});
+  if(!current) throw new NotFoundException("Évaluation d'efficacité introuvable");
+  await writeAudit(this.db,'TRAINING_EFFICACITE','DELETE',id,current,null);
+  return this.db.trainingEfficaciteEvaluation.delete({where:{id}});
+ }
+ // Formations realisees depuis au moins leur delai d'evaluation (60 jours
+ // par defaut, configurable par formation) et jamais encore evaluees en
+ // efficacite — c'est la liste que le Responsable QHSE doit traiter.
+ async formationsAEvaluerEfficacite(){
+  const trainings=await this.db.training.findMany({
+   where:{status:{in:['REALISEE','CLOTUREE']}},
+   include:{evaluationsEfficacite:true},
+  });
+  const now=new Date();
+  return trainings.filter(t=>{
+   if(t.evaluationsEfficacite.length>0) return false;
+   const delai=t.delaiEvaluationEfficaciteJours??60;
+   const echeance=new Date(t.scheduledAt); echeance.setDate(echeance.getDate()+delai);
+   return echeance<=now;
+  }).map(t=>({id:t.id,code:t.code,title:t.title,scheduledAt:t.scheduledAt,delaiJours:t.delaiEvaluationEfficaciteJours??60}));
+ }
+
+ // === MODULE FORMATION — Phase 4 : budget, calendrier, accueil securite,
+ // exports. Le calendrier et les exports restent client-side (meme
+ // convention que le reste de l'application — cf. exportEquipmentExcel) ;
+ // seuls le detail budgetaire et l'indicateur d'accueil securite ont
+ // besoin d'une agregation serveur.
+ async formationBudgetDetail(){
+  const trainings=await this.trainingList();
+  const parService:Record<string,{prevu:number,consomme:number}>={};
+  const parType:Record<string,{prevu:number,consomme:number}>={};
+  for(const t of trainings){
+   const service=t.service||'Non renseigné';
+   const type=t.type==='INDUCTION'?'Induction':(t.type==='FORMATION'?'Formation':(t.type||'Formation'));
+   parService[service]=parService[service]||{prevu:0,consomme:0};
+   parService[service].prevu+=t.budgetAlloue||0; parService[service].consomme+=t.coutReel||0;
+   parType[type]=parType[type]||{prevu:0,consomme:0};
+   parType[type].prevu+=t.budgetAlloue||0; parType[type].consomme+=t.coutReel||0;
+  }
+  return {
+   parService:Object.entries(parService).map(([nom,v])=>({nom,...v})),
+   parType:Object.entries(parType).map(([nom,v])=>({nom,...v})),
+  };
+ }
+ // Taux d'accueil securite realise avant prise de poste (point 9 du cahier
+ // des charges) — approxime a partir des donnees reellement disponibles :
+ // un collaborateur actif est considere couvert s'il a au moins une
+ // INDUCTION au statut REALISEE/CLOTUREE. Faute d'une date d'embauche
+ // tracee dans l'application, on ne peut pas garantir formellement
+ // l'ordre "avant la prise de poste" — l'indicateur le signale.
+ async accueilSecuriteStats(){
+  const [employees,inductions]=await Promise.all([
+   this.db.employee.findMany({where:{active:true}}),
+   this.db.training.findMany({where:{type:'INDUCTION',status:{in:['REALISEE','CLOTUREE']}},include:{participantsList:true}}),
+  ]);
+  const couverts=new Set<string>();
+  for(const ind of inductions) for(const p of ind.participantsList) if(p.present) couverts.add(p.employeeId);
+  const nonCouverts=employees.filter(e=>!couverts.has(e.id));
+  return {
+   collaborateursActifs:employees.length,
+   collaborateursCouverts:couverts.size,
+   tauxAccueilSecurite: employees.length>0?Math.round((couverts.size/employees.length)*100):null,
+   collaborateursNonCouverts:nonCouverts.map(e=>({id:e.id,firstName:e.firstName,lastName:e.lastName,department:e.department,position:e.position})),
+  };
  }
 
 

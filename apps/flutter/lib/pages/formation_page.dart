@@ -41,6 +41,12 @@ Color habilitationStatutColor(String? s) => {
       'EXPIREE': QhseColors.red, 'SUSPENDUE': QhseColors.textSecondary, 'EN_ATTENTE': QhseColors.blue,
     }[s] ?? QhseColors.textSecondary;
 
+// --- Phase 3 : efficacité à froid ---
+const efficaciteLabels = {'NON_EVALUEE': 'Non évaluée', 'EFFICACE': 'Efficace', 'PARTIELLEMENT_EFFICACE': 'Partiellement efficace', 'INEFFICACE': 'Inefficace'};
+Color efficaciteColor(String? s) => {
+      'EFFICACE': QhseColors.green, 'PARTIELLEMENT_EFFICACE': QhseColors.amber, 'INEFFICACE': QhseColors.red, 'NON_EVALUEE': QhseColors.textSecondary,
+    }[s] ?? QhseColors.textSecondary;
+
 class FormationPage extends StatefulWidget {
   const FormationPage({super.key});
   @override
@@ -49,9 +55,10 @@ class FormationPage extends StatefulWidget {
 
 class _FormationPageState extends State<FormationPage> {
   final api = Api();
-  List trainings = [], habilitations = [], employees = [], besoins = [];
+  List trainings = [], habilitations = [], employees = [], besoins = [], formationsAEvaluer = [];
   Map dashboard = {};
   Map matrice = {'collaborateurs': [], 'tauxCouverture': null, 'competencesCritiquesInsuffisantes': 0};
+  Map accueilSecurite = {'collaborateursActifs': 0, 'collaborateursCouverts': 0, 'tauxAccueilSecurite': null, 'collaborateursNonCouverts': []};
   bool loading = true;
   bool detecting = false;
 
@@ -67,6 +74,8 @@ class _FormationPageState extends State<FormationPage> {
       dashboard = Map.from(await api.get('/business/formation-dashboard'));
       besoins = List.from(await api.get('/business/besoins-formation'));
       matrice = Map.from(await api.get('/business/competence-matrice'));
+      formationsAEvaluer = List.from(await api.get('/business/formations-a-evaluer-efficacite'));
+      accueilSecurite = Map.from(await api.get('/business/accueil-securite-stats'));
     } catch (_) {}
     if (mounted) setState(() => loading = false);
   }
@@ -88,20 +97,62 @@ class _FormationPageState extends State<FormationPage> {
     catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
   }
 
+  // Évaluation d'efficacité simplifiée côté mobile (niveau + commentaire) —
+  // le formulaire détaillé avec les 7 critères booléens (application des
+  // connaissances, respect des procédures, etc.) reste réservé au web pour
+  // ne pas surcharger l'écran mobile ; ce choix est volontaire et n'empêche
+  // pas l'évaluation depuis le terrain.
+  Future<void> _evaluerEfficacite(Map training) async {
+    String niveau = 'EFFICACE';
+    final commentaireCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dc) => StatefulBuilder(builder: (dc2, setDState) => AlertDialog(
+        title: Text('Évaluer : ${training['title']}'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          DropdownButtonFormField<String>(
+            value: niveau,
+            items: efficaciteLabels.entries.where((e) => e.key != 'NON_EVALUEE').map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            onChanged: (v) => setDState(() => niveau = v ?? niveau),
+            decoration: const InputDecoration(labelText: "Niveau d'efficacité"),
+          ),
+          const SizedBox(height: 8),
+          TextField(controller: commentaireCtrl, decoration: const InputDecoration(labelText: 'Commentaire (optionnel)'), maxLines: 2),
+          if (niveau == 'INEFFICACE') Padding(padding: const EdgeInsets.only(top: 8), child: Text(
+            "Un besoin de formation complémentaire sera automatiquement proposé (à valider par le Responsable QHSE).",
+            style: TextStyle(fontSize: 11, color: QhseColors.amber),
+          )),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
+          ElevatedButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Enregistrer')),
+        ],
+      )),
+    );
+    if (ok != true) return;
+    try {
+      await api.post('/business/efficacite-evaluations', {
+        'trainingId': training['id'], 'delaiJours': training['delaiJours'] ?? 60,
+        'niveauEfficacite': niveau, 'commentaire': commentaireCtrl.text.isEmpty ? null : commentaireCtrl.text,
+      });
+      await load();
+    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+  }
+
   @override
   Widget build(BuildContext c) => DefaultTabController(
-    length: 3,
+    length: 4,
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Formation & Compétences'),
-        bottom: const TabBar(tabs: [Tab(text: 'Plan de formation'), Tab(text: 'Habilitations'), Tab(text: 'Compétences & besoins')]),
+        bottom: const TabBar(isScrollable: true, tabs: [Tab(text: 'Plan de formation'), Tab(text: 'Habilitations'), Tab(text: 'Compétences & besoins'), Tab(text: 'Efficacité & pilotage')]),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(children: [_buildKpis(c), Expanded(child: TabBarView(children: [_buildPlan(c), _buildHabilitations(c), _buildCompetences(c)]))]),
+          : Column(children: [_buildKpis(c), Expanded(child: TabBarView(children: [_buildPlan(c), _buildHabilitations(c), _buildCompetences(c), _buildEfficacite(c)]))]),
       floatingActionButton: Builder(builder: (bc) {
         final tabIndex = DefaultTabController.of(bc).index;
-        if (tabIndex == 2) return const SizedBox.shrink();
+        if (tabIndex == 2 || tabIndex == 3) return const SizedBox.shrink();
         return FloatingActionButton.extended(
           onPressed: () async {
             if (tabIndex == 0) {
@@ -264,6 +315,52 @@ class _FormationPageState extends State<FormationPage> {
       ],
     ),
   );
+
+  Widget _buildEfficacite(BuildContext c) {
+    final taux = accueilSecurite['tauxAccueilSecurite'];
+    final nonCouverts = List.from(accueilSecurite['collaborateursNonCouverts'] ?? []);
+    return RefreshIndicator(
+      onRefresh: load,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Text('Accueil sécurité (induction)', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text(
+            "Indicateur approché : collaborateurs actifs ayant réalisé au moins une induction. Faute de date d'embauche tracée, l'ordre strict avant prise de poste n'est pas garanti.",
+            style: TextStyle(fontSize: 11, color: QhseColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Row(children: [
+            _kpiCard('Taux accueil sécurité', taux != null ? '$taux%' : 'Données insuffisantes', taux != null && taux < 100 ? QhseColors.amber : QhseColors.green),
+            _kpiCard('Non couverts', '${nonCouverts.length}', nonCouverts.isNotEmpty ? QhseColors.red : QhseColors.green),
+          ]),
+          if (nonCouverts.isNotEmpty) ...nonCouverts.map<Widget>((e) => ListTile(
+                dense: true,
+                leading: const Icon(Icons.person_outline),
+                title: Text('${e['firstName']} ${e['lastName']}'),
+                subtitle: Text('${e['department'] ?? '—'} · ${e['position'] ?? '—'}'),
+              )),
+          const Divider(height: 32),
+          Text('Formations à évaluer à froid (J+30/60/90)', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          const SizedBox(height: 8),
+          if (formationsAEvaluer.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text("Aucune formation en attente d'évaluation"))),
+          ...formationsAEvaluer.map((t) => Card(child: ListTile(
+                title: Text('${t['code']} — ${t['title']}'),
+                subtitle: Text('Réalisée le ${t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']).toIso8601String().substring(0, 10) : '—'} · délai ${t['delaiJours']} j'),
+                trailing: ElevatedButton(onPressed: () => _evaluerEfficacite(Map.from(t)), child: const Text('Évaluer')),
+              ))),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Budget formation, calendrier détaillé et exports (Excel/CSV) sont disponibles sur la version web du module Formation.',
+              style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: QhseColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Formulaire unique pour Formation/Induction ET Habilitation — le

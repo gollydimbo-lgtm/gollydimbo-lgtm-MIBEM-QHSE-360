@@ -13040,6 +13040,58 @@ const BESOIN_STATUT_LABELS = { PROPOSE: 'Proposé', VALIDE: 'Validé', REJETE: '
 function besoinStatutColor(C, s) { return { PROPOSE: C.blue, VALIDE: C.green, REJETE: C.textMuted, TRANSFORME: C.green }[s] || C.textMuted; }
 function besoinPrioriteColor(C, p) { return { CRITIQUE: C.red, ELEVEE: C.amber, MOYENNE: C.blue, FAIBLE: C.textMuted }[p] || C.textMuted; }
 
+// --- Phase 3 : efficacité à froid ---
+const EFFICACITE_LABELS = { NON_EVALUEE: 'Non évaluée', EFFICACE: 'Efficace', PARTIELLEMENT_EFFICACE: 'Partiellement efficace', INEFFICACE: 'Inefficace' };
+function efficaciteColor(C, s) { return { EFFICACE: C.green, PARTIELLEMENT_EFFICACE: C.amber, INEFFICACE: C.red, NON_EVALUEE: C.textMuted }[s] || C.textMuted; }
+
+// --- Phase 4 : exports (même convention que exportEquipmentExcel/Csv) ---
+function formationExportRows(trainings) {
+  const header = ['Code', 'Intitulé', 'Type', 'Domaine', 'Date prévue', 'Statut', 'Obligatoire', 'Formateur', 'Coût prévu', 'Coût réel', 'Budget alloué'];
+  const rows = trainings.map((t) => [
+    t.code, t.title, TRAINING_TYPE_LABELS[t.type] || t.type, t.domaine || '', new Date(t.scheduledAt).toLocaleDateString('fr-FR'),
+    TRAINING_STATUS_LABELS[t.status] || t.status, t.obligatoire ? 'Oui' : 'Non', t.trainer || '', t.coutPrevu ?? '', t.coutReel ?? '', t.budgetAlloue ?? '',
+  ]);
+  return [header, ...rows];
+}
+function exportFormationExcel(trainings) {
+  downloadWorkbook([['Bilan annuel formation', formationExportRows(trainings)]], `bilan_formation_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+function exportFormationCsv(trainings) {
+  downloadCsv(formationExportRows(trainings), `bilan_formation_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+function habilitationExportRows(habilitations) {
+  const header = ['Code', 'Collaborateur', 'Intitulé', 'Catégorie', 'Date obtention', 'Date expiration', 'Statut'];
+  const rows = habilitations.map((h) => [
+    h.code, `${h.employee.firstName} ${h.employee.lastName}`, h.intitule, h.category?.label || '',
+    h.dateObtention ? new Date(h.dateObtention).toLocaleDateString('fr-FR') : '',
+    h.dateExpiration ? new Date(h.dateExpiration).toLocaleDateString('fr-FR') : '',
+    HABILITATION_STATUT_LABELS[h.statut] || h.statut,
+  ]);
+  return [header, ...rows];
+}
+function exportHabilitationsExcel(habilitations) {
+  downloadWorkbook([['État des habilitations', habilitationExportRows(habilitations)]], `etat_habilitations_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+function exportHabilitationsCsv(habilitations) {
+  downloadCsv(habilitationExportRows(habilitations), `etat_habilitations_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+function synthesisKpiExportRows(dash) {
+  return [
+    ['Indicateur', 'Valeur'],
+    ['Formations prévues', dash.plan.prevues], ['Formations réalisées', dash.plan.realisees],
+    ['Taux de réalisation (%)', dash.plan.tauxRealisation ?? ''], ['En retard', dash.plan.enRetard],
+    ['Obligatoires non réalisées', dash.plan.obligatoiresNonRealisees],
+    ['Taux de participation (%)', dash.participation.tauxParticipation ?? ''],
+    ['Taux de réussite (%)', dash.evaluation.tauxReussite ?? ''],
+    ['Habilitations valides', dash.habilitations.valides], ['Habilitations expirant bientôt', dash.habilitations.expirantBientot],
+    ['Habilitations expirées', dash.habilitations.expirees],
+    ['Budget consommé (%)', dash.budget.tauxConsommation ?? ''],
+  ];
+}
+function exportSynthesisKpiExcel(dash) {
+  downloadWorkbook([['Synthèse KPI formation', synthesisKpiExportRows(dash)]], `synthese_kpi_formation_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 
 function FormationPage() {
   const C = useTheme();
@@ -13051,6 +13103,10 @@ function FormationPage() {
   const besoinsQ = useCollection('/business/besoins-formation');
   const competencesQ = useCollection('/business/competences');
   const niveauxQ = useCollection('/business/competence-niveaux');
+  const formationsAEvaluerQ = useCollection('/business/formations-a-evaluer-efficacite');
+  const efficaciteEvaluationsQ = useCollection('/business/efficacite-evaluations');
+  const budgetDetailQ = useCollection('/business/formation-budget-detail');
+  const accueilSecuriteQ = useCollection('/business/accueil-securite-stats');
   const [tab, setTab] = useState('plan');
   const [typeFilter, setTypeFilter] = useState('TOUS');
   const [employeeFilter, setEmployeeFilter] = useState('');
@@ -13061,7 +13117,8 @@ function FormationPage() {
   const [showCompForm, setShowCompForm] = useState(false);
   const [showCompetenceQuick, setShowCompetenceQuick] = useState(false);
   const [detecting, setDetecting] = useState(false);
-  const loading = dashQ.loading || trainingsQ.loading || habilitationsQ.loading || employeesQ.loading || matriceQ.loading || besoinsQ.loading || competencesQ.loading || niveauxQ.loading;
+  const [evalTrainingId, setEvalTrainingId] = useState(null);
+  const loading = dashQ.loading || trainingsQ.loading || habilitationsQ.loading || employeesQ.loading || matriceQ.loading || besoinsQ.loading || competencesQ.loading || niveauxQ.loading || formationsAEvaluerQ.loading || efficaciteEvaluationsQ.loading || budgetDetailQ.loading || accueilSecuriteQ.loading;
   if (loading) return <LoadingPanel />;
   if (dashQ.error) return <ErrorPanel message={dashQ.error} onRetry={dashQ.reload} />;
   const dash = dashQ.data;
@@ -13069,7 +13126,11 @@ function FormationPage() {
   const habilitations = habilitationsQ.data || [];
   const matrice = matriceQ.data || { collaborateurs: [], tauxCouverture: null, competencesCritiquesInsuffisantes: 0 };
   const besoins = besoinsQ.data || [];
-  const reload = () => { dashQ.reload(); trainingsQ.reload(); habilitationsQ.reload(); matriceQ.reload(); besoinsQ.reload(); competencesQ.reload(); };
+  const formationsAEvaluer = formationsAEvaluerQ.data || [];
+  const efficaciteEvaluations = efficaciteEvaluationsQ.data || [];
+  const budgetDetail = budgetDetailQ.data || { parService: [], parType: [] };
+  const accueilSecurite = accueilSecuriteQ.data || { collaborateursActifs: 0, collaborateursCouverts: 0, tauxAccueilSecurite: null, collaborateursNonCouverts: [] };
+  const reload = () => { dashQ.reload(); trainingsQ.reload(); habilitationsQ.reload(); matriceQ.reload(); besoinsQ.reload(); competencesQ.reload(); formationsAEvaluerQ.reload(); efficaciteEvaluationsQ.reload(); budgetDetailQ.reload(); accueilSecuriteQ.reload(); };
   async function lancerDetection() {
     setDetecting(true);
     try { await api.post('/business/besoins-formation-detecter', {}); reload(); }
@@ -13090,6 +13151,18 @@ function FormationPage() {
     return true;
   });
   const habilitationsFiltered = habilitations.filter((h) => !employeeFilter || h.employeeId === employeeFilter);
+  // Phase 4 : calendrier — vue simplifiée regroupée par mois, calculée
+  // côté client à partir des données déjà chargées (même choix que les
+  // exports : pas de nouvel endpoint dédié).
+  const calendarEvents = [
+    ...trainings.filter((t) => t.status !== 'ANNULEE' && t.status !== 'CLOTUREE').map((t) => ({ date: new Date(t.scheduledAt), label: `${TRAINING_TYPE_LABELS[t.type] || t.type} — ${t.title}`, kind: 'formation' })),
+    ...habilitations.filter((h) => h.dateExpiration).map((h) => ({ date: new Date(h.dateExpiration), label: `Expiration habilitation — ${h.intitule} (${h.employee.firstName} ${h.employee.lastName})`, kind: 'habilitation' })),
+  ].sort((a, b) => a.date - b.date);
+  const calendarByMonth = {};
+  for (const ev of calendarEvents) {
+    const key = ev.date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    (calendarByMonth[key] = calendarByMonth[key] || []).push(ev);
+  }
 
   return (
     <div className="space-y-6">
@@ -13098,6 +13171,7 @@ function FormationPage() {
       {(showHabForm || editingHab) && <HabilitationForm record={editingHab} onClose={() => { setShowHabForm(false); setEditingHab(null); }} onCreated={reload} />}
       {showCompForm && <EmployeeCompetenceForm employees={employeesQ.data || []} competences={competencesQ.data || []} niveaux={niveauxQ.data || []} onClose={() => setShowCompForm(false)} onCreated={reload} />}
       {showCompetenceQuick && <CompetenceQuickForm onClose={() => setShowCompetenceQuick(false)} onCreated={() => competencesQ.reload()} />}
+      {evalTrainingId && <EfficaciteEvaluationForm trainingId={evalTrainingId} employees={employeesQ.data || []} onClose={() => setEvalTrainingId(null)} onCreated={reload} />}
 
       <div className="flex items-center justify-between">
         <LiveBadge />
@@ -13106,6 +13180,8 @@ function FormationPage() {
           <button onClick={() => setShowHabForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>+ Habilitation</button>
           <button onClick={() => setShowCompetenceQuick(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>+ Compétence</button>
           <button onClick={() => setShowCompForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>+ Évaluation matrice</button>
+          <button onClick={() => exportFormationExcel(trainings)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Export Excel</button>
+          <button onClick={() => exportFormationCsv(trainings)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Export CSV</button>
         </div>
       </div>
 
@@ -13125,7 +13201,7 @@ function FormationPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {[['plan', 'Plan de formation'], ['habilitations', 'Habilitations & certifications'], ['competences', 'Compétences & besoins']].map(([id, label]) => (
+        {[['plan', 'Plan de formation'], ['habilitations', 'Habilitations & certifications'], ['competences', 'Compétences & besoins'], ['efficacite', 'Efficacité à froid'], ['pilotage', 'Budget & pilotage']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
         ))}
         <div className="flex-1" />
@@ -13224,6 +13300,98 @@ function FormationPage() {
           </Panel>
         </div>
       )}
+
+      {tab === 'efficacite' && (
+        <div className="space-y-4">
+          <Panel title="Formations à évaluer à froid (délai J+30/60/90 atteint)" subtitle={`${formationsAEvaluer.length} en attente d'évaluation`}>
+            {formationsAEvaluer.length ? (
+              <div className="space-y-2">
+                {formationsAEvaluer.map((t) => (
+                  <div key={t.id} className="flex flex-wrap items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                    <div className="flex-1 min-w-[220px]">
+                      <p className="text-sm font-medium" style={{ color: C.text }}>{t.code} — {t.title}</p>
+                      <p className="text-xs" style={{ color: C.textMuted }}>Réalisée le {new Date(t.scheduledAt).toLocaleDateString('fr-FR')} · délai d'évaluation : {t.delaiJours} jours</p>
+                    </div>
+                    <button onClick={() => setEvalTrainingId(t.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Évaluer</button>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune formation en attente d'évaluation d'efficacité</p>}
+          </Panel>
+
+          <Panel title="Historique des évaluations d'efficacité" subtitle={`${efficaciteEvaluations.length} évaluation(s)`}>
+            {efficaciteEvaluations.length ? (
+              <DataTable columns={['Formation', 'Collaborateur', 'Date', 'Délai (j)', 'Efficacité', 'Commentaire']}
+                rows={efficaciteEvaluations.map((ev) => [
+                  ev.training ? `${ev.training.code} — ${ev.training.title}` : '—',
+                  ev.employee ? `${ev.employee.firstName} ${ev.employee.lastName}` : 'Global',
+                  new Date(ev.dateEvaluation).toLocaleDateString('fr-FR'), ev.delaiJours,
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${efficaciteColor(C, ev.niveauEfficacite)}22`, color: efficaciteColor(C, ev.niveauEfficacite) }}>{EFFICACITE_LABELS[ev.niveauEfficacite] || ev.niveauEfficacite}</span>,
+                  ev.commentaire || '—',
+                ])} />
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune évaluation enregistrée</p>}
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'pilotage' && (
+        <div className="space-y-4">
+          <Panel title="Accueil sécurité (induction)" subtitle="Indicateur approché : collaborateurs actifs ayant réalisé au moins une induction — faute de date d'embauche tracée dans l'application, l'ordre strict « avant la prise de poste » n'est pas garanti formellement.">
+            <div className="flex flex-wrap gap-3 mb-3">
+              <KpiCard label="Taux d'accueil sécurité" value={accueilSecurite.tauxAccueilSecurite != null ? `${accueilSecurite.tauxAccueilSecurite}%` : 'Données insuffisantes'} objectif={`${accueilSecurite.collaborateursCouverts}/${accueilSecurite.collaborateursActifs} collaborateurs`} color={accueilSecurite.tauxAccueilSecurite != null && accueilSecurite.tauxAccueilSecurite < 100 ? C.amber : C.green} icon={ShieldCheck} />
+              <KpiCard label="Non couverts" value={accueilSecurite.collaborateursNonCouverts.length} color={accueilSecurite.collaborateursNonCouverts.length > 0 ? C.red : C.green} icon={AlertTriangle} />
+            </div>
+            {accueilSecurite.collaborateursNonCouverts.length > 0 && (
+              <DataTable columns={['Collaborateur', 'Service', 'Poste']}
+                rows={accueilSecurite.collaborateursNonCouverts.map((e) => [`${e.firstName} ${e.lastName}`, e.department || '—', e.position || '—'])} />
+            )}
+          </Panel>
+
+          <Panel title="Budget formation" subtitle="Prévu vs consommé, par service et par type">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Par service</p>
+                {budgetDetail.parService.length ? (
+                  <DataTable columns={['Service', 'Prévu', 'Consommé']} rows={budgetDetail.parService.map((r) => [r.nom, r.prevu.toLocaleString('fr-FR'), r.consomme.toLocaleString('fr-FR')])} />
+                ) : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Par type</p>
+                {budgetDetail.parType.length ? (
+                  <DataTable columns={['Type', 'Prévu', 'Consommé']} rows={budgetDetail.parType.map((r) => [r.nom, r.prevu.toLocaleString('fr-FR'), r.consomme.toLocaleString('fr-FR')])} />
+                ) : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="Calendrier formation & habilitations" subtitle="Vue regroupée par mois — formations à venir et échéances d'habilitation" right={
+            <div className="flex gap-2">
+              <button onClick={() => exportHabilitationsExcel(habilitations)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Export habilitations (Excel)</button>
+              <button onClick={() => exportHabilitationsCsv(habilitations)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>CSV</button>
+              <button onClick={() => exportSynthesisKpiExcel(dash)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Synthèse KPI (Excel)</button>
+            </div>
+          }>
+            {Object.keys(calendarByMonth).length ? (
+              <div className="space-y-3">
+                {Object.entries(calendarByMonth).map(([month, events]) => (
+                  <div key={month}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.textMuted }}>{month}</p>
+                    <div className="space-y-1">
+                      {events.map((ev, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm px-2 py-1 rounded" style={{ backgroundColor: C.cardAlt, color: C.text }}>
+                          <span className="text-xs" style={{ color: C.textMuted }}>{ev.date.toLocaleDateString('fr-FR')}</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: ev.kind === 'formation' ? `${C.blue}22` : `${C.amber}22`, color: ev.kind === 'formation' ? C.blue : C.amber }}>{ev.kind === 'formation' ? 'Formation' : 'Habilitation'}</span>
+                          {ev.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun événement à venir</p>}
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }
@@ -13242,6 +13410,7 @@ function FormationTrainingForm({ record, onClose, onCreated }) {
     budgetAlloue: record?.budgetAlloue ?? '', priorite: record?.priorite || 'MOYENNE', motifBesoin: record?.motifBesoin || '',
     periodiciteMois: record?.periodiciteMois ?? '', recyclageNecessaire: record?.recyclageNecessaire || false,
     service: record?.service || '', status: record?.status || 'PLANNED', expiryAt: record?.expiryAt ? new Date(record.expiryAt).toISOString().slice(0, 10) : '',
+    evaluationType: record?.evaluationType || '', delaiEvaluationEfficaciteJours: record?.delaiEvaluationEfficaciteJours ?? 60,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -13256,6 +13425,8 @@ function FormationTrainingForm({ record, onClose, onCreated }) {
         coutReel: form.coutReel === '' ? null : Number(form.coutReel),
         budgetAlloue: form.budgetAlloue === '' ? null : Number(form.budgetAlloue),
         periodiciteMois: form.periodiciteMois === '' ? null : Number(form.periodiciteMois),
+        evaluationType: form.evaluationType || null,
+        delaiEvaluationEfficaciteJours: form.delaiEvaluationEfficaciteJours === '' ? null : Number(form.delaiEvaluationEfficaciteJours),
         scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
         expiryAt: form.expiryAt ? new Date(form.expiryAt).toISOString() : null,
       };
@@ -13327,6 +13498,10 @@ function FormationTrainingForm({ record, onClose, onCreated }) {
           <FormField label="Échéance / expiration liée (optionnel)"><input type="date" value={form.expiryAt} onChange={(e) => setForm({ ...form, expiryAt: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
         </div>
         <FormField label="Motif du besoin (optionnel)"><input value={form.motifBesoin} onChange={(e) => setForm({ ...form, motifBesoin: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type d'évaluation (optionnel)"><input placeholder="ex. QCM, pratique, entretien…" value={form.evaluationType} onChange={(e) => setForm({ ...form, evaluationType: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Délai d'évaluation d'efficacité à froid (jours)"><input type="number" value={form.delaiEvaluationEfficaciteJours} onChange={(e) => setForm({ ...form, delaiEvaluationEfficaciteJours: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
         <div className="flex items-center gap-4 mt-2">
           <label className="flex items-center gap-2 text-sm" style={{ color: C.text }}><input type="checkbox" checked={form.obligatoire} onChange={(e) => setForm({ ...form, obligatoire: e.target.checked })} /> Formation obligatoire</label>
           <label className="flex items-center gap-2 text-sm" style={{ color: C.text }}><input type="checkbox" checked={form.recyclageNecessaire} onChange={(e) => setForm({ ...form, recyclageNecessaire: e.target.checked })} /> Recyclage nécessaire</label>
@@ -13349,10 +13524,11 @@ function TrainingDetailModal({ trainingId, onClose, onChanged }) {
   const [rows, setRows] = useState(null);
   const [addEmployeeId, setAddEmployeeId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [signingIdx, setSigningIdx] = useState(null);
   if (trainingQ.loading || employeesQ.loading) return <LoadingPanel />;
   if (trainingQ.error || !trainingQ.data) return <ErrorPanel message={trainingQ.error || 'Formation introuvable'} onRetry={trainingQ.reload} />;
   const t = trainingQ.data;
-  const participants = rows || (t.participantsList || []).map((p) => ({ employeeId: p.employeeId, present: p.present ?? false, score: p.score ?? '', resultat: p.resultat || 'NON_EVALUE', commentaire: p.commentaire || '' }));
+  const participants = rows || (t.participantsList || []).map((p) => ({ employeeId: p.employeeId, present: p.present ?? false, score: p.score ?? '', resultat: p.resultat || 'NON_EVALUE', commentaire: p.commentaire || '', employeeSignature: p.employeeSignature || null, responsableSignature: p.responsableSignature || null }));
   const already = new Set(participants.map((p) => p.employeeId));
   const candidates = (employeesQ.data || []).filter((e) => !already.has(e.id));
   function setRow(idx, patch) { const next = participants.map((p, i) => (i === idx ? { ...p, ...patch } : p)); setRows(next); }
@@ -13361,7 +13537,7 @@ function TrainingDetailModal({ trainingId, onClose, onChanged }) {
   async function saveParticipants() {
     setSaving(true);
     try {
-      const payload = participants.map((p) => ({ employeeId: p.employeeId, present: !!p.present, score: p.score === '' ? null : Number(p.score), resultat: p.resultat, commentaire: p.commentaire || null }));
+      const payload = participants.map((p) => ({ employeeId: p.employeeId, present: !!p.present, score: p.score === '' ? null : Number(p.score), resultat: p.resultat, commentaire: p.commentaire || null, employeeSignature: p.employeeSignature || null, responsableSignature: p.responsableSignature || null }));
       await api.patch(`/business/trainings/${trainingId}/participants`, { participants: payload });
       setRows(null); trainingQ.reload(); onChanged();
     } catch (err) { alert(err.message); }
@@ -13400,7 +13576,14 @@ function TrainingDetailModal({ trainingId, onClose, onChanged }) {
                   <select value={p.resultat} onChange={(e) => setRow(i, { resultat: e.target.value })} className="px-2 py-1 rounded text-xs outline-none" style={inputStyle(C)}>
                     {Object.entries(RESULTAT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
+                  <button onClick={() => setSigningIdx(signingIdx === i ? null : i)} className="text-xs px-2 py-1 rounded" style={{ color: (p.employeeSignature || p.responsableSignature) ? C.green : C.textMuted }}>{(p.employeeSignature && p.responsableSignature) ? 'Signatures OK' : 'Signer'}</button>
                   <button onClick={() => removeParticipant(i)} className="text-xs px-2 py-1 rounded" style={{ color: C.red }}>Retirer</button>
+                  {signingIdx === i && (
+                    <div className="w-full grid grid-cols-2 gap-3 p-3 mt-1 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                      <SignaturePad label="Signature du collaborateur (présence)" value={p.employeeSignature} onChange={(v) => setRow(i, { employeeSignature: v })} />
+                      <SignaturePad label="Signature du responsable / formateur" value={p.responsableSignature} onChange={(v) => setRow(i, { responsableSignature: v })} />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -13417,6 +13600,77 @@ function TrainingDetailModal({ trainingId, onClose, onChanged }) {
         </div>
       </Modal>
     </>
+  );
+}
+
+function EfficaciteEvaluationForm({ trainingId, employees, onClose, onCreated }) {
+  const C = useTheme();
+  const [form, setForm] = useState({
+    employeeId: '', delaiJours: 60, niveauEfficacite: 'NON_EVALUEE',
+    applicationConnaissances: null, respectProcedures: null, changementComportement: null,
+    autonomie: null, reductionErreurs: null, reductionNc: null, reductionIncidents: null,
+    commentaire: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      await api.post('/business/efficacite-evaluations', {
+        trainingId, employeeId: form.employeeId || null, delaiJours: Number(form.delaiJours),
+        niveauEfficacite: form.niveauEfficacite,
+        applicationConnaissances: form.applicationConnaissances, respectProcedures: form.respectProcedures,
+        changementComportement: form.changementComportement, autonomie: form.autonomie,
+        reductionErreurs: form.reductionErreurs, reductionNc: form.reductionNc, reductionIncidents: form.reductionIncidents,
+        commentaire: form.commentaire || null,
+      });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  function BoolField({ label, field }) {
+    return (
+      <FormField label={label}>
+        <select value={form[field] === null ? '' : String(form[field])} onChange={(e) => setForm({ ...form, [field]: e.target.value === '' ? null : e.target.value === 'true' })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+          <option value="">—</option><option value="true">Oui</option><option value="false">Non</option>
+        </select>
+      </FormField>
+    );
+  }
+  return (
+    <Modal title="Évaluation d'efficacité à froid" onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Collaborateur (optionnel — vide = évaluation globale)">
+            <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">Global</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Délai écoulé (jours)"><input type="number" required value={form.delaiJours} onChange={(e) => setForm({ ...form, delaiJours: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Niveau d'efficacité">
+          <select value={form.niveauEfficacite} onChange={(e) => setForm({ ...form, niveauEfficacite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            {Object.entries(EFFICACITE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </FormField>
+        <div className="grid grid-cols-3 gap-3">
+          <BoolField label="Application des connaissances" field="applicationConnaissances" />
+          <BoolField label="Respect des procédures" field="respectProcedures" />
+          <BoolField label="Changement de comportement" field="changementComportement" />
+          <BoolField label="Autonomie" field="autonomie" />
+          <BoolField label="Réduction des erreurs" field="reductionErreurs" />
+          <BoolField label="Réduction des NC" field="reductionNc" />
+          <BoolField label="Réduction des incidents" field="reductionIncidents" />
+        </div>
+        <FormField label="Commentaire (optionnel)"><textarea rows={2} value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {form.niveauEfficacite === 'INEFFICACE' && <p className="text-xs mt-1" style={{ color: C.amber }}>Un besoin de formation complémentaire sera automatiquement proposé (à valider par le Responsable QHSE).</p>}
+        {error && <p className="text-sm mt-2" style={{ color: C.red }}>{error}</p>}
+        <div className="flex justify-end gap-2 mt-4">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

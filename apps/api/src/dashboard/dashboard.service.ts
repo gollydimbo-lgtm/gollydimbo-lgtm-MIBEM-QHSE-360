@@ -78,6 +78,11 @@ export class DashboardService {
       ? Math.round(((qualityControlsSubmittedRange - qualityControlsNonCompliant) / qualityControlsSubmittedRange) * 100)
       : null;
 
+    const [formationsAEvaluerList, accueilSecurite] = await Promise.all([
+      this.business.formationsAEvaluerEfficacite(),
+      this.business.accueilSecuriteStats(),
+    ]);
+
     return {
       generatedAt: now,
       counters: {
@@ -101,6 +106,9 @@ export class DashboardService {
         formationsObligatoiresNonRealisees,
         habilitationsExpirees,
         besoinsFormationEnAttente,
+        formationsAEvaluerEfficacite: formationsAEvaluerList.length,
+        accueilSecuriteTaux: accueilSecurite.tauxAccueilSecurite,
+        accueilSecuriteNonCouverts: accueilSecurite.collaborateursNonCouverts.length,
       },
       indicators: {
         qualite: {
@@ -206,6 +214,15 @@ export class DashboardService {
     const besoinsEnAttente = await this.db.besoinFormation.count({ where: { statut: 'PROPOSE' } });
     if (besoinsEnAttente > 0) {
       alerts.push({ level: 'INFO', icon: '🔵', domain: 'FORMATION', code: null, title: `${besoinsEnAttente} besoin(s) de formation en attente de validation`, detail: 'proposés par le moteur de détection', dueDate: null });
+    }
+
+    const formationsAEvaluer = await this.business.formationsAEvaluerEfficacite();
+    if (formationsAEvaluer.length > 0) {
+      alerts.push({ level: 'INFO', icon: '🔵', domain: 'FORMATION', code: null, title: `${formationsAEvaluer.length} formation(s) à évaluer à froid (efficacité)`, detail: 'délai J+30/60/90 atteint', dueDate: null });
+    }
+    const accueilSecurite = await this.business.accueilSecuriteStats();
+    if (accueilSecurite.collaborateursNonCouverts.length > 0) {
+      alerts.push({ level: 'WARNING', icon: '🟠', domain: 'FORMATION', code: null, title: `${accueilSecurite.collaborateursNonCouverts.length} collaborateur(s) sans accueil sécurité (induction) enregistré`, detail: `taux d'accueil sécurité : ${accueilSecurite.tauxAccueilSecurite ?? 'N/A'}%`, dueDate: null });
     }
 
     const rank = { CRITICAL: 0, WARNING: 1, INFO: 2, SUCCESS: 3 } as const;
