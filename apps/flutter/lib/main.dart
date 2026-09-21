@@ -37,6 +37,7 @@ import 'pages/quality_pages.dart';
 import 'pages/actions_page.dart';
 import 'pages/safety_talk_page.dart';
 import 'pages/formation_page.dart';
+import 'pages/notifications_page.dart';
 import 'theme.dart';
 
 // Clé de navigation globale : permet à Api.onUnauthorized (statique, sans
@@ -96,6 +97,8 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     api.currentUser().then((u) => setState(() => user = u));
     refreshPendingCount();
+    _refreshNotifCount();
+    _notifTimer = Timer.periodic(const Duration(seconds: 60), (_) => _refreshNotifCount());
     _connSub = Connectivity().onConnectivityChanged.listen((result) {
       final hasNetwork = result.any((r) => r != ConnectivityResult.none);
       if (hasNetwork) syncNow(silent: true);
@@ -103,11 +106,44 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   @override
-  void dispose() { _connSub?.cancel(); super.dispose(); }
+  void dispose() { _connSub?.cancel(); _notifTimer?.cancel(); super.dispose(); }
 
   StreamSubscription<List<ConnectivityResult>>? _connSub;
   int pendingSync = 0;
   bool syncing = false;
+  int notifNonLues = 0;
+  Timer? _notifTimer;
+
+  // Cloche de notifications — chantier "calendrier centralisé / notifications
+  // actives" de l'audit. Interrogation légère (compteur seul) toutes les
+  // 60s ; la liste complète n'est chargée qu'à l'ouverture de l'écran dédié.
+  Future<void> _refreshNotifCount() async {
+    try {
+      final d = await api.get('/notifications/compteur');
+      if (mounted) setState(() => notifNonLues = (d['nonLues'] as num?)?.toInt() ?? 0);
+    } catch (_) {}
+  }
+
+  Widget _notificationsAction() => Stack(clipBehavior: Clip.none, children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined),
+          tooltip: 'Notifications',
+          onPressed: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsPage()));
+            _refreshNotifCount();
+          },
+        ),
+        if (notifNonLues > 0)
+          Positioned(
+            right: 6, top: 6,
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(notifNonLues > 99 ? '99+' : '$notifNonLues', style: const TextStyle(color: Colors.white, fontSize: 10), textAlign: TextAlign.center),
+            ),
+          ),
+      ]);
 
   Future<void> refreshPendingCount() async {
     final n = await SyncQueue.pendingCount();
@@ -283,6 +319,7 @@ class _HomeShellState extends State<HomeShell> {
             },
           ),
         ),
+        _notificationsAction(),
         _syncAction(),
       ],
     );
