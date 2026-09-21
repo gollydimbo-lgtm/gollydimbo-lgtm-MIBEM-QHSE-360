@@ -119,6 +119,7 @@ import {Body,Controller,Delete,Get,Param,Patch,Post,Query} from '@nestjs/common'
 @Get('regulatory-risk-reevaluations') regulatoryRiskReevaluationList(@Query('requirementId')requirementId?:string){return this.s.regulatoryRiskReevaluationList(requirementId)}
 @Post('regulatory-requirements/:id/request-risk-reevaluation') regulatoryRequestRiskReevaluation(@Param('id')id:string,@Body()b:any){return this.s.regulatoryRequestRiskReevaluation(id,b)}
 @Patch('regulatory-risk-reevaluations/:id') regulatoryRiskReevaluationUpdate(@Param('id')id:string,@Body()b:any){return this.s.regulatoryRiskReevaluationUpdate(id,b)}
+@Post('risk-reevaluations-detecter') detecterReevaluationsRisquesCroisees(){return this.s.detecterReevaluationsRisquesCroisees()}
 @Get('regulatory-requirements') regulatoryRequirementList(@Query('textId')textId?:string,@Query('domainId')domainId?:string,@Query('siteId')siteId?:string,@Query('applicabilite')applicabilite?:string,@Query('statutConformite')statutConformite?:string){return this.s.regulatoryRequirementList({textId,domainId,siteId,applicabilite,statutConformite})}
 @Post('regulatory-requirements') regulatoryRequirementCreate(@Body()b:any){return this.s.regulatoryRequirementCreate(b)}
 @Get('regulatory-requirements/:id') regulatoryRequirementGet(@Param('id')id:string){return this.s.regulatoryRequirementGet(id)}

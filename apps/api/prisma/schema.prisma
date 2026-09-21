@@ -3474,15 +3474,26 @@ model RegulatoryRequirementDocument {
 // automatique de la cotation, toujours une tâche à traiter par un humain.
 model RegulatoryRiskReevaluationRequest {
   id String @id @default(cuid())
-  requirementId String
+  requirementId String?
   riskId String
   raison String?
   responsableId String?
   dateLimite DateTime?
   statut String @default("A_PLANIFIER")
+  // Généralisation (chantier "moteur de réévaluation croisée des risques") :
+  // au départ ces demandes ne venaient que d'une évolution réglementaire
+  // (requirementId obligatoire). sourceModule/sourceKey/sourceEntityId
+  // permettent au même mécanisme d'être déclenché par d'autres signaux du
+  // système (accident grave, non-conformités récurrentes liées au risque),
+  // en réutilisant le motif idempotent déjà utilisé par detecterBesoinsFormation :
+  // sourceKey est unique, donc relancer la détection ne duplique jamais une
+  // proposition déjà créée, quel que soit son statut.
+  sourceModule String @default("REGLEMENTAIRE")
+  sourceKey String? @unique
+  sourceEntityId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  requirement RegulatoryRequirement @relation(fields:[requirementId], references:[id], onDelete:Cascade)
+  requirement RegulatoryRequirement? @relation(fields:[requirementId], references:[id], onDelete:Cascade)
   risk Risk @relation(fields:[riskId], references:[id], onDelete:Cascade)
   responsable User? @relation("RegulatoryReevalResponsable", fields:[responsableId], references:[id], onDelete:SetNull)
 }

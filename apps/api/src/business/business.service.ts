@@ -2946,6 +2946,63 @@ import { saveFile } from '../documents/file-storage.util';
   return demande;
  }
 
+ // Moteur de réévaluation croisée des risques — généralise la logique
+ // ci-dessus (jusque-là déclenchée uniquement par une évolution
+ // réglementaire) à deux autres signaux déjà présents dans le système : un
+ // accident/incident grave lié à un risque, et des non-conformités
+ // récurrentes liées à un même risque. Même principe que
+ // detecterBesoinsFormation() : jamais de modification automatique de la
+ // cotation du risque, uniquement une tâche proposée à un humain, de façon
+ // idempotente via sourceKey (relancer la détection ne duplique rien).
+ async detecterReevaluationsRisquesCroisees(){
+  const candidats:Array<{sourceModule:string,sourceKey:string,sourceEntityId:string,riskId:string,raison:string}> = [];
+
+  // 1) Accidents/incidents graves (90 derniers jours) liés à un risque non
+  // réévalué depuis l'événement.
+  const depuis90j=new Date(); depuis90j.setDate(depuis90j.getDate()-90);
+  const accidentsGraves=await this.db.safetyEvent.findMany({
+   where:{riskId:{not:null}, occurredAt:{gte:depuis90j}, OR:[{severity:{gte:4}},{withLostTime:true}]},
+   include:{risk:true},
+  });
+  for(const ev of accidentsGraves){
+   if(!ev.risk||ev.risk.status!=='ACTIVE'||!ev.riskId) continue;
+   if(ev.risk.reviewedAt&&ev.risk.reviewedAt>ev.occurredAt) continue;
+   candidats.push({
+    sourceModule:'ACCIDENT_GRAVE', sourceKey:`ACCIDENT_GRAVE::${ev.id}`, sourceEntityId:ev.id, riskId:ev.riskId,
+    raison:`Événement sécurité "${ev.title}" (sévérité ${ev.severity}${ev.withLostTime?', avec arrêt de travail':''}) survenu le ${ev.occurredAt.toISOString().slice(0,10)} sur ce risque, non réévalué depuis.`,
+   });
+  }
+
+  // 2) Non-conformités récurrentes (>=2) liées à un même risque, non
+  // réévalué depuis la dernière occurrence.
+  const ncsAvecRisque=await this.db.nonConformity.findMany({where:{riskId:{not:null}},include:{risk:true},orderBy:{occurredAt:'desc'}});
+  const parRisque=new Map<string,typeof ncsAvecRisque>();
+  for(const n of ncsAvecRisque){ if(!n.riskId) continue; if(!parRisque.has(n.riskId)) parRisque.set(n.riskId,[]); parRisque.get(n.riskId)!.push(n); }
+  for(const [riskId,ncs] of parRisque){
+   if(ncs.length<2) continue;
+   const risk=ncs[0].risk;
+   if(!risk||risk.status!=='ACTIVE') continue;
+   const derniere=ncs[0].occurredAt;
+   if(risk.reviewedAt&&derniere&&risk.reviewedAt>derniere) continue;
+   candidats.push({
+    sourceModule:'NC_RECURRENTE_RISQUE', sourceKey:`NC_RECURRENTE_RISQUE::${riskId}`, sourceEntityId:riskId, riskId,
+    raison:`${ncs.length} non-conformités liées à ce risque, la plus récente le ${derniere?derniere.toISOString().slice(0,10):'date inconnue'}, risque non réévalué depuis.`,
+   });
+  }
+
+  const crees:any[]=[];
+  for(const cand of candidats){
+   const existe=await this.db.regulatoryRiskReevaluationRequest.findUnique({where:{sourceKey:cand.sourceKey}});
+   if(existe) continue;
+   const row=await this.db.regulatoryRiskReevaluationRequest.create({data:{
+    riskId:cand.riskId, raison:cand.raison, sourceModule:cand.sourceModule, sourceKey:cand.sourceKey, sourceEntityId:cand.sourceEntityId,
+   }});
+   await writeAudit(this.db,'REGULATORY_RISK_REEVALUATION','CREATE',row.id,null,row);
+   crees.push(row);
+  }
+  return {analyses:candidats.length, nouvellesDemandes:crees.length, demandes:crees};
+ }
+
  // ============================================================================
  // MODULE OBJECTIFS QHSE — Phase 1 : pilotage de la performance QHSE.
  // Principes repris de la Veille réglementaire et des Équipements : aucun
