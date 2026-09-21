@@ -759,7 +759,7 @@ import { saveFile } from '../documents/file-storage.util';
  riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:b})}
  async riskCategoryDelete(id:string){const row=await this.db.riskCategory.delete({where:{id}});await writeAudit(this.db,'RISK_CATEGORY','DELETE',id,row,null);return row;}
 
- workUnitList(){return this.db.workUnit.findMany({include:{site:true},orderBy:{name:'asc'}})}
+ workUnitList(siteId?:string){return this.db.workUnit.findMany({where:siteId?{siteId}:undefined,include:{site:true},orderBy:{name:'asc'}})}
  workUnitCreate(b:any){return this.db.workUnit.create({data:b})}
  workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:b})}
  async workUnitDelete(id:string){const row=await this.db.workUnit.update({where:{id},data:{active:false}});await writeAudit(this.db,'WORK_UNIT','UPDATE',id,null,row);return row;}
@@ -1807,7 +1807,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentInclude = { categoryEq:true, site:true, workUnit:true, responsable:true, fournisseur:true,
   risks:{orderBy:{code:'desc' as const}}, nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}}, safetyEvents:{orderBy:{occurredAt:'desc' as const}},
   maintenancePlans:{where:{actif:true},orderBy:{dateProchaine:'asc' as const}}, controls:{orderBy:{dateProchainControle:'asc' as const}}, calibrations:{orderBy:{dateProchaineEtalonnage:'asc' as const}}, consignations:{where:{statut:'EN_COURS'},orderBy:{dateDebut:'desc' as const}} };
- equipmentList(){return this.db.equipment.findMany({include:this.equipmentInclude,orderBy:{name:'asc'}})}
+ equipmentList(siteId?:string){return this.db.equipment.findMany({where:siteId?{siteId}:undefined,include:this.equipmentInclude,orderBy:{name:'asc'}})}
  equipmentGet(id:string){return this.db.equipment.findUnique({where:{id},include:this.equipmentInclude})}
  async equipmentSettingsGet(){
   let s=await this.db.equipmentSettings.findFirst();
@@ -2078,7 +2078,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentConsignationDelete(id:string){const row=await this.db.equipmentConsignation.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CONSIGNATION','DELETE',id,row,null);return row;}
 
- events(take?:number,skip?:number){return this.db.safetyEvent.findMany({include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'},take:take??500,skip:skip??0})}
+ events(take?:number,skip?:number,siteId?:string){return this.db.safetyEvent.findMany({where:siteId?{siteId}:undefined,include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'},take:take??500,skip:skip??0})}
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
  eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
  eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
@@ -2147,7 +2147,7 @@ import { saveFile } from '../documents/file-storage.util';
   };
  }
 
- processusList(){return this.db.processus.findMany({include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
+ processusList(siteId?:string){return this.db.processus.findMany({where:siteId?{siteId}:undefined,include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
    risks:{where:{status:'ACTIVE'}},
    actions:{where:{status:{not:'CLOSED'}}},
    nonConformities:{where:{status:'OPEN'}},
