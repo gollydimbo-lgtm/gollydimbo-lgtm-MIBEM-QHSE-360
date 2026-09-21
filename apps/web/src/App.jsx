@@ -13035,6 +13035,11 @@ function trainingStatusLabel(t) {
 const HABILITATION_STATUT_LABELS = { VALIDE: 'Valide', EXPIRE_BIENTOT: 'Expire bientôt', A_RENOUVELER: 'À renouveler', EXPIREE: 'Expirée', SUSPENDUE: 'Suspendue', EN_ATTENTE: 'En attente de renouvellement' };
 function habilitationStatutColor(C, s) { return { VALIDE: C.green, EXPIRE_BIENTOT: C.amber, A_RENOUVELER: C.amber, EXPIREE: C.red, SUSPENDUE: C.textMuted, EN_ATTENTE: C.blue }[s] || C.textMuted; }
 const RESULTAT_LABELS = { REUSSI: 'Réussi', A_RENFORCER: 'À renforcer', ECHEC: 'Échec', NON_EVALUE: 'Non évalué' };
+// --- Phase 2 : matrice des compétences + moteur de détection des besoins ---
+const BESOIN_STATUT_LABELS = { PROPOSE: 'Proposé', VALIDE: 'Validé', REJETE: 'Rejeté', TRANSFORME: 'Transformé en formation' };
+function besoinStatutColor(C, s) { return { PROPOSE: C.blue, VALIDE: C.green, REJETE: C.textMuted, TRANSFORME: C.green }[s] || C.textMuted; }
+function besoinPrioriteColor(C, p) { return { CRITIQUE: C.red, ELEVEE: C.amber, MOYENNE: C.blue, FAIBLE: C.textMuted }[p] || C.textMuted; }
+
 
 function FormationPage() {
   const C = useTheme();
@@ -13042,6 +13047,10 @@ function FormationPage() {
   const trainingsQ = useCollection('/business/trainings');
   const habilitationsQ = useCollection('/business/habilitations');
   const employeesQ = useCollection('/epi/employees');
+  const matriceQ = useCollection('/business/competence-matrice');
+  const besoinsQ = useCollection('/business/besoins-formation');
+  const competencesQ = useCollection('/business/competences');
+  const niveauxQ = useCollection('/business/competence-niveaux');
   const [tab, setTab] = useState('plan');
   const [typeFilter, setTypeFilter] = useState('TOUS');
   const [employeeFilter, setEmployeeFilter] = useState('');
@@ -13049,13 +13058,32 @@ function FormationPage() {
   const [detailId, setDetailId] = useState(null);
   const [showHabForm, setShowHabForm] = useState(false);
   const [editingHab, setEditingHab] = useState(null);
-  const loading = dashQ.loading || trainingsQ.loading || habilitationsQ.loading || employeesQ.loading;
+  const [showCompForm, setShowCompForm] = useState(false);
+  const [showCompetenceQuick, setShowCompetenceQuick] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const loading = dashQ.loading || trainingsQ.loading || habilitationsQ.loading || employeesQ.loading || matriceQ.loading || besoinsQ.loading || competencesQ.loading || niveauxQ.loading;
   if (loading) return <LoadingPanel />;
   if (dashQ.error) return <ErrorPanel message={dashQ.error} onRetry={dashQ.reload} />;
   const dash = dashQ.data;
   const trainings = trainingsQ.data || [];
   const habilitations = habilitationsQ.data || [];
-  const reload = () => { dashQ.reload(); trainingsQ.reload(); habilitationsQ.reload(); };
+  const matrice = matriceQ.data || { collaborateurs: [], tauxCouverture: null, competencesCritiquesInsuffisantes: 0 };
+  const besoins = besoinsQ.data || [];
+  const reload = () => { dashQ.reload(); trainingsQ.reload(); habilitationsQ.reload(); matriceQ.reload(); besoinsQ.reload(); competencesQ.reload(); };
+  async function lancerDetection() {
+    setDetecting(true);
+    try { await api.post('/business/besoins-formation-detecter', {}); reload(); }
+    catch (err) { alert(err.message); }
+    setDetecting(false);
+  }
+  async function traiterBesoin(id, statut) {
+    try { await api.patch(`/business/besoins-formation/${id}`, { statut }); besoinsQ.reload(); }
+    catch (err) { alert(err.message); }
+  }
+  async function transformerBesoin(b) {
+    try { await api.post(`/business/besoins-formation/${b.id}/transformer`, {}); reload(); }
+    catch (err) { alert(err.message); }
+  }
   const trainingsFiltered = trainings.filter((t) => {
     if (typeFilter !== 'TOUS' && t.type !== typeFilter) return false;
     if (employeeFilter && !(t.participantsList || []).some((p) => p.employeeId === employeeFilter)) return false;
@@ -13068,12 +13096,16 @@ function FormationPage() {
       {showFormationTrainingForm && <FormationTrainingForm onClose={() => setShowFormationTrainingForm(false)} onCreated={reload} />}
       {detailId && <TrainingDetailModal trainingId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />}
       {(showHabForm || editingHab) && <HabilitationForm record={editingHab} onClose={() => { setShowHabForm(false); setEditingHab(null); }} onCreated={reload} />}
+      {showCompForm && <EmployeeCompetenceForm employees={employeesQ.data || []} competences={competencesQ.data || []} niveaux={niveauxQ.data || []} onClose={() => setShowCompForm(false)} onCreated={reload} />}
+      {showCompetenceQuick && <CompetenceQuickForm onClose={() => setShowCompetenceQuick(false)} onCreated={() => competencesQ.reload()} />}
 
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={() => setShowFormationTrainingForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Formation / Induction</button>
           <button onClick={() => setShowHabForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>+ Habilitation</button>
+          <button onClick={() => setShowCompetenceQuick(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>+ Compétence</button>
+          <button onClick={() => setShowCompForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>+ Évaluation matrice</button>
         </div>
       </div>
 
@@ -13093,7 +13125,7 @@ function FormationPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {[['plan', 'Plan de formation'], ['habilitations', 'Habilitations & certifications']].map(([id, label]) => (
+        {[['plan', 'Plan de formation'], ['habilitations', 'Habilitations & certifications'], ['competences', 'Compétences & besoins']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
         ))}
         <div className="flex-1" />
@@ -13135,6 +13167,62 @@ function FormationPage() {
               ])} onRowClick={(i) => setEditingHab(habilitationsFiltered[i])} />
           ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune habilitation pour ce filtre</p>}
         </Panel>
+      )}
+
+      {tab === 'competences' && (
+        <div className="space-y-4">
+          <Panel title="Besoins de formation détectés" subtitle={`${besoins.filter((b) => b.statut === 'PROPOSE').length} en attente de validation`} right={
+            <button onClick={lancerDetection} disabled={detecting} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{detecting ? 'Analyse…' : 'Lancer la détection'}</button>
+          }>
+            {besoins.length ? (
+              <div className="space-y-2">
+                {besoins.map((b) => (
+                  <div key={b.id} className="flex flex-wrap items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${besoinPrioriteColor(C, b.priorite)}40` }}>
+                    <div className="flex-1 min-w-[220px]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: besoinPrioriteColor(C, b.priorite) }}>{b.sourceModule.replace(/_/g, ' ')}</span>
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${besoinStatutColor(C, b.statut)}22`, color: besoinStatutColor(C, b.statut) }}>{BESOIN_STATUT_LABELS[b.statut] || b.statut}</span>
+                      </div>
+                      <p className="text-sm font-medium mt-1" style={{ color: C.text }}>{b.titre}</p>
+                      <p className="text-xs" style={{ color: C.textMuted }}>{b.description || b.motif}{b.employee ? ` · ${b.employee.firstName} ${b.employee.lastName}` : ''}</p>
+                    </div>
+                    {b.statut === 'PROPOSE' && (
+                      <div className="flex gap-2">
+                        <button onClick={() => traiterBesoin(b.id, 'VALIDE')} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Valider</button>
+                        <button onClick={() => traiterBesoin(b.id, 'REJETE')} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.red, border: `1px solid ${C.border}` }}>Rejeter</button>
+                      </div>
+                    )}
+                    {b.statut === 'VALIDE' && (
+                      <button onClick={() => transformerBesoin(b)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Transformer en formation</button>
+                    )}
+                    {b.statut === 'TRANSFORME' && b.training && (
+                      <span className="text-xs px-2 py-1 rounded-lg" style={{ color: C.textMuted }}>→ {b.training.code}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun besoin détecté pour l'instant — lancez une détection.</p>}
+          </Panel>
+
+          <Panel title="Matrice des compétences" subtitle={matrice.tauxCouverture != null ? `Couverture ${matrice.tauxCouverture}% · ${matrice.competencesCritiquesInsuffisantes} écart(s) critique(s)` : 'Aucune évaluation enregistrée'}>
+            {matrice.collaborateurs.length ? (
+              <div className="space-y-3">
+                {matrice.collaborateurs.map((c) => (
+                  <div key={c.employee.id} className="p-3 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                    <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>{c.employee.firstName} {c.employee.lastName}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {c.lignes.map((l) => (
+                        <span key={l.id} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1" style={{ backgroundColor: l.critique ? `${C.red}22` : C.card, color: l.critique ? C.red : C.text, border: `1px solid ${C.border}` }}>
+                          {l.competence.label} : {l.niveauActuel?.label || 'non évalué'} → {l.niveauRequis?.label || '—'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne de matrice — utilisez "+ Évaluation matrice"</p>}
+          </Panel>
+        </div>
       )}
     </div>
   );
@@ -13405,6 +13493,88 @@ function HabilitationForm({ record, onClose, onCreated }) {
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button>
             <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
           </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function EmployeeCompetenceForm({ employees, competences, niveaux, onClose, onCreated }) {
+  const C = useTheme();
+  const [form, setForm] = useState({ employeeId: '', competenceId: '', niveauRequisId: '', niveauActuelId: '', dateEvaluation: new Date().toISOString().slice(0, 10), notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      await api.post('/business/employee-competences', {
+        ...form,
+        niveauRequisId: form.niveauRequisId || null, niveauActuelId: form.niveauActuelId || null,
+        dateEvaluation: form.dateEvaluation ? new Date(form.dateEvaluation).toISOString() : null,
+      });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title="Évaluer une compétence" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Collaborateur">
+          <select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Compétence">
+          <select required value={form.competenceId} onChange={(e) => setForm({ ...form, competenceId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">—</option>{competences.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Niveau requis">
+            <select value={form.niveauRequisId} onChange={(e) => setForm({ ...form, niveauRequisId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">—</option>{niveaux.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Niveau actuel">
+            <select value={form.niveauActuelId} onChange={(e) => setForm({ ...form, niveauActuelId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">Non évalué</option>{niveaux.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Date d'évaluation"><input type="date" value={form.dateEvaluation} onChange={(e) => setForm({ ...form, dateEvaluation: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Notes (optionnel)"><textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-sm mt-2" style={{ color: C.red }}>{error}</p>}
+        <div className="flex justify-end gap-2 mt-4">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function CompetenceQuickForm({ onClose, onCreated }) {
+  const C = useTheme();
+  const [form, setForm] = useState({ label: '', domaine: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      await api.post('/business/competences', { code: genCode('COMP'), label: form.label, domaine: form.domaine || null });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title="Nouvelle compétence" onClose={onClose}>
+      <form onSubmit={submit}>
+        <FormField label="Intitulé"><input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        <FormField label="Domaine (optionnel)"><input value={form.domaine} onChange={(e) => setForm({ ...form, domaine: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-sm mt-2" style={{ color: C.red }}>{error}</p>}
+        <div className="flex justify-end gap-2 mt-4">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: C.cardAlt, color: C.text }}>Annuler</button>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
         </div>
       </form>
     </Modal>

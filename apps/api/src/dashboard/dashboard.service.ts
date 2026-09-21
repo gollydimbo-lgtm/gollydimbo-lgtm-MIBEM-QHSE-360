@@ -48,6 +48,7 @@ export class DashboardService {
       formationsEnRetard,
       formationsObligatoiresNonRealisees,
       habilitationsExpirees,
+      besoinsFormationEnAttente,
     ] = await Promise.all([
       this.db.nonConformity.count({ where: { status: { not: 'CLOSED' } } }),
       this.db.nonConformity.count({ where: { status: { not: 'CLOSED' }, severity: { gte: 4 } } }),
@@ -70,6 +71,7 @@ export class DashboardService {
       this.db.training.count({ where: { status: { notIn: ['REALISEE', 'CLOTUREE', 'ANNULEE'] }, scheduledAt: { lt: now } } }),
       this.db.training.count({ where: { obligatoire: true, status: { notIn: ['REALISEE', 'CLOTUREE'] } } }),
       this.db.habilitation.count({ where: { dateExpiration: { lt: now } } }),
+      this.db.besoinFormation.count({ where: { statut: 'PROPOSE' } }),
     ]);
 
     const qualityComplianceRate = qualityControlsSubmittedRange > 0
@@ -98,6 +100,7 @@ export class DashboardService {
         formationsEnRetard,
         formationsObligatoiresNonRealisees,
         habilitationsExpirees,
+        besoinsFormationEnAttente,
       },
       indicators: {
         qualite: {
@@ -199,6 +202,10 @@ export class DashboardService {
     for (const h of expiringHabilitations) {
       const late = h.dateExpiration && h.dateExpiration < now;
       alerts.push({ level: late ? 'CRITICAL' : 'WARNING', icon: late ? '🔴' : '🟠', domain: 'HABILITATION', code: h.code, title: `${h.intitule} — ${h.employee.firstName} ${h.employee.lastName}`, detail: late ? 'habilitation expirée' : 'habilitation arrivant à échéance sous 30 jours', dueDate: h.dateExpiration });
+    }
+    const besoinsEnAttente = await this.db.besoinFormation.count({ where: { statut: 'PROPOSE' } });
+    if (besoinsEnAttente > 0) {
+      alerts.push({ level: 'INFO', icon: '🔵', domain: 'FORMATION', code: null, title: `${besoinsEnAttente} besoin(s) de formation en attente de validation`, detail: 'proposés par le moteur de détection', dueDate: null });
     }
 
     const rank = { CRITICAL: 0, WARNING: 1, INFO: 2, SUCCESS: 3 } as const;

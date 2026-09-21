@@ -124,6 +124,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   auditLogs AuditLog[]
+  besoinsFormationTraites BesoinFormation[]
   attachments Attachment[]
   documentsCreated Document[] @relation("DocumentCreator")
   documentsResponsable Document[] @relation("DocumentResponsable")
@@ -520,6 +521,8 @@ model Employee {
   haccpTeamMemberships HaccpTeamMember[]
   habilitations Habilitation[]
   trainingParticipations TrainingParticipant[]
+  competences EmployeeCompetence[]
+  besoinsFormation BesoinFormation[]
 }
 
 model EpiAssignment {
@@ -2010,6 +2013,8 @@ model Training {
   participantsList TrainingParticipant[]
   habilitationsDelivrees Habilitation[]
   actions Action[]
+  competencesAssociees EmployeeCompetence[]
+  besoinsTransformes BesoinFormation[]
 }
 
 // Catalogue des categories/domaines de formation — configurable par
@@ -2080,6 +2085,7 @@ model Habilitation {
   employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade)
   category HabilitationCategory? @relation(fields:[categoryId], references:[id], onDelete:SetNull)
   training Training? @relation(fields:[trainingId], references:[id], onDelete:SetNull)
+  competencesAssociees EmployeeCompetence[]
 }
 
 // Parametrage global du module FORMATION — seuils d'alerte avant
@@ -2093,6 +2099,89 @@ model TrainingSettings {
   alerteJ15 Boolean @default(false)
   ponderationScoreGlobal Float @default(10)
   updatedAt DateTime @updatedAt
+}
+
+// === MODULE FORMATION — Phase 2 : matrice des competences + moteur de
+// detection des besoins. Niveaux configurables (jamais fige en dur) : un
+// niveau n'est qu'un code + un ordre, l'ecart requis/actuel se calcule a
+// la lecture par comparaison des ordres (jamais stocke, pour ne jamais
+// devenir faux si l'administrateur reordonne les niveaux plus tard).
+model CompetenceNiveau {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  ordre Int
+  active Boolean @default(true)
+  competencesRequises EmployeeCompetence[] @relation("NiveauRequis")
+  competencesActuelles EmployeeCompetence[] @relation("NiveauActuel")
+}
+
+// Catalogue des competences — configurable, jamais limite aux exemples du
+// cahier des charges.
+model Competence {
+  id String @id @default(cuid())
+  code String @unique
+  label String
+  domaine String?
+  order Int @default(0)
+  active Boolean @default(true)
+  employeeCompetences EmployeeCompetence[]
+}
+
+// Matrice Collaborateur x Poste x Competence x Niveau requis x Niveau
+// actuel. C'est elle qui permet de repondre "qui presente un ecart ?" et
+// alimente le moteur de detection (ECART_COMPETENCE).
+model EmployeeCompetence {
+  id String @id @default(cuid())
+  employeeId String
+  competenceId String
+  poste String?
+  niveauRequisId String?
+  niveauActuelId String?
+  dateEvaluation DateTime?
+  formationAssocieeId String?
+  habilitationAssocieeId String?
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employee Employee @relation(fields:[employeeId], references:[id], onDelete:Cascade)
+  competence Competence @relation(fields:[competenceId], references:[id], onDelete:Cascade)
+  niveauRequis CompetenceNiveau? @relation("NiveauRequis", fields:[niveauRequisId], references:[id], onDelete:SetNull)
+  niveauActuel CompetenceNiveau? @relation("NiveauActuel", fields:[niveauActuelId], references:[id], onDelete:SetNull)
+  formationAssociee Training? @relation(fields:[formationAssocieeId], references:[id], onDelete:SetNull)
+  habilitationAssociee Habilitation? @relation(fields:[habilitationAssocieeId], references:[id], onDelete:SetNull)
+  @@unique([employeeId,competenceId])
+}
+
+// Besoin de formation propose par le moteur de detection a partir des
+// autres modules (NC recurrente, accident, risque eleve, habilitation
+// expiree, ecart de competence). Reste a l'etat PROPOSE tant qu'un humain
+// (Responsable QHSE) ne l'a pas valide ou rejete — jamais de formation
+// obligatoire creee automatiquement sans decision humaine (point 17 du
+// cahier des charges). sourceKey rend la detection idempotente : une
+// meme cause reelle ne genere jamais deux propositions.
+model BesoinFormation {
+  id String @id @default(cuid())
+  code String @unique
+  sourceModule String
+  sourceKey String @unique
+  sourceEntityId String?
+  titre String
+  description String?
+  competenceVisee String?
+  employeeId String?
+  posteConcerne String?
+  priorite String @default("MOYENNE")
+  statut String @default("PROPOSE")
+  motif String?
+  trainingId String?
+  traiteParId String?
+  traiteLe DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employee Employee? @relation(fields:[employeeId], references:[id], onDelete:SetNull)
+  training Training? @relation(fields:[trainingId], references:[id], onDelete:SetNull)
+  traitePar User? @relation(fields:[traiteParId], references:[id], onDelete:SetNull)
 }
 
 // Catalogue de catégories d'équipements — configurable par l'administrateur,

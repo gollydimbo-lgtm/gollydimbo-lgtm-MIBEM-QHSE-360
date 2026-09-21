@@ -49,9 +49,11 @@ class FormationPage extends StatefulWidget {
 
 class _FormationPageState extends State<FormationPage> {
   final api = Api();
-  List trainings = [], habilitations = [], employees = [];
+  List trainings = [], habilitations = [], employees = [], besoins = [];
   Map dashboard = {};
+  Map matrice = {'collaborateurs': [], 'tauxCouverture': null, 'competencesCritiquesInsuffisantes': 0};
   bool loading = true;
+  bool detecting = false;
 
   @override
   void initState() { super.initState(); load(); }
@@ -63,26 +65,46 @@ class _FormationPageState extends State<FormationPage> {
       habilitations = List.from(await api.get('/business/habilitations'));
       employees = List.from(await api.get('/epi/employees'));
       dashboard = Map.from(await api.get('/business/formation-dashboard'));
+      besoins = List.from(await api.get('/business/besoins-formation'));
+      matrice = Map.from(await api.get('/business/competence-matrice'));
     } catch (_) {}
     if (mounted) setState(() => loading = false);
   }
 
+  Future<void> _lancerDetection() async {
+    setState(() => detecting = true);
+    try { await api.post('/business/besoins-formation-detecter', {}); await load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    if (mounted) setState(() => detecting = false);
+  }
+
+  Future<void> _traiterBesoin(String id, String statut) async {
+    try { await api.patch('/business/besoins-formation/$id', {'statut': statut}); await load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+  }
+
+  Future<void> _transformerBesoin(String id) async {
+    try { await api.post('/business/besoins-formation/$id/transformer', {}); await load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+  }
+
   @override
   Widget build(BuildContext c) => DefaultTabController(
-    length: 2,
+    length: 3,
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Formation & Compétences'),
-        bottom: const TabBar(tabs: [Tab(text: 'Plan de formation'), Tab(text: 'Habilitations')]),
+        bottom: const TabBar(tabs: [Tab(text: 'Plan de formation'), Tab(text: 'Habilitations'), Tab(text: 'Compétences & besoins')]),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(children: [_buildKpis(c), Expanded(child: TabBarView(children: [_buildPlan(c), _buildHabilitations(c)]))]),
+          : Column(children: [_buildKpis(c), Expanded(child: TabBarView(children: [_buildPlan(c), _buildHabilitations(c), _buildCompetences(c)]))]),
       floatingActionButton: Builder(builder: (bc) {
         final tabIndex = DefaultTabController.of(bc).index;
+        if (tabIndex == 2) return const SizedBox.shrink();
         return FloatingActionButton.extended(
           onPressed: () async {
-            if (DefaultTabController.of(bc).index == 0) {
+            if (tabIndex == 0) {
               await Navigator.push(c, MaterialPageRoute(builder: (_) => const TrainingFormPage()));
             } else {
               await Navigator.push(c, MaterialPageRoute(builder: (_) => TrainingFormPage(employees: employees, habilitation: true)));
@@ -172,6 +194,75 @@ class _FormationPageState extends State<FormationPage> {
               ));
             },
           ),
+  );
+
+  Color _besoinPrioriteColor(String? p) => {'CRITIQUE': QhseColors.red, 'ELEVEE': QhseColors.amber, 'MOYENNE': QhseColors.blue, 'FAIBLE': QhseColors.textSecondary}[p] ?? QhseColors.textSecondary;
+  Color _besoinStatutColor(String? s) => {'PROPOSE': QhseColors.blue, 'VALIDE': QhseColors.green, 'REJETE': QhseColors.textSecondary, 'TRANSFORME': QhseColors.green}[s] ?? QhseColors.textSecondary;
+  String _besoinStatutLabel(String? s) => {'PROPOSE': 'Proposé', 'VALIDE': 'Validé', 'REJETE': 'Rejeté', 'TRANSFORME': 'Transformé'}[s] ?? s ?? '—';
+
+  Widget _buildCompetences(BuildContext c) => RefreshIndicator(
+    onRefresh: load,
+    child: ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Row(children: [
+          Expanded(child: Text('Besoins de formation détectés', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary))),
+          ElevatedButton(onPressed: detecting ? null : _lancerDetection, child: Text(detecting ? 'Analyse…' : 'Détecter')),
+        ]),
+        const SizedBox(height: 8),
+        if (besoins.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text('Aucun besoin détecté pour l\'instant'))),
+        ...besoins.map((b) {
+          final color = _besoinPrioriteColor(b['priorite']);
+          final emp = b['employee'];
+          return Card(child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Chip(label: Text('${b['sourceModule']}'.replaceAll('_', ' '), style: const TextStyle(fontSize: 10)), backgroundColor: color.withOpacity(0.15), labelStyle: TextStyle(color: color)),
+                const SizedBox(width: 6),
+                Chip(label: Text(_besoinStatutLabel(b['statut']), style: const TextStyle(fontSize: 10)), backgroundColor: _besoinStatutColor(b['statut']).withOpacity(0.15), labelStyle: TextStyle(color: _besoinStatutColor(b['statut']))),
+              ]),
+              const SizedBox(height: 6),
+              Text('${b['titre']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (b['description'] != null) Text('${b['description']}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+              if (emp != null) Text('${emp['firstName']} ${emp['lastName']}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+              const SizedBox(height: 8),
+              if (b['statut'] == 'PROPOSE') Row(children: [
+                TextButton(onPressed: () => _traiterBesoin(b['id'], 'VALIDE'), child: const Text('Valider')),
+                TextButton(onPressed: () => _traiterBesoin(b['id'], 'REJETE'), child: Text('Rejeter', style: TextStyle(color: QhseColors.red))),
+              ]),
+              if (b['statut'] == 'VALIDE') ElevatedButton(onPressed: () => _transformerBesoin(b['id']), child: const Text('Transformer en formation')),
+            ]),
+          ));
+        }),
+        const SizedBox(height: 16),
+        Text('Matrice des compétences', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+        Text(
+          matrice['tauxCouverture'] != null ? 'Couverture ${matrice['tauxCouverture']}% · ${matrice['competencesCritiquesInsuffisantes']} écart(s) critique(s)' : 'Aucune évaluation enregistrée',
+          style: TextStyle(fontSize: 12, color: QhseColors.textSecondary),
+        ),
+        const SizedBox(height: 8),
+        ...List.from(matrice['collaborateurs'] ?? []).map((cItem) {
+          final emp = cItem['employee'];
+          final lignes = List.from(cItem['lignes'] ?? []);
+          return Card(child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${emp['firstName']} ${emp['lastName']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, runSpacing: 6, children: lignes.map<Widget>((l) {
+                final critique = l['critique'] == true;
+                return Chip(
+                  label: Text('${l['competence']['label']} : ${l['niveauActuel']?['label'] ?? 'non évalué'} → ${l['niveauRequis']?['label'] ?? '—'}', style: const TextStyle(fontSize: 11)),
+                  backgroundColor: critique ? QhseColors.red.withOpacity(0.15) : QhseColors.cardAlt,
+                  labelStyle: TextStyle(color: critique ? QhseColors.red : QhseColors.textPrimary),
+                );
+              }).toList()),
+            ]),
+          ));
+        }),
+      ],
+    ),
   );
 }
 

@@ -1520,6 +1520,182 @@ import { saveFile } from '../documents/file-storage.util';
   };
  }
 
+ // === MODULE FORMATION — Phase 2 : matrice des competences + moteur de
+ // detection des besoins (point 27 du cahier des charges : Besoin ->
+ // Planification -> Formation -> Evaluation -> Competence -> Application
+ // terrain -> Mesure d'efficacite -> Analyse QHSE -> Action). Le moteur ne
+ // fait QUE proposer : jamais de formation creee automatiquement sans
+ // validation humaine.
+ competenceNiveauList(){return this.db.competenceNiveau.findMany({orderBy:{ordre:'asc'}})}
+ competenceNiveauCreate(b:any){return this.db.competenceNiveau.create({data:b})}
+ competenceNiveauUpdate(id:string,b:any){return this.db.competenceNiveau.update({where:{id},data:b})}
+ competenceNiveauDelete(id:string){return this.db.competenceNiveau.delete({where:{id}})}
+ competenceList(){return this.db.competence.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
+ competenceCreate(b:any){return this.db.competence.create({data:b})}
+ competenceUpdate(id:string,b:any){return this.db.competence.update({where:{id},data:b})}
+ competenceDelete(id:string){return this.db.competence.delete({where:{id}})}
+
+ employeeCompetenceInclude = { employee:true, competence:true, niveauRequis:true, niveauActuel:true, formationAssociee:true, habilitationAssociee:true };
+ // Ecart = ordre(niveau requis) - ordre(niveau actuel), calcule a la lecture
+ // (jamais stocke) pour rester exact meme si l'administrateur reordonne les
+ // niveaux. Un requis sans actuel evalue est un ecart maximal (competence
+ // jamais evaluee), pas un ecart de 0.
+ private decorateEcart(ec:any){
+  const ordreRequis=ec.niveauRequis?.ordre;
+  const ordreActuel=ec.niveauActuel?.ordre;
+  let ecart:number|null=null;
+  if(ordreRequis!=null) ecart = ordreActuel!=null ? ordreRequis-ordreActuel : ordreRequis;
+  return {...ec, ecart, critique: ecart!=null && ecart>=2};
+ }
+ async employeeCompetenceList(){
+  const rows=await this.db.employeeCompetence.findMany({include:this.employeeCompetenceInclude,orderBy:{updatedAt:'desc'}});
+  return rows.map(r=>this.decorateEcart(r));
+ }
+ async employeeCompetenceUpsert(b:any){
+  const existing=await this.db.employeeCompetence.findUnique({where:{employeeId_competenceId:{employeeId:b.employeeId,competenceId:b.competenceId}}});
+  const data={...b};
+  const row=existing
+   ? await this.db.employeeCompetence.update({where:{id:existing.id},data,include:this.employeeCompetenceInclude})
+   : await this.db.employeeCompetence.create({data,include:this.employeeCompetenceInclude});
+  await writeAudit(this.db,'EMPLOYEE_COMPETENCE',existing?'UPDATE':'CREATE',row.id,existing||null,row);
+  return this.decorateEcart(row);
+ }
+ async employeeCompetenceDelete(id:string){
+  const current=await this.db.employeeCompetence.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Ligne de matrice introuvable');
+  await writeAudit(this.db,'EMPLOYEE_COMPETENCE','DELETE',id,current,null);
+  return this.db.employeeCompetence.delete({where:{id}});
+ }
+ // Vue matrice groupee par collaborateur — c'est cette forme (lignes =
+ // collaborateurs, colonnes = competences) que l'UI matrice consomme.
+ async competenceMatrice(){
+  const rows=await this.employeeCompetenceList();
+  const parEmploye=new Map<string,any>();
+  for(const r of rows){
+   const key=r.employeeId;
+   if(!parEmploye.has(key)) parEmploye.set(key,{employee:r.employee,lignes:[]});
+   parEmploye.get(key).lignes.push(r);
+  }
+  const total=rows.length;
+  const maitrisees=rows.filter(r=>r.ecart!=null&&r.ecart<=0).length;
+  const critiques=rows.filter(r=>r.critique).length;
+  return {
+   collaborateurs:Array.from(parEmploye.values()),
+   tauxCouverture: total>0?Math.round((maitrisees/total)*100):null,
+   competencesCritiquesInsuffisantes: critiques,
+  };
+ }
+
+ async besoinFormationList(){return this.db.besoinFormation.findMany({include:{employee:true,training:true,traitePar:true},orderBy:{createdAt:'desc'}})}
+ async besoinFormationUpdate(id:string,b:any){
+  const current=await this.db.besoinFormation.findUnique({where:{id}});
+  if(!current) throw new NotFoundException('Besoin de formation introuvable');
+  const data:any={...b};
+  if(b.statut && b.statut!==current.statut && (b.statut==='VALIDE'||b.statut==='REJETE')) data.traiteLe=new Date();
+  const row=await this.db.besoinFormation.update({where:{id},data});
+  await writeAudit(this.db,'BESOIN_FORMATION','UPDATE',id,current,row);
+  return row;
+ }
+ // Transforme un besoin valide en formation planifiee (brouillon a
+ // completer par le Responsable QHSE) — jamais l'inverse automatique.
+ async besoinFormationTransformer(id:string,b:any={}){
+  const besoin=await this.db.besoinFormation.findUnique({where:{id}});
+  if(!besoin) throw new NotFoundException('Besoin de formation introuvable');
+  const training=await this.trainingCreate({
+   code:b.code||`FOR-${Date.now().toString().slice(-8)}`,
+   title:b.title||besoin.titre,
+   type:'FORMATION',
+   obligatoire:true,
+   competenceVisee:besoin.competenceVisee||undefined,
+   motifBesoin:besoin.motif||besoin.description||undefined,
+   priorite:besoin.priorite,
+   status:'DRAFT',
+   scheduledAt:b.scheduledAt?new Date(b.scheduledAt):new Date(),
+  });
+  const row=await this.db.besoinFormation.update({where:{id},data:{statut:'TRANSFORME',trainingId:training.id,traiteLe:new Date()}});
+  await writeAudit(this.db,'BESOIN_FORMATION','UPDATE',id,besoin,row);
+  return {besoin:row,training};
+ }
+ // Moteur de detection — scanne les autres modules deja presents dans
+ // l'application (jamais de nouvelle saisie demandee) et propose un besoin
+ // de formation pour chaque signal reel trouve. Idempotent via sourceKey :
+ // relancer la detection ne duplique jamais une proposition existante,
+ // quel que soit son statut (validee, rejetee ou deja transformee).
+ async detecterBesoinsFormation(){
+  const candidats:Array<{sourceModule:string,sourceKey:string,sourceEntityId?:string,titre:string,description?:string,competenceVisee?:string,employeeId?:string,posteConcerne?:string,priorite:string,motif:string}> = [];
+
+  // 1) Non-conformites recurrentes jamais analysees (cause racine non identifiee)
+  const recurrences=await this.ncRecurrentes();
+  for(const g of recurrences){
+   if(g.analyseCausaleFaite) continue;
+   candidats.push({
+    sourceModule:'NC_RECURRENTE', sourceKey:`NC_RECURRENTE::${g.titre}::${g.processus}`,
+    titre:`Récurrence non-conformité : ${g.titre}`,
+    description:`${g.occurrences} occurrence(s) sur le processus "${g.processus}", sans cause racine confirmée.`,
+    posteConcerne:g.processus, priorite:'ELEVEE',
+    motif:`Non-conformité récurrente (${g.occurrences} occurrences) jamais analysée en cause racine.`,
+   });
+  }
+
+  // 2) Accidents/incidents graves recents (90 jours) avec arret de travail
+  const depuis90j=new Date(); depuis90j.setDate(depuis90j.getDate()-90);
+  const accidentsGraves=await this.db.safetyEvent.findMany({where:{occurredAt:{gte:depuis90j},OR:[{severity:{gte:4}},{withLostTime:true}]},include:{employee:true}});
+  for(const ev of accidentsGraves){
+   candidats.push({
+    sourceModule:'ACCIDENT', sourceKey:`ACCIDENT::${ev.id}`, sourceEntityId:ev.id,
+    titre:`Suite à l'événement sécurité : ${ev.title}`,
+    description:ev.description||undefined, employeeId:ev.employeeId||undefined, posteConcerne:ev.poste||undefined,
+    priorite:'CRITIQUE', motif:`Événement sécurité de sévérité ${ev.severity}${ev.withLostTime?' avec arrêt de travail':''} — compétence à renforcer.`,
+   });
+  }
+
+  // 3) Risques eleves sans mesure de type formation associee
+  const risquesEleves=await this.db.risk.findMany({where:{status:'ACTIVE',score:{gte:9}},include:{riskMeasures:true}});
+  for(const r of risquesEleves){
+   if(r.riskMeasures.some(m=>m.trainingId)) continue;
+   candidats.push({
+    sourceModule:'RISQUE_ELEVE', sourceKey:`RISQUE_ELEVE::${r.id}`, sourceEntityId:r.id,
+    titre:`Sensibilisation au risque : ${r.hazard}`,
+    description:`Risque actif de score ${r.score}, sans mesure de formation associée.`,
+    priorite:'ELEVEE', motif:`Risque élevé (score ${r.score}) non couvert par une formation.`,
+   });
+  }
+
+  // 4) Habilitations expirees non recyclees
+  const habilitationsExpirees=await this.db.habilitation.findMany({where:{dateExpiration:{lt:new Date()}},include:{employee:true}});
+  for(const h of habilitationsExpirees){
+   candidats.push({
+    sourceModule:'HABILITATION_EXPIREE', sourceKey:`HABILITATION_EXPIREE::${h.id}`, sourceEntityId:h.id,
+    titre:`Recyclage habilitation : ${h.intitule}`,
+    description:`Habilitation expirée le ${h.dateExpiration?.toISOString().slice(0,10)} pour ${h.employee.firstName} ${h.employee.lastName}.`,
+    employeeId:h.employeeId, competenceVisee:h.intitule,
+    priorite:'CRITIQUE', motif:'Habilitation expirée — recyclage nécessaire.',
+   });
+  }
+
+  // 5) Ecarts de competence critiques (ecart >= 2 niveaux)
+  const matriceRows=await this.employeeCompetenceList();
+  for(const ec of matriceRows){
+   if(!ec.critique) continue;
+   candidats.push({
+    sourceModule:'ECART_COMPETENCE', sourceKey:`ECART_COMPETENCE::${ec.id}`, sourceEntityId:ec.id,
+    titre:`Écart de compétence : ${ec.competence.label} — ${ec.employee.firstName} ${ec.employee.lastName}`,
+    description:`Niveau actuel "${ec.niveauActuel?.label||'non évalué'}" contre niveau requis "${ec.niveauRequis?.label}".`,
+    employeeId:ec.employeeId, competenceVisee:ec.competence.label,
+    priorite:'ELEVEE', motif:'Écart de compétence critique identifié dans la matrice.',
+   });
+  }
+
+  const crees:any[]=[];
+  for(const cand of candidats){
+   const existe=await this.db.besoinFormation.findUnique({where:{sourceKey:cand.sourceKey}});
+   if(existe) continue;
+   const row=await this.db.besoinFormation.create({data:{code:`BF-${Date.now().toString().slice(-8)}-${crees.length}`,...cand}});
+   crees.push(row);
+  }
+  return {analyses:candidats.length, nouveauxBesoins:crees.length, besoins:crees};
+ }
+
 
  // === MODULE ÉQUIPEMENTS — Phase 1 : fondations, criticité, chaîne
  // Équipement -> Risque -> Contrôle -> NC -> CAPA ===
