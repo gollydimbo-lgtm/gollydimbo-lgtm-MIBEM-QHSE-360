@@ -2790,6 +2790,7 @@ function DocumentStatusChip({ status, big }) {
   }
   return <span className="text-xs px-2 py-1 rounded-md font-medium" style={{ backgroundColor: `${color}22`, color }}>{meta.label}</span>;
 }
+const QUALITY_CONTROL_STATUS_LABELS = { DRAFT: 'Brouillon', IN_PROGRESS: 'En cours', COMPLIANT: 'Conforme', NON_COMPLIANT: 'Non conforme', CANCELLED: 'Annulé' };
 const FREQUENCE_REVISION_LABELS = { MENSUELLE: 'Mensuelle', TRIMESTRIELLE: 'Trimestrielle', SEMESTRIELLE: 'Semestrielle', ANNUELLE: 'Annuelle', BIENNALE: 'Biennale', PERSONNALISEE: 'Personnalisée' };
 
 function DocumentUploadForm({ groups, onClose, onCreated }) {
@@ -3458,6 +3459,8 @@ function UtilisateursPage() {
   const users = useCollection('/users');
   const [showForm, setShowForm] = useState(false);
   const [resettingUser, setResettingUser] = useState(null);
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (users.loading) return <LoadingPanel />;
   if (users.error) return <ErrorPanel message={users.error} onRetry={users.reload} />;
   const list = users.data || [];
@@ -3470,8 +3473,6 @@ function UtilisateursPage() {
     await confirmAndDelete(`${u.firstName} ${u.lastName}`, `/users/${u.id}`, () => users.reload());
   }
   const currentEmail = getStoredUser()?.email;
-  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
-  const [search, setSearch] = useState('');
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredUsers = search.trim() ? list.filter((u) => norm([u.firstName, u.lastName, u.email, u.roles.map((r) => ROLE_LABELS[r.role.name] || r.role.name).join(' ')].join(' ')).includes(norm(search))) : list;
   function usersExportRows() {
@@ -4009,7 +4010,7 @@ function reportDefinitions(real) {
     },
     {
       id: 'controles-registre', titre: 'Registre des contrôles', description: 'Tous domaines confondus — type, résultat, taux de conformité, décision finale.',
-      sheets: () => [['Contrôles', [['Code', 'Domaine', 'Type', 'Date', 'Statut', 'Taux de conformité', 'Décision finale'], ...(qualityControls || []).map((c) => [c.code, c.domain, c.type?.name || '—', new Date(c.controlDate).toLocaleDateString('fr-FR'), c.status, c.conformityRate != null ? `${c.conformityRate}%` : '—', c.finalDecision || '—'])]]],
+      sheets: () => [['Contrôles', [['Code', 'Domaine', 'Type', 'Date', 'Statut', 'Taux de conformité', 'Décision finale'], ...(qualityControls || []).map((c) => [c.code, c.domain, c.type?.name || '—', new Date(c.controlDate).toLocaleDateString('fr-FR'), QUALITY_CONTROL_STATUS_LABELS[c.status] || c.status, c.conformityRate != null ? `${c.conformityRate}%` : '—', c.finalDecision || '—'])]]],
     },
     {
       id: 'processus-global', titre: 'Rapport global des processus', description: "Cartographie, criticité, score de maîtrise et alertes de tous les processus.",
@@ -4072,7 +4073,7 @@ function reportDefinitions(real) {
           ['Par mécanisme', [['Mécanisme', 'Nombre'], ...(s.parMecanisme || []).map((c) => [c.name, c.value])]],
           ['Par zone', [['Zone', 'Nombre'], ...(s.parZone || []).map((c) => [c.name, c.value])]],
           ['Récidives détectées', [['Critère', 'Type', 'Occurrences'], ...(r.parCauseRacine || []).map((x) => [x.critere, 'Cause racine', x.nombre]), ...(r.parZone || []).map((x) => [x.critere, 'Zone', x.nombre]), ...(r.parMecanisme || []).map((x) => [x.critere, 'Mécanisme', x.nombre])]],
-          ['Registre complet', [['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt', 'Statut'], ...list.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', e.statut || 'DECLARE'])]],
+          ['Registre complet', [['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt', 'Statut'], ...list.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', SAFETY_EVENT_STATUT_LABELS[e.statut] || e.statut || 'Déclaré'])]],
         ];
       },
     },
@@ -4662,7 +4663,7 @@ function ControlDetailModal({ controlId, onClose, onChanged }) {
     <Modal title={`Contrôle ${control.code}`} onClose={onClose} wide>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: C.textMuted }}>
-          <span>{control.productRef?.name || '—'}</span>·<span>{control.productionLine?.name || '—'}</span>·<span>Lot {control.lotNumber}</span>·<StatusChip statut={control.status === 'COMPLIANT' ? 'Conforme' : control.status === 'NON_COMPLIANT' ? 'Non conforme' : control.status} />
+          <span>{control.productRef?.name || '—'}</span>·<span>{control.productionLine?.name || '—'}</span>·<span>Lot {control.lotNumber}</span>·<StatusChip statut={QUALITY_CONTROL_STATUS_LABELS[control.status] || control.status} />
         </div>
         <button onClick={del} disabled={submitting} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>
       </div>
@@ -4835,6 +4836,8 @@ function QualiteControlesPage() {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [generating, setGenerating] = useState(null);
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
 
   if (controls.loading || types.loading || templatesQ.loading || schedules.loading || scheduleBuckets.loading) return <LoadingPanel />;
   if (controls.error) return <ErrorPanel message={controls.error} onRetry={controls.reload} />;
@@ -4848,10 +4851,6 @@ function QualiteControlesPage() {
   const tauxConformite = soumis.length ? Math.round((conformes / soumis.length) * 100) : null;
   const sorted = [...list].sort((a, b) => new Date(b.controlDate) - new Date(a.controlDate));
   const domains = [...new Set(allList.map((c) => c.domain))];
-  // Recherche + export harmonisés (audit priorité 7, finding #17/#18) —
-  // recherche client (liste déjà chargée en mémoire), même principe que
-  // les exports déjà en place ailleurs (downloadWorkbook/downloadCsv).
-  const [search, setSearch] = useState('');
   const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filtered = search.trim()
     ? sorted.filter((c) => norm([c.code, c.type?.name, c.domain, c.productRef?.name, c.productionLine?.name, c.lotNumber].join(' ')).includes(norm(search)))
@@ -4859,7 +4858,7 @@ function QualiteControlesPage() {
   function controlesExportRows() {
     return [
       ['Code', 'Type', 'Produit', 'Ligne', 'Lot', 'Date', 'Statut', 'Décision'],
-      ...filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '', c.productionLine?.name || '', c.lotNumber || '', new Date(c.controlDate).toLocaleDateString('fr-FR'), c.status, decisionLabels[c.finalDecision] || c.finalDecision || '']),
+      ...filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '', c.productionLine?.name || '', c.lotNumber || '', new Date(c.controlDate).toLocaleDateString('fr-FR'), QUALITY_CONTROL_STATUS_LABELS[c.status] || c.status, decisionLabels[c.finalDecision] || c.finalDecision || '']),
     ];
   }
   function exportControlesExcel() { downloadWorkbook([['Contrôles qualité', controlesExportRows()]], `Controles-qualite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
@@ -4931,7 +4930,7 @@ function QualiteControlesPage() {
           <Panel title={search.trim() ? `Résultats de recherche (${filtered.length})` : 'Registre des contrôles'}>
             {filtered.length
               ? <DataTable columns={['Code', 'Type', 'Produit', 'Ligne', 'Lot', 'Date', 'Statut', 'Décision']}
-                  rows={filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '—', c.productionLine?.name || '—', c.lotNumber || '—', new Date(c.controlDate).toLocaleDateString('fr-FR'), <StatusChip statut={c.status === 'COMPLIANT' ? 'Conforme' : c.status === 'NON_COMPLIANT' ? 'Non conforme' : c.status} />, decisionLabels[c.finalDecision] || c.finalDecision || '—'])}
+                  rows={filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '—', c.productionLine?.name || '—', c.lotNumber || '—', new Date(c.controlDate).toLocaleDateString('fr-FR'), <StatusChip statut={QUALITY_CONTROL_STATUS_LABELS[c.status] || c.status} />, decisionLabels[c.finalDecision] || c.finalDecision || '—'])}
                   onRowClick={(i) => setSelectedId(filtered[i].id)} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun contrôle enregistré pour le moment'}</p>}
           </Panel>
@@ -5181,6 +5180,8 @@ function QualiteProcessusPage() {
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
   const [tab, setTab] = useState('dashboard');
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (processus.loading || linksQ.loading) return <LoadingPanel />;
   if (processus.error) return <ErrorPanel message={processus.error} onRetry={processus.reload} />;
   const procList = processus.data || [];
@@ -5209,8 +5210,6 @@ function QualiteProcessusPage() {
     .filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
 
   const typeGroups = ['STRATEGIQUE', 'OPERATIONNEL', 'SUPPORT', 'AUTRE'];
-  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
-  const [search, setSearch] = useState('');
   const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredProcList = search.trim()
     ? procList.filter((p) => norm([p.nom, p.code, kProcessTypeLabels[p.type], p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : ''].join(' ')).includes(norm(search)))
@@ -5598,6 +5597,8 @@ function QualiteReclamationsPage() {
   const [detailFor, setDetailFor] = useState(null);
   const [tab, setTab] = useState('dashboard');
   const [showPonderation, setShowPonderation] = useState(false);
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (reclamations.loading || stats.loading || alertesQ.loading || scoreQ.loading) return <LoadingPanel />;
   if (reclamations.error) return <ErrorPanel message={reclamations.error} onRetry={reclamations.reload} />;
   const list = reclamations.data || [];
@@ -5620,8 +5621,6 @@ function QualiteReclamationsPage() {
     try { await api.post('/business/indicateurs-ponderation', { autoKey: key, poids: Number(poids) }); scoreQ.reload(); }
     catch (e) { alert(e.message); }
   }
-  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
-  const [search, setSearch] = useState('');
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredReclamations = search.trim() ? sorted.filter((r) => norm([r.client, r.motif, r.produitService].join(' ')).includes(norm(search))) : sorted;
   function reclamationsExportRows() {
@@ -5886,6 +5885,8 @@ function QualiteFournisseursPage() {
   const [selected, setSelected] = useState(null);
   const [detailFor, setDetailFor] = useState(null);
   const [tab, setTab] = useState('dashboard');
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (fournisseurs.loading || classementQ.loading || alertesQ.loading || matriceQ.loading) return <LoadingPanel />;
   if (fournisseurs.error) return <ErrorPanel message={fournisseurs.error} onRetry={fournisseurs.reload} />;
   const list = fournisseurs.data || [];
@@ -5908,8 +5909,6 @@ function QualiteFournisseursPage() {
     const scores = [f.scoreQualite, f.scoreLivraison, f.scoreQhse, f.scoreCommercial, f.scoreReactivite].filter((v) => v != null);
     return scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : null;
   }
-  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
-  const [search, setSearch] = useState('');
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredFournisseurs = search.trim() ? list.filter((f) => norm([f.nom, f.typeFournisseur, f.categorie].join(' ')).includes(norm(search))) : list;
   function fournisseursExportRows() {
@@ -6168,6 +6167,8 @@ function SafetyEventForm({ record, onClose, onCreated }) {
   );
 }
 
+const SAFETY_EVENT_STATUT_LABELS = { DECLARE: 'Déclaré', SECURISE: 'Sécurisé', INVESTIGATION: 'En investigation', ANALYSE_CAUSES: 'Analyse des causes', ACTIONS_DEFINIES: 'Actions définies', ACTIONS_EN_COURS: 'Actions en cours', VERIFICATION: "Vérification d'efficacité", VALIDE: 'Validé', CLOTURE: 'Clôturé' };
+
 function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
   const C = useTheme();
   const [ev, setEv] = useState(null);
@@ -6177,7 +6178,7 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
   const [showActionForm, setShowActionForm] = useState(false);
   const users = useCollection('/users');
   const [form, setForm] = useState(null);
-  const statutLabel = { DECLARE: 'Déclaré', SECURISE: 'Sécurisé', INVESTIGATION: 'En investigation', ANALYSE_CAUSES: 'Analyse des causes', ACTIONS_DEFINIES: 'Actions définies', ACTIONS_EN_COURS: 'Actions en cours', VERIFICATION: "Vérification d'efficacité", VALIDE: 'Validé', CLOTURE: 'Clôturé' };
+  const statutLabel = SAFETY_EVENT_STATUT_LABELS;
 
   async function load() {
     try {
@@ -6343,6 +6344,8 @@ function SecuriteAccidentsPage() {
   const [detailFor, setDetailFor] = useState(null);
   const [showHoursForm, setShowHoursForm] = useState(false);
   const [selectedHours, setSelectedHours] = useState(null);
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (events.loading || workedHours.loading || stats.loading || alertesQ.loading || recidivesQ.loading) return <LoadingPanel />;
   if (events.error) return <ErrorPanel message={events.error} onRetry={events.reload} />;
   const list = events.data || [];
@@ -6365,14 +6368,12 @@ function SecuriteAccidentsPage() {
   const journeesPerdues = eventsThisYear.reduce((s, e) => s + (e.withLostTime ? (e.lostDays || 0) : 0), 0);
   const tf = totalHours > 0 ? (accidentsAvecArret * 1000000) / totalHours : null;
   const tg = totalHours > 0 ? (journeesPerdues * 1000) / totalHours : null;
-  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
-  const [search, setSearch] = useState('');
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredEvents = search.trim() ? sorted.filter((e) => norm([e.type, e.title, e.statut].join(' ')).includes(norm(search))) : sorted;
   function safetyEventsExportRows() {
     return [
       ['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt (j)', 'Statut'],
-      ...filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? (e.lostDays || 0) : 0, e.statut || 'DECLARE']),
+      ...filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? (e.lostDays || 0) : 0, SAFETY_EVENT_STATUT_LABELS[e.statut] || e.statut || 'Déclaré']),
     ];
   }
   function exportSafetyEventsExcel() { downloadWorkbook([['Événements sécurité', safetyEventsExportRows()]], `Evenements-securite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
@@ -6461,7 +6462,7 @@ function SecuriteAccidentsPage() {
       </div>
       <Panel title={search.trim() ? `Résultats de recherche (${filteredEvents.length})` : "Registre des événements sécurité"} subtitle="Cliquez une ligne pour ouvrir l'enquête et le plan d'actions.">
         {filteredEvents.length
-          ? <DataTable columns={['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt', 'Statut']} rows={filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', e.statut || 'DECLARE'])}
+          ? <DataTable columns={['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt', 'Statut']} rows={filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', SAFETY_EVENT_STATUT_LABELS[e.statut] || e.statut || 'Déclaré'])}
               onRowClick={(i) => setDetailFor(filteredEvents[i].id)} />
           : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun événement enregistré pour le moment'}</p>}
       </Panel>
@@ -7020,6 +7021,8 @@ function EnvironnementPage() {
   const [showProduitForm, setShowProduitForm] = useState(false);
   const [selectedProduit, setSelectedProduit] = useState(null);
   const [tab, setTab] = useState('apercu');
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (records.loading || aspects.loading || dashboardQ.loading || alertesQ.loading || tendancesQ.loading || veilleQ.loading || produitsQ.loading) return <LoadingPanel />;
   if (records.error) return <ErrorPanel message={records.error} onRetry={records.reload} />;
   const list = records.data || [];
@@ -7041,8 +7044,6 @@ function EnvironnementPage() {
   const scoreLevel = dash.score == null ? null : dash.score >= 80 ? { label: 'Bon', color: C.green } : dash.score >= 60 ? { label: 'À améliorer', color: C.amber } : { label: 'Critique', color: C.red };
   const veilleStatutLabel = { A_TRAITER: 'À traiter', EN_COURS: 'En cours', INTEGREE: 'Intégrée', CONFORME: 'Conforme', PARTIELLEMENT_CONFORME: 'Partiellement conforme', NON_CONFORME: 'Non conforme', NON_APPLICABLE: 'Non applicable', A_VERIFIER: 'À vérifier' };
   const veilleStatutColor = { CONFORME: C.green, INTEGREE: C.green, PARTIELLEMENT_CONFORME: C.amber, NON_CONFORME: C.red, NON_APPLICABLE: C.textMuted, A_VERIFIER: C.amber, A_TRAITER: C.amber, EN_COURS: C.blue };
-  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
-  const [search, setSearch] = useState('');
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredReleves = search.trim() ? sorted.filter((r) => norm([r.categorie, r.type, r.site].join(' ')).includes(norm(search))) : sorted;
   function relevesExportRows() {
