@@ -1063,6 +1063,7 @@ function NonConformityForm({ record, prefill, onClose, onCreated }) {
           </select>
           {editing && !form.riskId && <button type="button" onClick={generateRisk} disabled={generatingRisk} className="mt-2 text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>{generatingRisk ? '…' : 'Générer un risque à partir de cette NC'}</button>}
         </FormField>
+        {editing && <AttachmentsPanel ownerType="NON_CONFORMITY" ownerId={record.id} />}
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
         <div className="flex gap-2">
           {editing && <button type="button" onClick={del} disabled={saving} className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Supprimer</button>}
@@ -6121,6 +6122,8 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
 
         <CapaLinksPanel sourceModule="SAFETY_EVENT" sourceEntityId={ev.id} prefill={{ title: `Action — ${ev.title}`, source: 'Accident / incident', safetyEventId: ev.id }} />
 
+        <AttachmentsPanel ownerType="SAFETY_EVENT" ownerId={ev.id} />
+
         <FormField label="Statut">
           <select value={form.statut} onChange={(e) => setForm({ ...form, statut: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
             {Object.entries(statutLabel).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -8256,6 +8259,81 @@ function CapaCommonModal({ sources, onClose, onCreated }) {
         <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Créer la CAPA commune'}</button>
       </form>
     </Modal>
+  );
+}
+
+// Panneau générique réutilisable "Pièces jointes / photos" (chantier issu de
+// l'audit, finding #22) — s'appuie sur le mécanisme d'upload/liaison déjà
+// existant côté API (/attachments/base64 + /attachments/link + /attachments/for,
+// déjà utilisé sur mobile pour Non-conformités et Accidents) qui n'avait
+// jamais de contrepartie visuelle côté web : jusqu'ici aucune page web ne
+// permettait d'ajouter NI de consulter une pièce jointe. Même esprit que
+// CapaLinksPanel/DocumentLinksPanel : un seul composant pour tous les
+// modules plutôt qu'une implémentation par module.
+function AttachmentsPanel({ ownerType, ownerId }) {
+  const C = useTheme();
+  const linksQ = useCollection(ownerId ? `/attachments/for?ownerType=${ownerType}&ownerId=${ownerId}` : null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const links = linksQ.data || [];
+
+  async function onFileSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setError('Fichier supérieur à 10 Mo'); return; }
+    setUploading(true); setError(null);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Lecture du fichier impossible'));
+        reader.readAsDataURL(file);
+      });
+      const att = await api.post('/attachments/base64', { fileName: file.name, mimeType: file.type || 'application/octet-stream', base64 });
+      await api.post('/attachments/link', { ownerType, ownerId, attachmentId: att.id });
+      linksQ.reload();
+    } catch (err) { setError(err.message); }
+    setUploading(false);
+  }
+
+  async function removeLink(linkId) {
+    if (!window.confirm('Retirer cette pièce jointe ?')) return;
+    try { await api.del(`/attachments/link/${linkId}`); linksQ.reload(); } catch (err) { setError(err.message); }
+  }
+
+  if (!ownerId) return null;
+  return (
+    <div className="mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Pièces jointes / photos ({links.length})</p>
+        <label className="text-xs px-2 py-1 rounded-lg cursor-pointer" style={{ backgroundColor: C.green, color: '#052e1f' }}>
+          {uploading ? 'Envoi…' : '+ Ajouter une photo/fichier'}
+          <input type="file" accept="image/*,.pdf" className="hidden" onChange={onFileSelected} disabled={uploading} />
+        </label>
+      </div>
+      {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+      {links.length
+        ? <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {links.map((l) => {
+              const a = l.attachment;
+              const isImage = a.mimeType?.startsWith('image/');
+              const fullUrl = `${getBaseUrl()}${a.url}`;
+              return (
+                <div key={l.id} className="relative rounded-lg overflow-hidden" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+                  <a href={fullUrl} target="_blank" rel="noreferrer" className="block">
+                    {isImage
+                      ? <img src={fullUrl} alt={a.originalName} className="w-full h-20 object-cover" />
+                      : <div className="w-full h-20 flex items-center justify-center"><FileWarning size={20} color={C.textMuted} /></div>}
+                  </a>
+                  <p className="text-[10px] px-1 py-1 truncate" title={a.originalName} style={{ color: C.textMuted }}>{a.originalName}</p>
+                  <button onClick={() => removeLink(l.id)} className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] leading-none" style={{ backgroundColor: C.red, color: '#fff' }} title="Retirer">×</button>
+                </div>
+              );
+            })}
+          </div>
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucune pièce jointe.</p>}
+    </div>
   );
 }
 

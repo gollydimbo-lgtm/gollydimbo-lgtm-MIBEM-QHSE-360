@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { createHash } from 'crypto';
 import { mkdirSync, writeFileSync } from 'fs';
@@ -27,10 +27,21 @@ export class AttachmentsController {
     return this.db.attachmentLink.create({ data: { ownerType: body.ownerType, ownerId: body.ownerId, attachmentId: body.attachmentId }, include: { attachment: true } });
   }
 
-  // Liste les pièces jointes d'une entité donnée.
+  // Liste les pièces jointes d'une entité donnée. Le storagePath est un
+  // chemin absolu côté serveur (jamais à exposer tel quel) : on calcule ici
+  // l'URL publique déjà servie statiquement par main.ts (express.static sur
+  // /uploads), selon la même convention que rapportGenererPdf().
   @Get('for')
   async listFor(@Query('ownerType') ownerType: AttachmentOwnerType, @Query('ownerId') ownerId: string) {
     if (!ownerType || !ownerId) throw new BadRequestException('ownerType et ownerId sont obligatoires');
-    return this.db.attachmentLink.findMany({ where: { ownerType, ownerId }, include: { attachment: true }, orderBy: { createdAt: 'desc' } });
+    const links = await this.db.attachmentLink.findMany({ where: { ownerType, ownerId }, include: { attachment: true }, orderBy: { createdAt: 'desc' } });
+    return links.map((l) => ({ ...l, attachment: { ...l.attachment, url: '/uploads/' + l.attachment.storagePath.split(/[\/]/).pop() } }));
+  }
+
+  // Détache une pièce jointe d'une entité (ne supprime pas le fichier ni
+  // l'Attachment lui-même : il peut être lié ailleurs ou réutilisé).
+  @Delete('link/:id')
+  async unlink(@Param('id') id: string) {
+    return this.db.attachmentLink.delete({ where: { id } });
   }
 }

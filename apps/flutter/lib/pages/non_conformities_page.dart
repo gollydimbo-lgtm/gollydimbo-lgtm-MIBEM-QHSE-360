@@ -7,6 +7,7 @@ import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'document_link_widget.dart';
+import 'attachments_widget.dart';
 
 const _ncStatusLabels = {'OPEN': 'Ouverte', 'IN_PROGRESS': 'En cours', 'CLOSED': 'Clôturée'};
 const _ncCriticiteLabels = {'MINEURE': 'Mineure', 'MODEREE': 'Modérée', 'MAJEURE': 'Majeure', 'CRITIQUE': 'Critique'};
@@ -683,8 +684,8 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
             SizedBox(width: double.infinity, child: OutlinedButton(onPressed: busy || effResult.isEmpty ? null : saveEffectiveness, child: const Text('Enregistrer la vérification'))),
 
             const SizedBox(height: 16),
-            OutlinedButton.icon(onPressed: () => captureAndLinkPhoto(context, api, 'NON_CONFORMITY', n['id']), icon: const Icon(Icons.camera_alt), label: const Text('Ajouter une photo')),
-            const SizedBox(height: 20),
+            AttachmentsSection(ownerType: 'NON_CONFORMITY', ownerId: n['id']),
+            const SizedBox(height: 4),
 
             if (!loadingSuggestions && suggestions.isNotEmpty) ...[
               const Text('Suggestions du moteur de recommandations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
