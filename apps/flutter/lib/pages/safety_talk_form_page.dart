@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../services/sync_queue.dart';
 import 'safety_talk_page.dart';
 
 /// Formulaire de création / édition manuelle d'une fiche complète de quart
@@ -181,6 +182,17 @@ class _SafetyTalkFormPageState extends State<SafetyTalkFormPage> {
           ? await api.patch('/safety-talks/${widget.safetyTalk!['id']}', payload)
           : await api.post('/safety-talks', payload);
       if (mounted) Navigator.pop(context, result);
+    } on ApiException catch (e) {
+      if (e.networkError && !editing) {
+        await SyncQueue.enqueue('safetyTalk', 'CREATE', payload);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : causerie enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          Navigator.pop(context);
+        }
+        return;
+      }
+      setState(() { busy = false; error = '$e'; });
+      return;
     } catch (e) {
       setState(() { busy = false; error = '$e'; });
       return;

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../services/sync_queue.dart';
 
 // ============================================================================
 // OBJECTIFS QHSE — parité complète avec le module web : tableau de bord,
@@ -359,10 +360,21 @@ class _ObjectifFormPageState extends State<ObjectifFormPage> {
       'priorite': priorite, 'importanceStrategique': importanceStrategique.text.trim().isEmpty ? null : importanceStrategique.text.trim(),
       'processusId': processusId, 'workUnitId': workUnitId,
     };
+    final createPayload = {'code': _objGenCode(), ...payload};
     try {
       if (editing) await api.patch('/business/objectifs-qhse/${widget.record!['id']}', payload);
-      else await api.post('/business/objectifs-qhse', {'code': _objGenCode(), ...payload});
+      else await api.post('/business/objectifs-qhse', createPayload);
       if (mounted) Navigator.pop(context, true);
+    } on ApiException catch (e) {
+      if (e.networkError && !editing) {
+        await SyncQueue.enqueue('objectifQhse', 'CREATE', createPayload);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : objectif enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+          Navigator.pop(context, true);
+        }
+      } else {
+        setState(() { busy = false; error = '$e'; });
+      }
     } catch (e) { setState(() { busy = false; error = '$e'; }); }
   }
 

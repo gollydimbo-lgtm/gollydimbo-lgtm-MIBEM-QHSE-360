@@ -5,6 +5,7 @@ import 'attachment_helpers.dart';
 import 'haccp_study_detail_page.dart';
 import 'haccp_monitoring_form_page.dart';
 import 'load_error_view.dart';
+import '../services/sync_queue.dart';
 
 // Libellés partagés par tout le module HACCP (page, fiche étude, fiche CCP,
 // formulaire de relevé) — centralisés ici pour éviter les divergences entre
@@ -259,16 +260,27 @@ class _StudiesTabState extends State<_StudiesTab> {
       )),
     );
     if (ok != true || name.text.trim().isEmpty) return;
+    final payload = {
+      'code': code.text.trim().isEmpty ? genCode('HACCP') : code.text.trim(),
+      'name': name.text.trim(),
+      'produit': produit.text.trim().isEmpty ? null : produit.text.trim(),
+      'activite': activite.text.trim().isEmpty ? null : activite.text.trim(),
+      'responsableId': responsableId,
+    };
     try {
-      final created = Map.from(await api.post('/haccp/studies', {
-        'code': code.text.trim().isEmpty ? genCode('HACCP') : code.text.trim(),
-        'name': name.text.trim(),
-        'produit': produit.text.trim().isEmpty ? null : produit.text.trim(),
-        'activite': activite.text.trim().isEmpty ? null : activite.text.trim(),
-        'responsableId': responsableId,
-      }));
+      final created = Map.from(await api.post('/haccp/studies', payload));
       if (mounted) {
         Navigator.push(context, MaterialPageRoute(builder: (_) => HaccpStudyDetailPage(studyId: created['id']))).then((_) => load());
+      }
+    } on ApiException catch (e) {
+      if (e.networkError) {
+        await SyncQueue.enqueue('haccpStudy', 'CREATE', payload);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : étude HACCP enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          load();
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));

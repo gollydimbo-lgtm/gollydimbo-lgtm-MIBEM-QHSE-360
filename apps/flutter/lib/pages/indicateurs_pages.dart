@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
+import '../services/sync_queue.dart';
 
 Map<String, dynamic> indicateurStatus(double? actuel, double? cible, bool sensInverse, double? seuilVert, double? seuilOrange) {
   if (actuel == null) return {'color': null, 'label': '—'};
@@ -71,10 +72,22 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
           FilledButton(onPressed: saving ? null : () async {
             setD(() => saving = true);
+            final payload = {'valeur': double.tryParse(valeur.text) ?? 0, 'commentaire': commentaire.text.isEmpty ? null : commentaire.text};
             try {
-              await api.post('/business/indicateurs-qualite/${ind['id']}/mesures', {'valeur': double.tryParse(valeur.text) ?? 0, 'commentaire': commentaire.text.isEmpty ? null : commentaire.text});
+              await api.post('/business/indicateurs-qualite/${ind['id']}/mesures', payload);
               if (context.mounted) Navigator.pop(c);
               load();
+            } on ApiException catch (e) {
+              if (e.networkError) {
+                await SyncQueue.enqueue('indicateurMesure', 'CREATE', {'indicateurId': ind['id'], ...payload});
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : mesure enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+                  Navigator.pop(c);
+                }
+                load();
+              } else {
+                setD(() { saving = false; formError = '$e'; });
+              }
             } catch (e) { setD(() { saving = false; formError = '$e'; }); }
           }, child: Text(saving ? '…' : 'Enregistrer')),
         ],

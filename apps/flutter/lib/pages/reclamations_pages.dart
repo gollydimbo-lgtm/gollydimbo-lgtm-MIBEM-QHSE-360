@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
+import '../services/sync_queue.dart';
 
 const Map<String, String> kCanalLabels = {
   'TELEPHONE': 'Téléphone', 'EMAIL': 'Email', 'SITE_WEB': 'Site web', 'RESEAUX_SOCIAUX': 'Réseaux sociaux',
@@ -95,11 +96,23 @@ Future<void> showReclamationDialog(BuildContext context, Api api, {Map? record, 
               'lotNumber': lotNumber.text.isEmpty ? null : lotNumber.text, 'categorieProbleme': categorieProbleme,
               'gravite': gravite, 'statut': statut, 'delaiCibleJours': delaiCibleJours.text.isEmpty ? null : int.tryParse(delaiCibleJours.text),
             };
+            final createPayload = {'code': 'REC-${DateTime.now().millisecondsSinceEpoch}', ...payload};
             try {
               if (record != null) await api.patch('/business/reclamations/${record['id']}', payload);
-              else await api.post('/business/reclamations', {'code': 'REC-${DateTime.now().millisecondsSinceEpoch}', ...payload});
+              else await api.post('/business/reclamations', createPayload);
               if (context.mounted) Navigator.pop(c);
               onSaved();
+            } on ApiException catch (e) {
+              if (e.networkError && record == null) {
+                await SyncQueue.enqueue('reclamation', 'CREATE', createPayload);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : réclamation enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+                  Navigator.pop(c);
+                }
+                onSaved();
+              } else {
+                setD(() { saving = false; formError = '$e'; });
+              }
             } catch (e) { setD(() { saving = false; formError = '$e'; }); }
           },
           child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),

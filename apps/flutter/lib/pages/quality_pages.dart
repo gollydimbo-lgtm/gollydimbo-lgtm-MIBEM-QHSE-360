@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
+import '../services/sync_queue.dart';
 
 const Map<String, String> kDomainLabels = {
   'QUALITE': 'Qualité (centré produit/ligne/lot)',
@@ -425,15 +426,26 @@ class _NewControlPageState extends State<NewControlPage> {
   Future<void> create() async {
     if (isQualite && (lineId == null || productId == null || shiftId == null || lot.text.isEmpty)) { _msg('Ligne, produit, quart et lot sont obligatoires pour un contrôle qualité'); return; }
     setState(() => busy = true);
+    final payload = {
+      'code': code.text, 'domain': domain, 'typeId': typeId,
+      'siteId': siteId, 'lineId': isQualite ? lineId : null, 'machineId': machineId,
+      'productId': isQualite ? productId : null, 'formatId': formatId,
+      'shiftId': isQualite ? shiftId : null, 'lotNumber': isQualite ? lot.text : null,
+      'templateId': templateId,
+    };
     try {
-      final x = await api.post('/quality/controls', {
-        'code': code.text, 'domain': domain, 'typeId': typeId,
-        'siteId': siteId, 'lineId': isQualite ? lineId : null, 'machineId': machineId,
-        'productId': isQualite ? productId : null, 'formatId': formatId,
-        'shiftId': isQualite ? shiftId : null, 'lotNumber': isQualite ? lot.text : null,
-        'templateId': templateId,
-      });
+      final x = await api.post('/quality/controls', payload);
       if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ControlPage(controlId: x['id'])));
+    } on ApiException catch (e) {
+      if (e.networkError) {
+        await SyncQueue.enqueue('qualityControl', 'CREATE', payload);
+        if (mounted) {
+          _msg('Pas de réseau : contrôle enregistré hors-ligne, il sera synchronisé automatiquement.');
+          Navigator.pop(context);
+        }
+      } else {
+        _msg('$e');
+      }
     } catch (e) { _msg('$e'); }
     setState(() => busy = false);
   }

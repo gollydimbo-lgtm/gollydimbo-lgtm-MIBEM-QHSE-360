@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
+import '../services/sync_queue.dart';
 
 const Map<String, String> kProcessTypeLabels = {
   'STRATEGIQUE': 'Stratégique', 'OPERATIONNEL': 'Opérationnel', 'SUPPORT': 'Support', 'AUTRE': 'Autre',
@@ -151,11 +152,23 @@ Future<void> showProcessusDialog(BuildContext context, Api api, {Map? record, re
           onPressed: saving ? null : () async {
             setD(() => saving = true);
             final payload = {'nom': nom.text, 'type': type, 'criticite': criticite, 'piloteId': piloteId, 'finalite': finalite.text, 'objectifs': objectifs.text, 'kpi': kpi.text};
+            final createPayload = {'code': 'PROC-${DateTime.now().millisecondsSinceEpoch}', ...payload};
             try {
               if (record != null) await api.patch('/business/processus/${record['id']}', payload);
-              else await api.post('/business/processus', {'code': 'PROC-${DateTime.now().millisecondsSinceEpoch}', ...payload});
+              else await api.post('/business/processus', createPayload);
               if (context.mounted) Navigator.pop(c);
               onSaved();
+            } on ApiException catch (e) {
+              if (e.networkError && record == null) {
+                await SyncQueue.enqueue('processus', 'CREATE', createPayload);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : processus enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+                  Navigator.pop(c);
+                }
+                onSaved();
+              } else {
+                setD(() { saving = false; formError = '$e'; });
+              }
             } catch (e) { setD(() { saving = false; formError = '$e'; }); }
           },
           child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
