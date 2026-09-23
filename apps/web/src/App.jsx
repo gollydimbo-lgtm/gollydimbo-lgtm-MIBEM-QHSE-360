@@ -353,6 +353,47 @@ function StatusChip({ statut }) {
   const color = map[statut] || C.textMuted;
   return <span className="text-xs px-2 py-1 rounded-md font-medium" style={{ backgroundColor: `${color}22`, color }}>{statut}</span>;
 }
+
+// Workflow de validation multi-niveaux (audit finding #23) : composant
+// partagé par NC/CAPA/Risques, sur le modèle de Documentation
+// (soumission -> vérification -> approbation). Optionnel : tant que
+// personne ne clique « Soumettre », validationStatus reste 'APPROUVEE'
+// (comportement historique inchangé) — voir business.service.ts.
+const VALIDATION_STATUS_LABELS = { APPROUVEE: 'Validée', SOUMISE: 'Soumise à validation', REJETEE: 'Rejetée' };
+function ValidationWorkflowPanel({ item, endpointBase, onChanged }) {
+  const C = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [commentaire, setCommentaire] = useState('');
+  const [error, setError] = useState(null);
+  const statut = item.validationStatus || 'APPROUVEE';
+  async function run(action) {
+    setBusy(true); setError(null);
+    try { await api.post(`${endpointBase}/${action}-validation`, { commentaire }); setCommentaire(''); onChanged(); }
+    catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+  return (
+    <div className="p-3 rounded-lg mb-5" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Validation QHSE</p>
+        <StatusChip statut={VALIDATION_STATUS_LABELS[statut] || statut} />
+      </div>
+      {statut === 'SOUMISE' && <p className="text-[11px] mb-2" style={{ color: C.textMuted }}>Soumise{item.validationDemandeeLe ? ` le ${new Date(item.validationDemandeeLe).toLocaleDateString('fr-FR')}` : ''}{item.validationDemandeePar ? ` par ${item.validationDemandeePar.firstName} ${item.validationDemandeePar.lastName}` : ''} — en attente d'approbation par un responsable QHSE.</p>}
+      {statut === 'REJETEE' && <p className="text-[11px] mb-2" style={{ color: C.red }}>Rejetée{item.valideLe ? ` le ${new Date(item.valideLe).toLocaleDateString('fr-FR')}` : ''}{item.commentaireValidation ? ` — ${item.commentaireValidation}` : ''}</p>}
+      {statut === 'APPROUVEE' && item.valideLe && <p className="text-[11px] mb-2" style={{ color: C.textMuted }}>Validée le {new Date(item.valideLe).toLocaleDateString('fr-FR')}{item.validePar ? ` par ${item.validePar.firstName} ${item.validePar.lastName}` : ''}</p>}
+      {error && <p className="text-xs mb-2" style={{ color: C.red }}>{error}</p>}
+      {statut !== 'SOUMISE'
+        ? <button onClick={() => run('soumettre')} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.blue, color: '#fff' }}>Soumettre pour validation</button>
+        : (
+          <div className="flex items-center gap-2">
+            <input value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Commentaire (optionnel)" className="flex-1 text-xs px-2 py-1.5 rounded-lg outline-none" style={inputStyle(C)} />
+            <button onClick={() => run('approuver')} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>Approuver</button>
+            <button onClick={() => run('rejeter')} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Rejeter</button>
+          </div>
+        )}
+    </div>
+  );
+}
 function DonutChart({ data, colors }) {
   const C = useTheme();
   return (
@@ -7381,6 +7422,7 @@ function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
         </div>
       </div>
 
+      <ValidationWorkflowPanel item={d} endpointBase={`/business/risks/${d.id}`} onChanged={detailQ.reload} />
       <CapaLinksPanel sourceModule="RISK" sourceEntityId={d.id} prefill={{ title: `Traiter le risque — ${d.hazard}`, source: 'Registre des risques', riskId: d.id, criticite: d.grossLevel }} />
 
       <div className="flex items-center justify-between mb-2">
@@ -8808,7 +8850,7 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
         <div className="flex gap-2">
           {d.status === 'CLOSED'
             ? <button onClick={reopen} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Réouvrir</button>
-            : <button onClick={close} disabled={busy || d.effectivenessResult !== 'EFFICACE'} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: d.effectivenessResult === 'EFFICACE' ? C.green : C.cardAlt, color: d.effectivenessResult === 'EFFICACE' ? '#052e1f' : C.textMuted, border: d.effectivenessResult === 'EFFICACE' ? 'none' : `1px solid ${C.border}` }} title={d.effectivenessResult !== 'EFFICACE' ? "Vérification d'efficacité 'Efficace' requise" : ''}>Clôturer</button>}
+            : (() => { const peutCloturer = d.effectivenessResult === 'EFFICACE' && d.validationStatus !== 'SOUMISE' && d.validationStatus !== 'REJETEE'; return <button onClick={close} disabled={busy || !peutCloturer} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: peutCloturer ? C.green : C.cardAlt, color: peutCloturer ? '#052e1f' : C.textMuted, border: peutCloturer ? 'none' : `1px solid ${C.border}` }} title={!peutCloturer ? (d.effectivenessResult !== 'EFFICACE' ? "Vérification d'efficacité 'Efficace' requise" : 'Validation QHSE requise avant clôture') : ''}>Clôturer</button>; })()}
           <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
         </div>
       </div>
@@ -8829,6 +8871,7 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
         </div>
       </div>
 
+      <ValidationWorkflowPanel item={d} endpointBase={`/business/non-conformities/${d.id}`} onChanged={detailQ.reload} />
       <CapaLinksPanel sourceModule="NON_CONFORMITY" sourceEntityId={d.id} prefill={{ title: `Traiter — ${d.title}`, source: 'Non-conformité', nonConformityId: d.id, criticite: d.criticiteNiveau }} />
       <DocumentLinksPanel sourceModule="NON_CONFORMITY" sourceEntityId={d.id} />
 
@@ -9261,7 +9304,7 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
           <div className="flex gap-2">
             {d.status === 'CLOSED'
               ? <button onClick={reopen} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: `${C.amber}22`, color: C.amber }}>Réouvrir</button>
-              : <button onClick={close} disabled={busy || d.effectivenessResult !== 'EFFICACE'} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: d.effectivenessResult === 'EFFICACE' ? C.green : C.cardAlt, color: d.effectivenessResult === 'EFFICACE' ? '#052e1f' : C.textMuted, border: d.effectivenessResult === 'EFFICACE' ? 'none' : `1px solid ${C.border}` }} title={d.effectivenessResult !== 'EFFICACE' ? "Vérification d'efficacité 'Efficace' requise" : ''}>Clôturer</button>}
+              : (() => { const peutCloturer = d.effectivenessResult === 'EFFICACE' && d.validationStatus !== 'SOUMISE' && d.validationStatus !== 'REJETEE'; return <button onClick={close} disabled={busy || !peutCloturer} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: peutCloturer ? C.green : C.cardAlt, color: peutCloturer ? '#052e1f' : C.textMuted, border: peutCloturer ? 'none' : `1px solid ${C.border}` }} title={!peutCloturer ? (d.effectivenessResult !== 'EFFICACE' ? "Vérification d'efficacité 'Efficace' requise" : 'Validation QHSE requise avant clôture') : ''}>Clôturer</button>; })()}
             <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
           </div>
         </div>
@@ -9283,6 +9326,8 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
           <div className="flex items-center justify-between mb-1"><p className="text-xs" style={{ color: C.textMuted }}>Avancement</p><p className="text-xs font-semibold" style={{ color: C.text }}>{d.avancement || 0}%</p></div>
           <div className="w-full h-2 rounded-full" style={{ backgroundColor: C.cardAlt }}><div className="h-2 rounded-full" style={{ width: `${d.avancement || 0}%`, backgroundColor: C.blue }} /></div>
         </div>
+
+        <ValidationWorkflowPanel item={d} endpointBase={`/business/actions/${d.id}`} onChanged={detailQ.reload} />
 
         {(d.links || []).length > 0 && (
           <div className="mb-5">

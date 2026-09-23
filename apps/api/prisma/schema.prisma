@@ -859,6 +859,20 @@ model NonConformity {
   equipmentControls EquipmentControl[]
   equipmentCalibrations EquipmentCalibration[]
   regulatoryRequirement RegulatoryRequirement? @relation(fields:[regulatoryRequirementId], references:[id], onDelete:SetNull)
+  // --- Workflow de validation multi-niveaux (audit finding #23), sur le
+  // modèle de Documentation (soumission -> vérification -> approbation) :
+  // optionnel et non bloquant par défaut (validationStatus='APPROUVEE'
+  // dès la création, comme avant), mais dès qu'une soumission explicite a
+  // lieu, la clôture est bloquée tant qu'un RESPONSABLE_QHSE/ADMINISTRATEUR
+  // n'a pas validé ou rejeté.
+  validationStatus String @default("APPROUVEE")
+  validationDemandeeParId String?
+  validationDemandeeLe DateTime?
+  valideParId String?
+  valideLe DateTime?
+  commentaireValidation String?
+  validationDemandeePar User? @relation("NcValidationDemandeePar", fields:[validationDemandeeParId], references:[id], onDelete:SetNull)
+  validePar User? @relation("NcValidePar", fields:[valideParId], references:[id], onDelete:SetNull)
   @@index([status,occurredAt])
 }
 
@@ -989,6 +1003,20 @@ model Action {
   training Training? @relation(fields:[trainingId], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // --- Workflow de validation multi-niveaux (audit finding #23), sur le
+  // modèle de Documentation (soumission -> vérification -> approbation) :
+  // optionnel et non bloquant par défaut (validationStatus='APPROUVEE'
+  // dès la création, comme avant), mais dès qu'une soumission explicite a
+  // lieu, la clôture est bloquée tant qu'un RESPONSABLE_QHSE/ADMINISTRATEUR
+  // n'a pas validé ou rejeté.
+  validationStatus String @default("APPROUVEE")
+  validationDemandeeParId String?
+  validationDemandeeLe DateTime?
+  valideParId String?
+  valideLe DateTime?
+  commentaireValidation String?
+  validationDemandeePar User? @relation("ActionValidationDemandeePar", fields:[validationDemandeeParId], references:[id], onDelete:SetNull)
+  validePar User? @relation("ActionValidePar", fields:[valideParId], references:[id], onDelete:SetNull)
   @@index([status,dueDate])
 }
 
@@ -1385,6 +1413,20 @@ model Risk {
   regulatoryRequirementLinks RegulatoryRequirementRisk[]
   regulatoryReevaluationRequests RegulatoryRiskReevaluationRequest[]
   objectifLinks ObjectifRisk[]
+  // --- Workflow de validation multi-niveaux (audit finding #23), sur le
+  // modèle de Documentation (soumission -> vérification -> approbation) :
+  // optionnel et non bloquant par défaut (validationStatus='APPROUVEE'
+  // dès la création, comme avant), mais dès qu'une soumission explicite a
+  // lieu, la clôture est bloquée tant qu'un RESPONSABLE_QHSE/ADMINISTRATEUR
+  // n'a pas validé ou rejeté.
+  validationStatus String @default("APPROUVEE")
+  validationDemandeeParId String?
+  validationDemandeeLe DateTime?
+  valideParId String?
+  valideLe DateTime?
+  commentaireValidation String?
+  validationDemandeePar User? @relation("RiskValidationDemandeePar", fields:[validationDemandeeParId], references:[id], onDelete:SetNull)
+  validePar User? @relation("RiskValidePar", fields:[valideParId], references:[id], onDelete:SetNull)
   @@index([status,score])
 }
 

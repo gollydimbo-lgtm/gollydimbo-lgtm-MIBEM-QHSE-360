@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
-import { currentSiteScope } from '../common/audit-context';
+import { currentSiteScope, currentAuditUserId } from '../common/audit-context';
 import { stripSystemFields } from '../common/strip-system-fields';
 import { saveFile } from '../documents/file-storage.util';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
@@ -116,6 +116,9 @@ import { saveFile } from '../documents/file-storage.util';
   if(nc.effectivenessResult!=='EFFICACE'){
    throw new Error("Clôture impossible : la vérification d'efficacité doit d'abord conclure à une action efficace.");
   }
+  if(nc.validationStatus==='SOUMISE'||nc.validationStatus==='REJETEE'){
+   throw new Error("Clôture impossible : cette non-conformité est soumise à validation QHSE et n'a pas encore été approuvée.");
+  }
   const closed=await this.db.nonConformity.update({where:{id},data:{status:'CLOSED',closedAt:new Date(),effectivenessNotes:b?.notes??nc.effectivenessNotes}});
   await writeAudit(this.db,'NC','UPDATE',id,nc,closed);
   return closed;
@@ -126,6 +129,34 @@ import { saveFile } from '../documents/file-storage.util';
   const reopened=await this.db.nonConformity.update({where:{id},data:{status:'OPEN',closedAt:null,reopenedCount:{increment:1}}});
   await writeAudit(this.db,'NC','UPDATE',id,nc,reopened);
   return reopened;
+ }
+
+ // Workflow de validation multi-niveaux (audit finding #23), sur le modèle
+ // de Documentation (soumission -> vérification -> approbation) : optionnel,
+ // n'engage la NC dans ce cycle que si quelqu'un le déclenche explicitement.
+ async ncSoumettreValidation(id:string){
+  const nc=await this.db.nonConformity.findUnique({where:{id}});
+  if(!nc) throw new NotFoundException('Non-conformité introuvable');
+  if(nc.validationStatus==='SOUMISE') throw new Error('Cette non-conformité est déjà soumise à validation.');
+  const updated=await this.db.nonConformity.update({where:{id},data:{validationStatus:'SOUMISE',validationDemandeeParId:currentAuditUserId(),validationDemandeeLe:new Date(),commentaireValidation:null}});
+  await writeAudit(this.db,'NC','UPDATE',id,nc,updated);
+  return updated;
+ }
+ async ncApprouverValidation(id:string,commentaire?:string){
+  const nc=await this.db.nonConformity.findUnique({where:{id}});
+  if(!nc) throw new NotFoundException('Non-conformité introuvable');
+  if(nc.validationStatus!=='SOUMISE') throw new Error("Cette non-conformité n'est pas en attente de validation.");
+  const updated=await this.db.nonConformity.update({where:{id},data:{validationStatus:'APPROUVEE',valideParId:currentAuditUserId(),valideLe:new Date(),commentaireValidation:commentaire||null}});
+  await writeAudit(this.db,'NC','UPDATE',id,nc,updated);
+  return updated;
+ }
+ async ncRejeterValidation(id:string,commentaire?:string){
+  const nc=await this.db.nonConformity.findUnique({where:{id}});
+  if(!nc) throw new NotFoundException('Non-conformité introuvable');
+  if(nc.validationStatus!=='SOUMISE') throw new Error("Cette non-conformité n'est pas en attente de validation.");
+  const updated=await this.db.nonConformity.update({where:{id},data:{validationStatus:'REJETEE',valideParId:currentAuditUserId(),valideLe:new Date(),commentaireValidation:commentaire||null,status:'OPEN',closedAt:null}});
+  await writeAudit(this.db,'NC','UPDATE',id,nc,updated);
+  return updated;
  }
 
  // Tableau de bord réel (point 2) — chaque KPI reste `null` si non calculable.
@@ -359,6 +390,9 @@ import { saveFile } from '../documents/file-storage.util';
   if(action.effectivenessResult!=='EFFICACE'){
    throw new Error("Clôture impossible : la vérification d'efficacité doit d'abord conclure à une action efficace.");
   }
+  if(action.validationStatus==='SOUMISE'||action.validationStatus==='REJETEE'){
+   throw new Error("Clôture impossible : cette action est soumise à validation QHSE et n'a pas encore été approuvée.");
+  }
   const closed=await this.db.action.update({where:{id},data:{status:'CLOSED',dateCloture:new Date(),completedAt:action.completedAt||new Date()}});
   if(action.parentActionId) await this.actionRecalcAvancement(action.parentActionId);
   return closed;
@@ -367,6 +401,32 @@ import { saveFile } from '../documents/file-storage.util';
   const action=await this.db.action.findUnique({where:{id}});
   if(!action) throw new NotFoundException('Action introuvable');
   return this.db.action.update({where:{id},data:{status:'OPEN',dateCloture:null,reopenedCount:{increment:1}}});
+ }
+ // Workflow de validation multi-niveaux (audit finding #23) — même principe
+ // que pour les non-conformités (ncSoumettreValidation).
+ async actionSoumettreValidation(id:string){
+  const action=await this.db.action.findUnique({where:{id}});
+  if(!action) throw new NotFoundException('Action introuvable');
+  if(action.validationStatus==='SOUMISE') throw new Error('Cette action est déjà soumise à validation.');
+  const updated=await this.db.action.update({where:{id},data:{validationStatus:'SOUMISE',validationDemandeeParId:currentAuditUserId(),validationDemandeeLe:new Date(),commentaireValidation:null}});
+  await writeAudit(this.db,'ACTION','UPDATE',id,action,updated);
+  return updated;
+ }
+ async actionApprouverValidation(id:string,commentaire?:string){
+  const action=await this.db.action.findUnique({where:{id}});
+  if(!action) throw new NotFoundException('Action introuvable');
+  if(action.validationStatus!=='SOUMISE') throw new Error("Cette action n'est pas en attente de validation.");
+  const updated=await this.db.action.update({where:{id},data:{validationStatus:'APPROUVEE',valideParId:currentAuditUserId(),valideLe:new Date(),commentaireValidation:commentaire||null}});
+  await writeAudit(this.db,'ACTION','UPDATE',id,action,updated);
+  return updated;
+ }
+ async actionRejeterValidation(id:string,commentaire?:string){
+  const action=await this.db.action.findUnique({where:{id}});
+  if(!action) throw new NotFoundException('Action introuvable');
+  if(action.validationStatus!=='SOUMISE') throw new Error("Cette action n'est pas en attente de validation.");
+  const updated=await this.db.action.update({where:{id},data:{validationStatus:'REJETEE',valideParId:currentAuditUserId(),valideLe:new Date(),commentaireValidation:commentaire||null,status:'OPEN',dateCloture:null}});
+  await writeAudit(this.db,'ACTION','UPDATE',id,action,updated);
+  return updated;
  }
  // Une prolongation ne remplace jamais silencieusement l'échéance : l'ancienne
  // reste tracée dans ActionExtension (point 26).
@@ -869,6 +929,36 @@ import { saveFile } from '../documents/file-storage.util';
   const risk=await this.db.risk.update({where:{id},data:{archivedAt:new Date(),status:'ARCHIVE'}});
   await writeAudit(this.db,'RISK','DELETE',id,current,risk);
   return risk;
+ }
+
+ // Workflow de validation multi-niveaux (audit finding #23) : ici, pas de
+ // clôture à bloquer (un risque reste vivant tant qu'il n'est pas archivé),
+ // donc la validation formalise la relecture QHSE d'une cotation avant
+ // qu'elle ne fasse foi dans le registre officiel — traçabilité du
+ // sign-off, sans empêcher la réévaluation continue déjà en place.
+ async riskSoumettreValidation(id:string){
+  const risk=await this.db.risk.findUnique({where:{id}});
+  if(!risk) throw new NotFoundException('Risque introuvable');
+  if(risk.validationStatus==='SOUMISE') throw new Error('Ce risque est déjà soumis à validation.');
+  const updated=await this.db.risk.update({where:{id},data:{validationStatus:'SOUMISE',validationDemandeeParId:currentAuditUserId(),validationDemandeeLe:new Date(),commentaireValidation:null}});
+  await writeAudit(this.db,'RISK','UPDATE',id,risk,updated);
+  return updated;
+ }
+ async riskApprouverValidation(id:string,commentaire?:string){
+  const risk=await this.db.risk.findUnique({where:{id}});
+  if(!risk) throw new NotFoundException('Risque introuvable');
+  if(risk.validationStatus!=='SOUMISE') throw new Error("Ce risque n'est pas en attente de validation.");
+  const updated=await this.db.risk.update({where:{id},data:{validationStatus:'APPROUVEE',valideParId:currentAuditUserId(),valideLe:new Date(),commentaireValidation:commentaire||null}});
+  await writeAudit(this.db,'RISK','UPDATE',id,risk,updated);
+  return updated;
+ }
+ async riskRejeterValidation(id:string,commentaire?:string){
+  const risk=await this.db.risk.findUnique({where:{id}});
+  if(!risk) throw new NotFoundException('Risque introuvable');
+  if(risk.validationStatus!=='SOUMISE') throw new Error("Ce risque n'est pas en attente de validation.");
+  const updated=await this.db.risk.update({where:{id},data:{validationStatus:'REJETEE',valideParId:currentAuditUserId(),valideLe:new Date(),commentaireValidation:commentaire||null}});
+  await writeAudit(this.db,'RISK','UPDATE',id,risk,updated);
+  return updated;
  }
 
  riskMeasureList(riskId:string){return this.db.riskMeasure.findMany({where:{riskId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
