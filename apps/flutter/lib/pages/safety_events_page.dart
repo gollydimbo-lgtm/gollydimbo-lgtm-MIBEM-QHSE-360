@@ -35,6 +35,7 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
   Map recidives = {'parCauseRacine': [], 'parZone': [], 'parMecanisme': []};
   List workedHours = [];
   bool loading = true;
+  Object? error;
   int tabIndex = 0;
 
   @override

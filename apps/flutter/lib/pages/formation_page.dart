@@ -591,4 +591,3 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
     SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Formation obligatoire'), value: form['obligatoire'] == true, onChanged: (v) => setState(() => form['obligatoire'] = v)),
   ];
 }
-</content>

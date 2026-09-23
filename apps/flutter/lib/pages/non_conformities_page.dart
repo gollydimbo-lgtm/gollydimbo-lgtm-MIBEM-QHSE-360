@@ -505,7 +505,7 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
     try {
       final r = await api.post('/recommendations/suggest', {'title': nc?['title'] ?? '', 'description': nc?['description'] ?? ''});
       suggestions = List.from(r['suggestions'] ?? []);
-    } catch (e) { error = e; }
+    } catch (_) {}
     setState(() => loadingSuggestions = false);
   }
 
