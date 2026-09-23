@@ -1,11 +1,18 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'load_error_view.dart';
+
+// Export CSV du registre (finding #30/#17 de l'audit — export manquant
+// côté mobile pour les Actions CAPA, déjà présent côté web).
+String _capaCsvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
 
 const _capaStatusLabels = {
   'DRAFT': 'Brouillon', 'TO_ANALYZE': 'À analyser', 'PLANNED': 'Planifiée', 'ASSIGNED': 'Assignée',
@@ -44,8 +51,34 @@ class _ActionsPageState extends State<ActionsPage> {
   List alertes = [];
   bool loading = true;
   Object? error;
+  bool exporting = false;
   // Recherche harmonisée (audit priorité 7, finding #18).
   String search = '';
+
+  Future<void> exportCsv() async {
+    setState(() => exporting = true);
+    try {
+      final headers = ['Code', 'Titre', 'Type', 'Statut', 'Avancement', 'Échéance', 'Efficacité'];
+      final buffer = StringBuffer();
+      buffer.writeln(headers.map((v) => _capaCsvEscape(v)).join(','));
+      for (final a in items) {
+        buffer.writeln([
+          a['code'], a['title'], _capaTypeLabels[a['actionType']] ?? a['actionType'] ?? '', _capaStatusLabels[a['status']] ?? a['status'] ?? '',
+          a['avancement'] != null ? '${a['avancement']}%' : '',
+          a['dueDate'] != null ? DateTime.parse(a['dueDate']).toIso8601String().substring(0, 10) : '',
+          _capaEffLabels[a['effectivenessResult']] ?? a['effectivenessResult'] ?? '',
+        ].map((v) => _capaCsvEscape('$v')).join(','));
+      }
+      final dir = await getTemporaryDirectory();
+      final fileName = 'Actions-CAPA-${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
+      await Share.shareXFiles([XFile(file.path)], text: 'Registre des actions CAPA');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => exporting = false);
+  }
 
   @override
   void initState() { super.initState(); load(); }
@@ -76,7 +109,9 @@ class _ActionsPageState extends State<ActionsPage> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Actions CAPA'), bottom: const TabBar(tabs: [Tab(text: "Plan d'action"), Tab(text: 'Critiques'), Tab(text: 'Analyses')])),
+        appBar: AppBar(title: const Text('Actions CAPA'), actions: [
+          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: 'Exporter le registre', onPressed: exporting ? null : exportCsv),
+        ], bottom: const TabBar(tabs: [Tab(text: "Plan d'action"), Tab(text: 'Critiques'), Tab(text: 'Analyses')])),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const CapaFormPage())).then((_) => load()),
           icon: const Icon(Icons.add),

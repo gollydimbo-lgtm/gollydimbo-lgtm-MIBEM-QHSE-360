@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
@@ -8,6 +11,10 @@ import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'document_link_widget.dart';
 import 'load_error_view.dart';
+
+// Export CSV du registre (finding #30/#17 de l'audit — export manquant
+// côté mobile pour les Audits, déjà présent côté web).
+String _auditCsvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
 
 const _auditStatusLabels = {
   'DRAFT': 'Brouillon', 'PLANNED': 'Planifié', 'TO_PREPARE': 'À préparer', 'PREPARING': 'Préparation en cours',
@@ -44,8 +51,32 @@ class _AuditsPageState extends State<AuditsPage> {
   Map? synthese;
   bool loading = true;
   Object? error;
+  bool exporting = false;
   // Recherche harmonisée (audit priorité 7, finding #18).
   String search = '';
+
+  Future<void> exportCsv() async {
+    setState(() => exporting = true);
+    try {
+      final headers = ['Code', 'Titre', 'Type', 'Date', 'Statut', 'Score'];
+      final buffer = StringBuffer();
+      buffer.writeln(headers.map((v) => _auditCsvEscape(v)).join(','));
+      for (final a in items) {
+        buffer.writeln([
+          a['code'], a['title'], a['type']?['label'] ?? '', _date(a['auditDate']),
+          _auditStatusLabels[a['status']] ?? a['status'] ?? '', a['score'] != null ? '${a['score']}%' : '',
+        ].map((v) => _auditCsvEscape('$v')).join(','));
+      }
+      final dir = await getTemporaryDirectory();
+      final fileName = 'Audits-${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
+      await Share.shareXFiles([XFile(file.path)], text: 'Registre des audits');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => exporting = false);
+  }
 
   @override
   void initState() { super.initState(); load(); }
@@ -72,6 +103,7 @@ class _AuditsPageState extends State<AuditsPage> {
       appBar: AppBar(
         title: const Text('Audits QHSE'),
         actions: [
+          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: 'Exporter le registre', onPressed: exporting ? null : exportCsv),
           IconButton(icon: const Icon(Icons.people_outline), tooltip: 'Auditeurs', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditeursPage()))),
           IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Paramétrage', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditParametragePage())).then((_) => load())),
         ],
