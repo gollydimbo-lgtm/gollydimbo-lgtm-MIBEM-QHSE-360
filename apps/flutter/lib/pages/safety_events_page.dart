@@ -37,6 +37,8 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
   bool loading = true;
   Object? error;
   int tabIndex = 0;
+  // Recherche harmonisée (audit priorité 7, finding #18).
+  String search = '';
 
   @override
   void initState() { super.initState(); load(); }
@@ -174,25 +176,42 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                 ),
                 RefreshIndicator(
                   onRefresh: load,
-                  child: events.isEmpty
-                      ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun événement déclaré')))])
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: events.length,
-                          itemBuilder: (_, i) {
-                            final e = events[i];
-                            final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
-                            return Card(
-                              child: ListTile(
-                                leading: Icon(meta.$2, color: meta.$3, size: 32),
-                                title: Text('${e['title']}'),
-                                subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])} • ${kStatutLabels[e['statut']] ?? 'Déclaré'}'),
-                                trailing: severityChip(e['severity'] ?? 1, prefix: ''),
-                                onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SafetyEventDetailPage(eventId: e['id']))).then((_) => load()),
-                              ),
+                  child: Column(children: [
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: TextField(
+                        decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 18), hintText: 'Rechercher (titre, type, statut...)', isDense: true, border: OutlineInputBorder()),
+                        onChanged: (v) => setState(() => search = v),
+                      ),
+                    ),
+                    Expanded(child: Builder(builder: (_) {
+                      final filtered = search.trim().isEmpty
+                          ? events
+                          : events.where((e) {
+                              final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
+                              return ('${e['title'] ?? ''} ${meta.$1} ${kStatutLabels[e['statut']] ?? ''}').toLowerCase().contains(search.trim().toLowerCase());
+                            }).toList();
+                      return filtered.isEmpty
+                          ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? 'Aucun événement déclaré' : 'Aucun résultat pour cette recherche')))])
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(12),
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final e = filtered[i];
+                                final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
+                                return Card(
+                                  child: ListTile(
+                                    leading: Icon(meta.$2, color: meta.$3, size: 32),
+                                    title: Text('${e['title']}'),
+                                    subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])} • ${kStatutLabels[e['statut']] ?? 'Déclaré'}'),
+                                    trailing: severityChip(e['severity'] ?? 1, prefix: ''),
+                                    onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SafetyEventDetailPage(eventId: e['id']))).then((_) => load()),
+                                  ),
+                                );
+                              },
                             );
-                          },
-                        ),
+                    })),
+                  ]),
                 ),
                 RefreshIndicator(
                   onRefresh: load,

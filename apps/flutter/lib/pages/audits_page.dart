@@ -44,6 +44,8 @@ class _AuditsPageState extends State<AuditsPage> {
   Map? synthese;
   bool loading = true;
   Object? error;
+  // Recherche harmonisée (audit priorité 7, finding #18).
+  String search = '';
 
   @override
   void initState() { super.initState(); load(); }
@@ -103,24 +105,41 @@ class _AuditsPageState extends State<AuditsPage> {
     ]),
   );
 
+  List get _filteredAudits {
+    if (search.trim().isEmpty) return items;
+    final q = search.trim().toLowerCase();
+    return items.where((a) => ('${a['code'] ?? ''} ${a['title'] ?? ''} ${a['type']?['label'] ?? ''}').toLowerCase().contains(q)).toList();
+  }
+
   Widget _buildRegistre(BuildContext c) => RefreshIndicator(
     onRefresh: load,
-    child: items.isEmpty
-        ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun audit planifié')))])
-        : ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: items.length,
-            itemBuilder: (_, i) {
-              final a = items[i];
-              return Card(child: ListTile(
-                leading: const Icon(Icons.assignment_turned_in, size: 32),
-                title: Text('${a['code']} — ${a['title']}'),
-                subtitle: Text('${_auditStatusLabels[a['status']] ?? a['status']} · ${_date(a['auditDate'])}${a['type'] != null ? ' · ${a['type']['label']}' : ''}'),
-                trailing: a['score'] != null ? Text('${a['score']}%', style: const TextStyle(fontWeight: FontWeight.bold)) : null,
-                onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => AuditDetailPage(auditId: a['id']))).then((_) => load()),
-              ));
-            },
-          ),
+    child: Column(children: [
+      Padding(
+        padding: const EdgeInsets.all(12),
+        child: TextField(
+          decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 18), hintText: 'Rechercher un audit (code, titre, type...)', isDense: true, border: OutlineInputBorder()),
+          onChanged: (v) => setState(() => search = v),
+        ),
+      ),
+      Expanded(
+        child: _filteredAudits.isEmpty
+            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? 'Aucun audit planifié' : 'Aucun résultat pour cette recherche')))])
+            : ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _filteredAudits.length,
+                itemBuilder: (_, i) {
+                  final a = _filteredAudits[i];
+                  return Card(child: ListTile(
+                    leading: const Icon(Icons.assignment_turned_in, size: 32),
+                    title: Text('${a['code']} — ${a['title']}'),
+                    subtitle: Text('${_auditStatusLabels[a['status']] ?? a['status']} · ${_date(a['auditDate'])}${a['type'] != null ? ' · ${a['type']['label']}' : ''}'),
+                    trailing: a['score'] != null ? Text('${a['score']}%', style: const TextStyle(fontWeight: FontWeight.bold)) : null,
+                    onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => AuditDetailPage(auditId: a['id']))).then((_) => load()),
+                  ));
+                },
+              ),
+      ),
+    ]),
   );
 
   String _date(dynamic v) => v == null ? '' : v.toString().substring(0, 10);

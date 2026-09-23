@@ -44,6 +44,8 @@ class _ActionsPageState extends State<ActionsPage> {
   List alertes = [];
   bool loading = true;
   Object? error;
+  // Recherche harmonisée (audit priorité 7, finding #18).
+  String search = '';
 
   @override
   void initState() { super.initState(); load(); }
@@ -93,9 +95,16 @@ class _ActionsPageState extends State<ActionsPage> {
     );
   }
 
-  Widget _buildList(BuildContext c, List list, DateTime now, {required String empty}) => RefreshIndicator(
+  Widget _buildList(BuildContext c, List rawList, DateTime now, {required String empty}) => RefreshIndicator(
     onRefresh: load,
     child: Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: TextField(
+          decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 18), hintText: 'Rechercher (code, titre...)', isDense: true, border: OutlineInputBorder()),
+          onChanged: (v) => setState(() => search = v),
+        ),
+      ),
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: KpiBar([
@@ -106,9 +115,13 @@ class _ActionsPageState extends State<ActionsPage> {
           KpiStat('Critiques', '${dashboard['critiques'] ?? 0}', color: (dashboard['critiques'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
         ]),
       ),
-      Expanded(
+      Builder(builder: (_) {
+        final list = search.trim().isEmpty
+            ? rawList
+            : rawList.where((a) => ('${a['code'] ?? ''} ${a['title'] ?? ''}').toLowerCase().contains(search.trim().toLowerCase())).toList();
+        return Expanded(
         child: list.isEmpty
-            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(empty)))])
+            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? empty : 'Aucun résultat pour cette recherche')))])
             : ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: list.length,
@@ -130,7 +143,8 @@ class _ActionsPageState extends State<ActionsPage> {
                   );
                 },
               ),
-      ),
+      );
+      }),
     ]),
   );
 

@@ -44,6 +44,9 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   String? filter;
   bool multiSelectMode = false;
   Set<String> selectedIds = {};
+  // Recherche harmonisée (audit priorité 7, finding #18 — déjà côté web,
+  // absente côté mobile).
+  String search = '';
 
   @override
   void initState() { super.initState(); load(); }
@@ -193,6 +196,12 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     ),
   );
 
+  List get _filteredItems {
+    if (search.trim().isEmpty) return items;
+    final q = search.trim().toLowerCase();
+    return items.where((n) => ('${n['code'] ?? ''} ${n['title'] ?? ''} ${n['source'] ?? ''}').toLowerCase().contains(q)).toList();
+  }
+
   Widget _buildRegistre(BuildContext c) => Column(children: [
     Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -201,6 +210,13 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
         for (final s in _ncStatusLabels.keys)
           ChoiceChip(label: Text(_ncStatusLabels[s]!), selected: filter == s, onSelected: (_) { filter = s; load(); }),
       ]),
+    ),
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: TextField(
+        decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 20), hintText: 'Rechercher (code, titre, source...)', isDense: true, border: OutlineInputBorder()),
+        onChanged: (v) => setState(() => search = v),
+      ),
     ),
     Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -215,13 +231,13 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     Expanded(
       child: RefreshIndicator(
         onRefresh: load,
-        child: items.isEmpty
-            ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune non-conformité')))])
+        child: _filteredItems.isEmpty
+            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? 'Aucune non-conformité' : 'Aucun résultat pour cette recherche')))])
             : ListView.builder(
                 padding: const EdgeInsets.all(12),
-                itemCount: items.length,
+                itemCount: _filteredItems.length,
                 itemBuilder: (_, i) {
-                  final n = items[i];
+                  final n = _filteredItems[i];
                   final actions = List.from(n['actions'] ?? []);
                   final selected = selectedIds.contains(n['id']);
                   return Card(
