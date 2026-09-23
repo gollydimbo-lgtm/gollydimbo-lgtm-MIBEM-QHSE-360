@@ -172,11 +172,74 @@ class _EmployeeTabState extends State<EmployeeTab> {
           ...items.map((e) => Card(child: ListTile(
                 title: Text('${e['firstName']} ${e['lastName']}'),
                 subtitle: Text('${e['matricule']} • ${e['department'] ?? '—'} • ${e['position'] ?? '—'}'),
-                trailing: Icon(Icons.circle, size: 10, color: e['active'] == true ? QhseColors.green : QhseColors.red),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  // Point 35 — fiche employé unifiée, même vue transversale que le web.
+                  IconButton(icon: const Icon(Icons.badge_outlined, size: 20), tooltip: 'Voir la fiche', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeDossierPage(employee: e)))),
+                  Icon(Icons.circle, size: 10, color: e['active'] == true ? QhseColors.green : QhseColors.red),
+                ]),
                 onTap: () => _openForm(record: e),
               ))),
         ],
       ),
+    );
+  }
+}
+
+// Point 35 — fiche employé unifiée : lecture seule, rassemble ce qui existe
+// déjà ailleurs (événements sécurité victime/témoin, dotations EPI,
+// habilitations, formations, expositions) sans dupliquer aucune donnée.
+class EmployeeDossierPage extends StatefulWidget {
+  final Map employee;
+  const EmployeeDossierPage({super.key, required this.employee});
+  @override
+  State<EmployeeDossierPage> createState() => _EmployeeDossierPageState();
+}
+
+class _EmployeeDossierPageState extends State<EmployeeDossierPage> {
+  final api = Api();
+  Map? dossier;
+  bool loading = true;
+  Object? error;
+
+  @override
+  void initState() { super.initState(); load(); }
+
+  Future<void> load() async {
+    setState(() { loading = true; error = null; });
+    try { dossier = Map.from(await api.get('/epi/employees/${widget.employee['id']}/dossier')); }
+    catch (e) { error = e; }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Widget _section(String title, List items, String Function(Map) titleFn, String Function(Map) subtitleFn) {
+    return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+      const SizedBox(height: 6),
+      if (items.isEmpty) Text('Aucun élément', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
+      else ...items.map((it) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Text('${titleFn(Map.from(it))} — ${subtitleFn(Map.from(it))}', style: const TextStyle(fontSize: 12)))),
+    ])));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = dossier;
+    return Scaffold(
+      appBar: AppBar(title: Text('Fiche — ${widget.employee['firstName']} ${widget.employee['lastName']}')),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? LoadErrorView(error: error, onRetry: load)
+              : RefreshIndicator(
+                  onRefresh: load,
+                  child: ListView(padding: const EdgeInsets.all(12), children: [
+                    _section('Événements sécurité — personne concernée', List.from(d?['evenementsConcerne'] ?? []), (e) => '${e['title']}', (e) => '${e['type']}'),
+                    _section('Événements sécurité — témoin', List.from(d?['evenementsTemoin'] ?? []), (e) => '${e['title']}', (e) => '${e['type']}'),
+                    _section('Dotations EPI', List.from(d?['dotationsEpi'] ?? []), (a) => '${a['epi']?['name'] ?? '—'}', (a) => a['renewalAt'] != null ? 'Renouvellement ${a['renewalAt'].toString().substring(0, 10)}' : '—'),
+                    _section('Habilitations', List.from(d?['habilitations'] ?? []), (h) => '${h['intitule']}', (h) => '${h['statut']}'),
+                    _section('Formations', List.from(d?['formations'] ?? []), (f) => '${f['training']?['title'] ?? f['training']?['intitule'] ?? '—'}', (f) => '${f['resultat'] ?? '—'}'),
+                    _section('Expositions surveillées', List.from(d?['expositions'] ?? []), (ex) => '${ex['agentDangereux'] ?? '—'}', (ex) => ex['conforme'] == null ? '—' : (ex['conforme'] == true ? 'Conforme' : 'Non conforme')),
+                  ]),
+                ),
     );
   }
 }

@@ -9,6 +9,7 @@ import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'load_error_view.dart';
+import 'validation_history_widgets.dart';
 
 // Export CSV du registre (finding #30/#17 de l'audit — export manquant
 // côté mobile pour les Actions CAPA, déjà présent côté web).
@@ -535,7 +536,7 @@ class _CapaDetailPageState extends State<CapaDetailPage> {
           const SizedBox(height: 10),
           Row(children: [
             if (a['status'] == 'CLOSED') OutlinedButton(onPressed: busy ? null : reopen, child: const Text('Réouvrir'))
-            else FilledButton(onPressed: busy || a['effectivenessResult'] != 'EFFICACE' ? null : close, child: const Text('Clôturer')),
+            else FilledButton(onPressed: busy || a['effectivenessResult'] != 'EFFICACE' || a['validationStatus'] == 'SOUMISE' || a['validationStatus'] == 'REJETEE' ? null : close, child: const Text('Clôturer')),
             const SizedBox(width: 8),
             OutlinedButton(onPressed: requestExtension, child: const Text('Prolonger')),
           ]),
@@ -543,6 +544,10 @@ class _CapaDetailPageState extends State<CapaDetailPage> {
           Text('Avancement : ${a['avancement'] ?? 0}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: (a['avancement'] ?? 0) / 100, minHeight: 8)),
           const SizedBox(height: 20),
+          ValidationWorkflowSection(item: a, endpointBase: '/business/actions/${a['id']}', onChanged: load),
+          const SizedBox(height: 12),
+          HistorySection(module: 'ACTION', entityId: a['id']),
+          const SizedBox(height: 12),
 
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             const Text('Plan d\'action — sous-actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),

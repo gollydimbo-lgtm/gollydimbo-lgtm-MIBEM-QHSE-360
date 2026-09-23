@@ -9,6 +9,7 @@ import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
+import 'validation_history_widgets.dart';
 import 'document_link_widget.dart';
 import 'attachments_widget.dart';
 import 'load_error_view.dart';
@@ -692,7 +693,8 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
               Chip(label: Text(_ncStatusLabels[n['status']] ?? n['status'])),
               if (n['status'] == 'CLOSED') ...[const SizedBox(width: 8), OutlinedButton(onPressed: busy ? null : reopen, child: const Text('Réouvrir'))]
               else ...[const SizedBox(width: 8), FilledButton(
-                  onPressed: busy || n['effectivenessResult'] != 'EFFICACE' ? null : close,
+                  // Finding #23 — pas de clôture pendant que la validation est en cours.
+                  onPressed: busy || n['effectivenessResult'] != 'EFFICACE' || n['validationStatus'] == 'SOUMISE' || n['validationStatus'] == 'REJETEE' ? null : close,
                   child: const Text('Clôturer'),
                 )],
             ]),
@@ -703,6 +705,10 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
             const SizedBox(height: 20),
             CapaLinksSection(sourceModule: 'NON_CONFORMITY', sourceEntityId: n['id'], prefill: {'title': 'Traiter — ${n['title']}', 'source': 'Non-conformité', 'criticite': n['criticiteNiveau']}),
             DocumentLinksSection(sourceModule: 'NON_CONFORMITY', sourceEntityId: n['id']),
+            ValidationWorkflowSection(item: n, endpointBase: '/business/non-conformities/${n['id']}', onChanged: load),
+            const SizedBox(height: 12),
+            HistorySection(module: 'NC', entityId: n['id']),
+            const SizedBox(height: 12),
 
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               const Text('Confinement / actions immédiates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),

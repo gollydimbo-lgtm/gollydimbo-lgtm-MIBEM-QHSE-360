@@ -29,9 +29,17 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
   Map dashboard = {};
   bool loading = true;
   Object? error;
+  String? generatingRiskAspectId;
 
   @override
   void initState() { super.initState(); load(); }
+
+  Future<void> generateRiskFromAspect(String id) async {
+    setState(() => generatingRiskAspectId = id);
+    try { await api.post('/business/environnement-aspects/$id/generate-risk', {}); await load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+    if (mounted) setState(() => generatingRiskAspectId = null);
+  }
 
   Future<void> load() async {
     setState(() { loading = true; error = null; });
@@ -203,7 +211,19 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
                 leading: Icon(Icons.circle, size: 12, color: _criticiteColor(a['criticite'] ?? 1)),
                 title: Text(a['aspect'] ?? ''),
                 subtitle: Text(a['milieu'] ?? '—'),
-                trailing: Text('${a['criticite']} (${_criticiteLabel(a['criticite'] ?? 1)})', style: TextStyle(color: _criticiteColor(a['criticite'] ?? 1), fontWeight: FontWeight.bold, fontSize: 11)),
+                trailing: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('${a['criticite']} (${_criticiteLabel(a['criticite'] ?? 1)})', style: TextStyle(color: _criticiteColor(a['criticite'] ?? 1), fontWeight: FontWeight.bold, fontSize: 11)),
+                  // Finding #34 — un aspect significatif peut générer un risque formel,
+                  // même logique que le web (calculerRisque, jamais ressaisi à la main).
+                  if (a['significatif'] == true)
+                    a['riskId'] != null
+                        ? const Text('Risque créé', style: TextStyle(color: QhseColors.green, fontSize: 10))
+                        : TextButton(
+                            onPressed: generatingRiskAspectId == a['id'] ? null : () => generateRiskFromAspect(a['id']),
+                            style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                            child: Text(generatingRiskAspectId == a['id'] ? '…' : 'Générer un risque', style: const TextStyle(fontSize: 10, color: QhseColors.red)),
+                          ),
+                ]),
                 onTap: () => showAspectDialog(c, api, record: a, onSaved: load),
               ))),
         ]),

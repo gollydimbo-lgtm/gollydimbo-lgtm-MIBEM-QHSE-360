@@ -6,6 +6,7 @@ import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'attachments_widget.dart';
 import 'load_error_view.dart';
+import 'validation_history_widgets.dart';
 
 const _types = {
   'ACCIDENT': ('Accident', Icons.local_hospital, Colors.red),
@@ -261,6 +262,17 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
   double? lat, lon;
   bool busy = false;
   String? createdId;
+  // Point 35 — lien optionnel vers le personnel (personne concernée + témoins),
+  // en plus de la description libre déjà demandée ci-dessus.
+  List employees = [];
+  String? employeeId;
+  List<String> temoinIds = [];
+
+  @override
+  void initState() {
+    super.initState();
+    api.get('/epi/employees').then((r) { if (mounted) setState(() => employees = List.from(r)); }).catchError((_) {});
+  }
 
   Future<void> gps() async {
     final p = await captureGps(context);
@@ -283,6 +295,8 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
       'severity': severity,
       'zone': zone.text.trim().isEmpty ? null : zone.text.trim(),
       'typePersonnel': typePersonnel,
+      'employeeId': employeeId,
+      'temoinIds': temoinIds,
     };
     try {
       final r = await api.post('/business/safety-events', payload);
@@ -332,6 +346,28 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
           ],
           onChanged: createdId == null ? (v) => setState(() => typePersonnel = v) : null,
         ),
+        const SizedBox(height: 12),
+        if (employees.isNotEmpty) ...[
+          DropdownButtonFormField<String>(
+            value: employeeId, isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Employé concerné (optionnel)'),
+            items: employees.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text('${e['firstName']} ${e['lastName']}'))).toList(),
+            onChanged: createdId == null ? (v) => setState(() => employeeId = v) : null,
+          ),
+          const SizedBox(height: 12),
+          InputDecorator(
+            decoration: const InputDecoration(labelText: 'Témoins (optionnel)', border: OutlineInputBorder()),
+            child: Wrap(spacing: 6, runSpacing: 4, children: employees.map<Widget>((e) {
+              final id = e['id'] as String;
+              final selected = temoinIds.contains(id);
+              return FilterChip(
+                label: Text('${e['firstName']} ${e['lastName']}', style: const TextStyle(fontSize: 11)),
+                selected: selected,
+                onSelected: createdId == null ? (v) => setState(() => v ? temoinIds.add(id) : temoinIds.remove(id)) : null,
+              );
+            }).toList()),
+          ),
+        ],
         const SizedBox(height: 12),
         Text('Sévérité : $severity', style: const TextStyle(fontWeight: FontWeight.bold)),
         Slider(value: severity.toDouble(), min: 1, max: 5, divisions: 4, label: '$severity', onChanged: createdId == null ? (v) => setState(() => severity = v.round()) : null),
@@ -506,6 +542,8 @@ class _SafetyEventDetailPageState extends State<SafetyEventDetailPage> {
 
         const SizedBox(height: 20),
         CapaLinksSection(sourceModule: 'SAFETY_EVENT', sourceEntityId: widget.eventId, prefill: {'title': 'Action — ${ev!['title'] ?? ''}', 'source': 'SAFETY_EVENT'}),
+        const SizedBox(height: 12),
+        HistorySection(module: 'SAFETY_EVENT', entityId: widget.eventId),
 
         const SizedBox(height: 20),
         AttachmentsSection(ownerType: 'SAFETY_EVENT', ownerId: widget.eventId),

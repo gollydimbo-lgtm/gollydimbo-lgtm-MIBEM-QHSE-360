@@ -8,6 +8,7 @@ import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
+import 'validation_history_widgets.dart';
 import 'load_error_view.dart';
 
 Color _niveauColor(String? n) => {
@@ -442,6 +443,10 @@ class _RiskDetailPageState extends State<RiskDetailPage> {
 
           const SizedBox(height: 20),
           CapaLinksSection(sourceModule: 'RISK', sourceEntityId: r['id'], prefill: {'title': 'Maîtriser le risque — ${r['hazard'] ?? ''}', 'source': 'RISK'}),
+          const SizedBox(height: 12),
+          ValidationWorkflowSection(item: r, endpointBase: '/business/risks/${r['id']}', onChanged: load),
+          const SizedBox(height: 12),
+          HistorySection(module: 'RISK', entityId: r['id']),
         ]),
       ),
     );

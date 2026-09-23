@@ -11,6 +11,7 @@ import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'document_link_widget.dart';
 import 'load_error_view.dart';
+import 'validation_history_widgets.dart';
 
 // Export CSV du registre (finding #30/#17 de l'audit — export manquant
 // côté mobile pour les Audits, déjà présent côté web).
@@ -455,6 +456,8 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
 
           const SizedBox(height: 20),
           CapaLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id'], prefill: {'title': 'Suite audit — ${a['title']}', 'source': 'AUDIT'}),
+          const SizedBox(height: 12),
+          HistorySection(module: 'AUDIT', entityId: a['id']),
           DocumentLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id']),
         ]),
       ),

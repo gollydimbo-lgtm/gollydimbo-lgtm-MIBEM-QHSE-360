@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
+import 'capa_link_widget.dart';
 import '../services/sync_queue.dart';
 
 const Map<String, String> kDomainLabels = {
@@ -728,6 +729,10 @@ class _ControlPageState extends State<ControlPage> {
         if (!closed && missing.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('${missing.length} point(s) obligatoire(s) restant(s) avant de pouvoir soumettre.', style: const TextStyle(color: QhseColors.amber, fontSize: 12))),
         if (!closed) FilledButton.icon(onPressed: (submitting || missing.isNotEmpty) ? null : submit, icon: const Icon(Icons.check_circle), label: Text(submitting ? 'Soumission...' : 'Soumettre et générer les NC')),
         if (closed) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text('Ce contrôle est clôturé — plus aucune modification possible.', style: TextStyle(color: QhseColors.textSecondary))),
+        // Finding #31 — lien CAPA promu pour un contrôle non conforme ou refusé,
+        // au même titre que les autres modules (parité avec l'app web).
+        if (c?['status'] == 'NON_COMPLIANT' || c?['finalDecision'] == 'REFUSE')
+          CapaLinksSection(sourceModule: 'CONTROLE', sourceEntityId: c!['id'], prefill: {'title': 'Traiter le contrôle non conforme — ${c?['code'] ?? ''}', 'source': 'Contrôle qualité'}),
       ]),
     );
   }
