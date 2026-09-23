@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; import * as bcrypt from 'bcrypt';
+import { Injectable, BadRequestException } from '@nestjs/common'; import { PrismaService } from '../common/prisma.service'; import * as bcrypt from 'bcrypt'; import { writeAudit } from '../common/audit-log.helper';
 @Injectable() export class UsersService{constructor(private db:PrismaService){} list(){return this.db.user.findMany({select:{id:true,email:true,firstName:true,lastName:true,status:true,roles:{include:{role:true}}},orderBy:{lastName:'asc'}})}
  async create(b:{email:string;password:string;firstName:string;lastName:string;role:string}){
   if(!b?.email||!b?.password||!b?.firstName||!b?.lastName||!b?.role) throw new BadRequestException('email, password, firstName, lastName et role sont obligatoires');
@@ -15,5 +15,5 @@ import { Injectable, BadRequestException } from '@nestjs/common'; import { Prism
   await this.db.user.update({where:{id},data:{passwordHash}});
   return {success:true};
  }
- remove(id:string){return this.db.user.delete({where:{id}})}
+ async remove(id:string){const row=await this.db.user.findUnique({where:{id},select:{id:true,email:true,firstName:true,lastName:true}});const deleted=await this.db.user.delete({where:{id}});await writeAudit(this.db,'USER','DELETE',id,row,null);return deleted;}
 }

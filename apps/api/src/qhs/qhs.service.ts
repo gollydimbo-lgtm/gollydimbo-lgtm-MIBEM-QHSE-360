@@ -89,8 +89,11 @@ export class QhsService {
     return this.db.safetyTalk.update({ where: { id }, data: { status: 'DELIVERED' } });
   }
 
-  remove(id: string) {
-    return this.db.safetyTalk.delete({ where: { id } });
+  async remove(id: string) {
+    const current = await this.db.safetyTalk.findUnique({ where: { id } });
+    const deleted = await this.db.safetyTalk.delete({ where: { id } });
+    await this.log('Suppression causerie sécurité', id, null, current, null);
+    return deleted;
   }
 
   // =========================================================================

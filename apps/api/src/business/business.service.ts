@@ -95,7 +95,7 @@ import { saveFile } from '../documents/file-storage.util';
   return cause;
  }
  ncCauseUpdate(id:string,b:any){return this.db.ncCause.update({where:{id},data:b})}
- ncCauseDelete(id:string){return this.db.ncCause.delete({where:{id}})}
+ async ncCauseDelete(id:string){const row=await this.db.ncCause.delete({where:{id}});await writeAudit(this.db,'NC_CAUSE','DELETE',id,row,null);return row;}
 
  // Vérification d'efficacité (point 15) — étape obligatoire avant clôture.
  async ncEffectivenessCheck(id:string,b:any){
