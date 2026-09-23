@@ -7,6 +7,26 @@ import { stripSystemFields } from '../common/strip-system-fields';
  async employeeUpdate(id:string,b:any){const old=await this.db.employee.findUnique({where:{id}}); const r=await this.db.employee.update({where:{id},data:stripSystemFields(b)}); await writeAudit(this.db,'Employee','UPDATE',id,old,r); return r;}
  async employeeDelete(id:string){const old=await this.db.employee.findUnique({where:{id}}); const r=await this.db.employee.delete({where:{id}}); await writeAudit(this.db,'Employee','DELETE',id,old,null); return r;}
 
+ // Point 35 — fiche employé unifiée : une vue transversale qui rassemble,
+ // sans les dupliquer, tous les enregistrements déjà existants où cet
+ // employé apparaît (victime ou témoin d'un événement, dotations EPI,
+ // habilitations, formations, expositions), à défaut d'une relation
+ // unique EMPLOYEE_ID que les modules NC/Action ne portent pas encore.
+ async employeeDossier(id:string){
+  const employee=await this.db.employee.findUnique({where:{id}});
+  if(!employee) return null;
+  const [evenementsConcerne,evenementsTemoin,dotationsEpi,habilitations,formations,competences,expositions]=await Promise.all([
+   this.db.safetyEvent.findMany({where:{employeeId:id},orderBy:{occurredAt:'desc'}}),
+   this.db.safetyEvent.findMany({where:{temoinIds:{has:id}},orderBy:{occurredAt:'desc'}}),
+   this.db.epiAssignment.findMany({where:{employeeId:id},include:{epi:true},orderBy:{distributedAt:'desc'}}),
+   this.db.habilitation.findMany({where:{employeeId:id},orderBy:{dateExpiration:'desc'}}),
+   this.db.trainingParticipant.findMany({where:{employeeId:id},include:{training:true}}),
+   this.db.employeeCompetence.findMany({where:{employeeId:id}}),
+   this.db.expositionSurveillance.findMany({where:{employeeId:id},orderBy:{dateMesure:'desc'}}),
+  ]);
+  return {employee,evenementsConcerne,evenementsTemoin,dotationsEpi,habilitations,formations,competences,expositions};
+ }
+
  catalogList(){return this.db.epi.findMany({orderBy:{name:'asc'}})}
  async catalogCreate(b:any){const r=await this.db.epi.create({data:stripSystemFields(b)}); await writeAudit(this.db,'Epi','CREATE',r.id,null,r); return r;}
  async catalogUpdate(id:string,b:any){const old=await this.db.epi.findUnique({where:{id}}); const r=await this.db.epi.update({where:{id},data:stripSystemFields(b)}); await writeAudit(this.db,'Epi','UPDATE',id,old,r); return r;}

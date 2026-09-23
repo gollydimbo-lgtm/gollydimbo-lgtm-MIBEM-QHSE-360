@@ -2834,6 +2834,56 @@ function EmployeeForm({ record, onClose, onCreated }) {
   );
 }
 
+// Point 35 — fiche employé unifiée : une vue transversale en lecture seule,
+// qui n'invente aucune donnée, mais rassemble ce qui existe déjà ailleurs
+// (événements sécurité en tant que victime ou témoin, dotations EPI,
+// habilitations, formations, expositions) faute d'un identifiant employé
+// partagé par tous les modules (NC/Action restent liés à un User, pas à
+// un Employee — limite documentée, pas résolue par cette fiche).
+function EmployeeDossierModal({ employee, onClose }) {
+  const C = useTheme();
+  const dossierQ = useCollection(`/epi/employees/${employee.id}/dossier`);
+  const d = dossierQ.data;
+  return (
+    <Modal title={`Fiche employé — ${employee.firstName} ${employee.lastName}`} onClose={onClose} wide>
+      {dossierQ.loading ? <LoadingPanel /> : dossierQ.error ? <ErrorPanel message={dossierQ.error} onRetry={dossierQ.reload} /> : (
+        <div className="space-y-4">
+          <Panel title="Événements sécurité — personne concernée">
+            {d.evenementsConcerne.length
+              ? <DataTable columns={['Date', 'Type', 'Titre', 'Sévérité']} rows={d.evenementsConcerne.map((ev) => [new Date(ev.occurredAt).toLocaleDateString('fr-FR'), ev.type, ev.title, ev.severity])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun événement où cet employé est la personne concernée</p>}
+          </Panel>
+          <Panel title="Événements sécurité — témoin">
+            {d.evenementsTemoin.length
+              ? <DataTable columns={['Date', 'Type', 'Titre', 'Sévérité']} rows={d.evenementsTemoin.map((ev) => [new Date(ev.occurredAt).toLocaleDateString('fr-FR'), ev.type, ev.title, ev.severity])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun événement où cet employé est témoin</p>}
+          </Panel>
+          <Panel title="Dotations EPI">
+            {d.dotationsEpi.length
+              ? <DataTable columns={['EPI', 'Quantité', 'Distribué le', 'Renouvellement']} rows={d.dotationsEpi.map((a) => [a.epi?.name || '—', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '—'])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune dotation EPI</p>}
+          </Panel>
+          <Panel title="Habilitations">
+            {d.habilitations.length
+              ? <DataTable columns={['Intitulé', 'Statut', 'Expiration']} rows={d.habilitations.map((h) => [h.intitule, h.statut, h.dateExpiration ? new Date(h.dateExpiration).toLocaleDateString('fr-FR') : '—'])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune habilitation</p>}
+          </Panel>
+          <Panel title="Formations">
+            {d.formations.length
+              ? <DataTable columns={['Formation', 'Présent', 'Résultat']} rows={d.formations.map((f) => [f.training?.title || f.training?.intitule || '—', f.present == null ? '—' : (f.present ? 'Oui' : 'Non'), f.resultat || '—'])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune formation suivie</p>}
+          </Panel>
+          <Panel title="Expositions surveillées">
+            {d.expositions.length
+              ? <DataTable columns={['Date', 'Agent', 'Conforme']} rows={d.expositions.map((ex) => [new Date(ex.dateMesure).toLocaleDateString('fr-FR'), ex.agentDangereux || '—', ex.conforme == null ? '—' : (ex.conforme ? 'Oui' : 'Non')])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune exposition enregistrée</p>}
+          </Panel>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function EpiCatalogForm({ record, categories, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
@@ -6225,11 +6275,13 @@ function SafetyEventForm({ record, onClose, onCreated }) {
   const editing = !!record;
   const processusQ = useCollection('/business/processus');
   const fournisseursQ = useCollection('/business/fournisseurs');
+  const employeesQ = useCollection('/epi/employees');
   const [form, setForm] = useState({
     type: record?.type || 'INCIDENT', categorie: record?.categorie || '', title: record?.title || '', description: record?.description || '',
     occurredAt: record ? new Date(record.occurredAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     severity: record?.severity || 2, withLostTime: record?.withLostTime || false, lostDays: record?.lostDays ?? '',
     zone: record?.zone || '', atelier: record?.atelier || '', poste: record?.poste || '', activite: record?.activite || '',
+    employeeId: record?.employeeId || '', temoinIds: record?.temoinIds || [],
     personneNom: record?.personneNom || '', personneFonction: record?.personneFonction || '', typePersonnel: record?.typePersonnel || '',
     typeLesion: record?.typeLesion || '', siegeLesion: record?.siegeLesion || '', mecanisme: record?.mecanisme || '',
     consequenceMaterielle: record?.consequenceMaterielle || '', consequenceEnvironnementale: record?.consequenceEnvironnementale || '',
@@ -6244,7 +6296,7 @@ function SafetyEventForm({ record, onClose, onCreated }) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { ...form, severity: Number(form.severity), occurredAt: new Date(form.occurredAt).toISOString(), lostDays: form.withLostTime && form.lostDays !== '' ? Number(form.lostDays) : null, processusId: form.processusId || null, fournisseurId: form.fournisseurId || null };
+      const payload = { ...form, severity: Number(form.severity), occurredAt: new Date(form.occurredAt).toISOString(), lostDays: form.withLostTime && form.lostDays !== '' ? Number(form.lostDays) : null, processusId: form.processusId || null, fournisseurId: form.fournisseurId || null, employeeId: form.employeeId || null, temoinIds: form.temoinIds };
       if (editing) await api.patch(`/business/safety-events/${record.id}`, payload);
       else await api.post('/business/safety-events', payload);
       onCreated();
@@ -6313,6 +6365,21 @@ function SafetyEventForm({ record, onClose, onCreated }) {
           <FormField label="Type de personnel">
             <select value={form.typePersonnel} onChange={(e) => setForm({ ...form, typePersonnel: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
               <option value="">—</option><option value="SALARIE">Salarié</option><option value="INTERIMAIRE">Intérimaire</option><option value="SOUS_TRAITANT">Sous-traitant</option><option value="STAGIAIRE">Stagiaire</option><option value="VISITEUR">Visiteur</option><option value="AUTRE">Autre</option>
+            </select>
+          </FormField>
+        </div>
+
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2 mt-3" style={{ color: C.textMuted }}>Lien avec le personnel (point 35 — fiche employé unifiée)</p>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Employé concerné (optionnel)">
+            <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+              <option value="">— saisie libre ci-dessus —</option>
+              {(employeesQ.data || []).map((emp) => <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Témoins (optionnel, plusieurs possibles)">
+            <select multiple value={form.temoinIds} onChange={(e) => setForm({ ...form, temoinIds: Array.from(e.target.selectedOptions, (o) => o.value) })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ ...inputStyle(C), height: '5.5rem' }}>
+              {(employeesQ.data || []).map((emp) => <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>)}
             </select>
           </FormField>
         </div>
@@ -6706,6 +6773,7 @@ function SecuriteEpiPage() {
   const [showEmpForm, setShowEmpForm] = useState(false);
   const [selectedEpi, setSelectedEpi] = useState(null);
   const [selectedEmp, setSelectedEmp] = useState(null);
+  const [dossierEmp, setDossierEmp] = useState(null);
   const [categoryForm, setCategoryForm] = useState(null); // {kind:'epi'|'epc', record}
   const [showEpcForm, setShowEpcForm] = useState(false);
   const [selectedEpc, setSelectedEpc] = useState(null);
@@ -6768,6 +6836,7 @@ function SecuriteEpiPage() {
     <div className="space-y-6">
       {(showEpiForm || selectedEpi) && <EpiCatalogForm record={selectedEpi} categories={epiCatList} onClose={() => { setShowEpiForm(false); setSelectedEpi(null); }} onCreated={() => { catalog.reload(); dash.reload(); }} />}
       {(showEmpForm || selectedEmp) && <EmployeeForm record={selectedEmp} onClose={() => { setShowEmpForm(false); setSelectedEmp(null); }} onCreated={() => { employees.reload(); dash.reload(); }} />}
+      {dossierEmp && <EmployeeDossierModal employee={dossierEmp} onClose={() => setDossierEmp(null)} />}
       {categoryForm && <CategoryForm record={categoryForm.record} endpoint={categoryForm.kind === 'epi' ? '/epi/epi-categories' : '/epi/epc-categories'} label={categoryForm.kind === 'epi' ? 'EPI' : 'EPC'} onClose={() => setCategoryForm(null)} onCreated={() => { epiCategories.reload(); epcCategories.reload(); }} />}
       {(showEpcForm || selectedEpc) && <EpcForm record={selectedEpc} categories={epcCatList} onClose={() => { setShowEpcForm(false); setSelectedEpc(null); }} onCreated={epcList.reload} />}
       {showEpiInspForm && <EpiInspectionForm epiOptions={catalogList} onClose={() => setShowEpiInspForm(false)} onCreated={epiInspections.reload} />}
@@ -6957,8 +7026,8 @@ function SecuriteEpiPage() {
       {tab === 'personnel' && (
         <Panel title="Liste du personnel" right={<button onClick={() => setShowEmpForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel employé</button>}>
           {employeeList.length
-            ? <DataTable columns={['Matricule', 'Nom', 'Département', 'Poste', 'Statut']}
-                rows={employeeList.map((e) => [e.matricule, `${e.firstName} ${e.lastName}`, e.department || '—', e.position || '—', <StatusChip statut={e.active ? 'Conforme' : 'Non conforme'} />])}
+            ? <DataTable columns={['Matricule', 'Nom', 'Département', 'Poste', 'Statut', 'Fiche']}
+                rows={employeeList.map((e) => [e.matricule, `${e.firstName} ${e.lastName}`, e.department || '—', e.position || '—', <StatusChip statut={e.active ? 'Conforme' : 'Non conforme'} />, <button onClick={(ev) => { ev.stopPropagation(); setDossierEmp(e); }} className="text-xs" style={{ color: C.blue }}>Voir la fiche</button>])}
                 onRowClick={(i) => setSelectedEmp(employeeList[i])} />
             : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun employé enregistré — utilisez « + Nouvel employé » pour commencer</p>}
         </Panel>

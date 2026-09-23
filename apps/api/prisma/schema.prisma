@@ -718,6 +718,10 @@ model SafetyEvent {
   personneNom String?
   personneFonction String?
   typePersonnel String?
+  // Point 35 — témoins de l'événement, distincts de la personne concernée,
+  // simple liste d'identifiants Employee (pas de table de jointure : une
+  // présence, pas une relation à historiser en elle-même).
+  temoinIds String[] @default([])
   // Conséquences
   typeLesion String?
   siegeLesion String?
