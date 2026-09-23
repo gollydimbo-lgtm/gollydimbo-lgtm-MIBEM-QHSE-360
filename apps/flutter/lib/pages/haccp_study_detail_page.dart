@@ -375,11 +375,15 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
     final buttons = <Widget>[
       OutlinedButton.icon(onPressed: busy ? null : editStudy, icon: const Icon(Icons.edit, size: 16), label: const Text('Modifier')),
     ];
-    if (status == 'BROUILLON' || status == 'EN_VALIDATION') {
+    // Boutons soumis à Api.canManage (RBAC, finding #1) : le backend exige
+    // ADMINISTRATEUR/RESPONSABLE_QHSE sur /validate et sur la suppression.
+    if ((status == 'BROUILLON' || status == 'EN_VALIDATION') && Api.canManage) {
       buttons.add(FilledButton.icon(onPressed: busy ? null : validate, icon: const Icon(Icons.check, size: 16), label: Text(status == 'BROUILLON' ? 'Soumettre pour validation' : 'Valider')));
     }
     buttons.add(OutlinedButton.icon(onPressed: busy ? null : revise, icon: const Icon(Icons.history_edu, size: 16), label: const Text('Nouvelle révision')));
-    buttons.add(TextButton.icon(onPressed: busy ? null : deleteStudy, icon: Icon(Icons.delete_outline, size: 16, color: QhseColors.red), label: Text('Supprimer', style: TextStyle(color: QhseColors.red))));
+    if (Api.canManage) {
+      buttons.add(TextButton.icon(onPressed: busy ? null : deleteStudy, icon: Icon(Icons.delete_outline, size: 16, color: QhseColors.red), label: Text('Supprimer', style: TextStyle(color: QhseColors.red))));
+    }
     return buttons;
   }
 

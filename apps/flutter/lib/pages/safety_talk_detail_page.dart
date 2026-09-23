@@ -343,7 +343,9 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
 
   List<Widget> _workflowButtons(String? status) {
     final buttons = <Widget>[];
-    if (status == 'DRAFT' || status == 'REPORTE') {
+    // Api.canManage (RBAC, finding #1) : le backend exige ADMINISTRATEUR/
+    // RESPONSABLE_QHSE sur /safety-talks/:id/approve.
+    if ((status == 'DRAFT' || status == 'REPORTE') && Api.canManage) {
       buttons.add(FilledButton.icon(onPressed: busy ? null : approve, icon: const Icon(Icons.check, size: 16), label: const Text('Valider')));
     }
     if (status == 'APPROVED') {

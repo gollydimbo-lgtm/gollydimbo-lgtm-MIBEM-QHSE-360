@@ -41,6 +41,14 @@ class Api {
   /// [HomeShell] pour rediriger vers l'écran de connexion.
   static void Function()? onUnauthorized;
 
+  // Rôles de l'utilisateur connecté, mis en cache en mémoire pour un accès
+  // synchrone depuis build() (RBAC côté web/API, finding #1 — jusqu'ici
+  // aucune contrepartie côté mobile : les boutons supprimer/valider/approuver
+  // s'affichaient pour tout le monde et n'échouaient qu'à l'appel serveur).
+  // Alimenté par saveSession() (connexion) et _ensureLoaded() (démarrage).
+  static List<String> _roles = [];
+  static bool get canManage => _roles.contains('ADMINISTRATEUR') || _roles.contains('RESPONSABLE_QHSE');
+
   static Future<void> _ensureLoaded() async {
     if (_loaded) return;
     final p = await SharedPreferences.getInstance();
@@ -49,6 +57,13 @@ class Api {
     _loaded = true;
     final token = p.getString('token');
     if (token != null) _scheduleProactiveRefresh(token);
+    final userJson = p.getString('user');
+    if (userJson != null) {
+      try {
+        final user = Map<String, dynamic>.from(jsonDecode(userJson));
+        _roles = ((user['roles'] as List?) ?? []).map((r) => r.toString()).toList();
+      } catch (_) { /* profil local corrompu ou absent : pas de rôle en cache */ }
+    }
   }
 
   static Future<String> currentBaseUrl() async {
@@ -65,7 +80,7 @@ class Api {
     await p.setString('api_base_url', u);
   }
 
-  Future<String?> token() async => (await SharedPreferences.getInstance()).getString('token');
+  Future<String?> token() async { await _ensureLoaded(); return (await SharedPreferences.getInstance()).getString('token'); }
   Future<String?> _storedRefreshToken() async => (await SharedPreferences.getInstance()).getString('refresh_token');
 
   // Décode la partie centrale d'un JWT pour lire sa date d'expiration —
@@ -191,6 +206,7 @@ class Api {
     await p.setString('token', token);
     if (refreshToken != null) await p.setString('refresh_token', refreshToken);
     await p.setString('user', jsonEncode(user));
+    _roles = ((user['roles'] as List?) ?? []).map((r) => r.toString()).toList();
     _scheduleProactiveRefresh(token);
   }
 
@@ -211,5 +227,6 @@ class Api {
     await p.remove('token');
     await p.remove('refresh_token');
     await p.remove('user');
+    _roles = [];
   }
 }

@@ -392,7 +392,7 @@ class _RiskDetailPageState extends State<RiskDetailPage> {
       appBar: AppBar(title: Text(r['hazard'] ?? ''), actions: [
         IconButton(icon: const Icon(Icons.camera_alt_outlined), onPressed: () => captureAndLinkPhoto(context, api, 'RISK', r['id'])),
         IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RiskFormPage(record: r))).then((_) => load())),
-        IconButton(icon: const Icon(Icons.archive_outlined), onPressed: deleteRisk),
+        if (Api.canManage) IconButton(icon: const Icon(Icons.archive_outlined), onPressed: deleteRisk),
       ]),
       body: RefreshIndicator(
         onRefresh: load,

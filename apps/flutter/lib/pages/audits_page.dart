@@ -783,7 +783,7 @@ class _AuditTypesTabState extends State<_AuditTypesTab> {
                 return Card(child: ListTile(
                   title: Text(t['label'] ?? ''),
                   subtitle: Text(t['code'] ?? ''),
-                  trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-types/${t['id']}'); load(); }),
+                  trailing: Api.canManage ? IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-types/${t['id']}'); load(); }) : null,
                 ));
               },
             ),
@@ -850,7 +850,7 @@ class _AuditReferentialsTabState extends State<_AuditReferentialsTab> {
                 return Card(child: ListTile(
                   title: Text(r['label'] ?? ''),
                   subtitle: Text(r['description'] ?? r['code'] ?? ''),
-                  trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-referentials/${r['id']}'); load(); }),
+                  trailing: Api.canManage ? IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-referentials/${r['id']}'); load(); }) : null,
                 ));
               },
             ),

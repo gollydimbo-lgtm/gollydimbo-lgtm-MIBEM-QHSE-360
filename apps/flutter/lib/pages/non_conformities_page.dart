@@ -237,7 +237,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
                       onTap: multiSelectMode
                           ? () => setState(() { if (selected) { selectedIds.remove(n['id']); } else { selectedIds.add(n['id']); } })
                           : () => Navigator.push(c, MaterialPageRoute(builder: (_) => NonConformityDetailPage(ncId: n['id']))).then((_) => load()),
-                      onLongPress: multiSelectMode ? null : () => delete(n),
+                      onLongPress: multiSelectMode || !Api.canManage ? null : () => delete(n),
                     ),
                   );
                 },
