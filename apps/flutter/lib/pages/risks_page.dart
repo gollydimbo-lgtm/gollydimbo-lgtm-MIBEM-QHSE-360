@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
@@ -15,6 +18,9 @@ Color _niveauColor(String? n) => {
     }[n] ?? QhseColors.textSecondary;
 String _niveauLabel(String? n) => {'CRITIQUE': 'Critique', 'ELEVE': 'Élevé', 'MODERE': 'Modéré', 'FAIBLE': 'Faible'}[n] ?? '—';
 Color _alerteColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
+// Export CSV du registre (finding #30 de l'audit — export manquant côté
+// mobile alors qu'il existe déjà côté web pour Risques/NC).
+String _csvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
 // Hiérarchie de prévention (point 9 du cahier des charges) — suggestion,
 // jamais une liste figée côté serveur.
 const List<List<String>> kRiskMeasureTypes = [
@@ -43,6 +49,7 @@ class _RisksPageState extends State<RisksPage> {
   Map dashboard = {};
   bool loading = true;
   Object? error;
+  bool exporting = false;
   final searchCtrl = TextEditingController();
   List? searchResults;
   int _searchToken = 0;
@@ -79,12 +86,39 @@ class _RisksPageState extends State<RisksPage> {
   @override
   void dispose() { searchCtrl.dispose(); super.dispose(); }
 
+  // --- Export CSV du registre des risques (mêmes colonnes que l'export
+  // Excel du back-office, cf. exportRisquesExcel côté web) ---
+  Future<void> exportCsv() async {
+    setState(() => exporting = true);
+    try {
+      final headers = ['Code', 'Danger', 'Catégorie', 'Unité de travail', 'Situation dangereuse', 'Événement redouté', 'Dommage potentiel', 'Personnes exposées', 'Méthode', 'Gravité', 'Probabilité', 'Exposition', 'Score brut', 'Niveau', 'Gravité résiduelle', 'Probabilité résiduelle', 'Score résiduel', 'Niveau résiduel', 'Statut de maîtrise', 'Prochaine réévaluation'];
+      final buffer = StringBuffer();
+      buffer.writeln(headers.map((v) => _csvEscape(v)).join(','));
+      for (final r in items) {
+        buffer.writeln([
+          r['code'], r['hazard'], r['category']?['label'] ?? '', r['workUnit']?['name'] ?? '', r['hazardousSituation'] ?? '', r['hazardousEvent'] ?? '', r['potentialDamage'] ?? '', r['exposedPersons'] ?? '',
+          r['method'] ?? '', r['severity'] ?? '', r['probability'] ?? '', r['exposure'] ?? '', r['grossScore'] ?? r['score'] ?? '', r['grossLevel'] ?? '', r['residualSeverity'] ?? '', r['residualProbability'] ?? '', r['residualScore'] ?? '', r['residualLevel'] ?? '',
+          r['controlStatus'] ?? '', r['nextReviewDate'] != null ? DateTime.parse(r['nextReviewDate']).toIso8601String().substring(0, 10) : '',
+        ].map((v) => _csvEscape('$v')).join(','));
+      }
+      final dir = await getTemporaryDirectory();
+      final fileName = 'Registre-des-risques-${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
+      await Share.shareXFiles([XFile(file.path)], text: 'Registre des risques');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => exporting = false);
+  }
+
   @override
   Widget build(BuildContext c) => DefaultTabController(
     length: 6,
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Registre des risques'),
+        actions: [IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), onPressed: exporting ? null : exportCsv, tooltip: 'Exporter le registre')],
         bottom: const TabBar(isScrollable: true, tabs: [
           Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Hiérarchisation'), Tab(text: 'Cartographie'), Tab(text: 'Top 10'), Tab(text: 'Paramétrage'),
         ]),

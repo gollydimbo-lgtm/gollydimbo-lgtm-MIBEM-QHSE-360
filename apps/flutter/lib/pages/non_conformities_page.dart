@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
@@ -18,6 +21,9 @@ Color _ncCriticiteColor(String? n) => {
       'CRITIQUE': QhseColors.red, 'MAJEURE': QhseColors.amber,
       'MODEREE': const Color(0xFFB45309), 'MINEURE': QhseColors.green,
     }[n] ?? QhseColors.textSecondary;
+// Export CSV du registre (finding #30 de l'audit — export manquant côté
+// mobile alors qu'il existe déjà côté web, cf. exportNcExcel).
+String _csvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
 
 // --- Écran principal : tableau de bord + registre des non-conformités ---
 class NonConformitiesPage extends StatefulWidget {
@@ -34,12 +40,41 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   bool syntheseLoading = false;
   bool loading = true;
   Object? error;
+  bool exporting = false;
   String? filter;
   bool multiSelectMode = false;
   Set<String> selectedIds = {};
 
   @override
   void initState() { super.initState(); load(); }
+
+  // --- Export CSV du registre des non-conformités (mêmes colonnes que
+  // l'export Excel du back-office, cf. exportNcExcel côté web) ---
+  Future<void> exportCsv() async {
+    setState(() => exporting = true);
+    try {
+      final headers = ['Code', 'Titre', 'Source', 'Type', 'Criticité', 'Score', 'Unité de travail', 'Responsable', 'Date', 'Échéance', 'Statut', 'Efficacité'];
+      final buffer = StringBuffer();
+      buffer.writeln(headers.map((v) => _csvEscape(v)).join(','));
+      for (final n in items) {
+        buffer.writeln([
+          n['code'], n['title'], n['source'] ?? '', n['classification'] ?? '', n['criticiteNiveau'] ?? '', n['criticiteScore'] ?? '',
+          n['workUnit']?['name'] ?? '', n['responsible'] != null ? '${n['responsible']['firstName']} ${n['responsible']['lastName']}' : '',
+          n['occurredAt'] != null ? DateTime.parse(n['occurredAt']).toIso8601String().substring(0, 10) : '',
+          n['dueDate'] != null ? DateTime.parse(n['dueDate']).toIso8601String().substring(0, 10) : '',
+          n['status'] ?? '', n['effectivenessResult'] ?? '',
+        ].map((v) => _csvEscape('$v')).join(','));
+      }
+      final dir = await getTemporaryDirectory();
+      final fileName = 'Non-conformites-${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
+      await Share.shareXFiles([XFile(file.path)], text: 'Registre des non-conformités');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => exporting = false);
+  }
 
   Future<void> generateSynthese() async {
     setState(() => syntheseLoading = true);
@@ -126,6 +161,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
             tooltip: multiSelectMode ? 'Annuler la sélection' : 'Sélection multiple (CAPA commune)',
             onPressed: () => setState(() { multiSelectMode = !multiSelectMode; selectedIds = {}; }),
           ),
+          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: 'Exporter le registre', onPressed: exporting ? null : exportCsv),
           IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Paramétrage des seuils', onPressed: editSettings),
         ],
       ),
