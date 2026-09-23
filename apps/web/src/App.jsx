@@ -5471,11 +5471,15 @@ function IndicateursQualitePage() {
   const [mesureFor, setMesureFor] = useState(null);
   const [categorieFilter, setCategorieFilter] = useState('');
   const [showPonderation, setShowPonderation] = useState(false);
+  // Recherche harmonisée (audit priorité 7, finding #18).
+  const [search, setSearch] = useState('');
   if (indicateurs.loading || auto.loading || indice.loading || ponderations.loading) return <LoadingPanel />;
   if (indicateurs.error) return <ErrorPanel message={indicateurs.error} onRetry={indicateurs.reload} />;
   const allIndList = indicateurs.data || [];
   const categories = [...new Set(allIndList.map((i) => i.categorie).filter(Boolean))];
-  const indList = categorieFilter ? allIndList.filter((i) => i.categorie === categorieFilter) : allIndList;
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const indList = (categorieFilter ? allIndList.filter((i) => i.categorie === categorieFilter) : allIndList)
+    .filter((i) => !search.trim() || norm([i.indicateur, i.categorie].join(' ')).includes(norm(search)));
   const autoList = auto.data || [];
   const indiceData = indice.data || { indice: null, detail: [] };
   const cibles = indList.filter((i) => (i.sensInverse ? i.actuel <= i.cible : i.actuel >= i.cible)).length;
@@ -5550,6 +5554,7 @@ function IndicateursQualitePage() {
 
       <Panel title="Indicateurs qualité vs cibles" right={
         <div className="flex items-center gap-2">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un indicateur..." className="text-xs px-3 py-1.5 rounded-lg outline-none" style={inputStyle(C)} />
           {categories.length > 0 && (
             <select value={categorieFilter} onChange={(e) => setCategorieFilter(e.target.value)} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)}>
               <option value="">Toutes catégories</option>{categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
@@ -6511,6 +6516,8 @@ function SecuriteEpiPage() {
   const [showTrainingForm, setShowTrainingForm] = useState(false);
   const [selectedTraining, setSelectedTraining] = useState(null);
   const auditLogs = useCollection('/audit-logs');
+  // Recherche harmonisée (audit priorité 7, finding #18).
+  const [search, setSearch] = useState('');
 
   if (dash.loading || renewals.loading || renewalBuckets.loading || assignments.loading || trainings.loading || catalog.loading || employees.loading || epiCategories.loading || epcCategories.loading || epcList.loading || epiInspections.loading || epcInspections.loading || matrix.loading || maintenances.loading || auditLogs.loading) return <LoadingPanel />;
   if (dash.error) return <ErrorPanel message={dash.error} />;
@@ -6539,12 +6546,18 @@ function SecuriteEpiPage() {
   const auditLogList = (auditLogs.data || []).filter((l) => ['Epi', 'Epc', 'EpiCategory', 'EpcCategory', 'EpiAssignment', 'EpiInspection', 'EpcInspection', 'EpcMaintenance', 'JobRiskProtection'].includes(l.module));
   // Export harmonisé (audit priorité 7, finding #17) — registre des
   // dotations, la donnée la plus consultée hors application pour ce module.
-  function exportDotationsExcel() {
-    downloadWorkbook([['Dotations EPI', [
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const assignmentFiltered = search.trim()
+    ? assignmentList.filter((a) => norm([a.code, a.employee?.firstName, a.employee?.lastName, a.epi?.name].join(' ')).includes(norm(search)))
+    : assignmentList;
+  function dotationsExportRows() {
+    return [
       ['Code', 'Employé', 'EPI', 'Quantité', 'Date', 'Renouvellement'],
-      ...assignmentList.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '']),
-    ]]], `Dotations-EPI-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      ...assignmentFiltered.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '']),
+    ];
   }
+  function exportDotationsExcel() { downloadWorkbook([['Dotations EPI', dotationsExportRows()]], `Dotations-EPI-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportDotationsCsv() { downloadCsv(dotationsExportRows(), `Dotations-EPI-${new Date().toISOString().slice(0, 10)}.csv`); }
 
   return (
     <div className="space-y-6">
@@ -6721,16 +6734,18 @@ function SecuriteEpiPage() {
       )}
 
       {tab === 'attribution' && (
-        <Panel title="Registre des dotations" right={
+        <Panel title={search.trim() ? `Résultats de recherche (${assignmentFiltered.length})` : 'Registre des dotations'} right={
           <div className="flex items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher (code, employé, EPI...)" className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={exportDotationsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportDotationsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
             <button onClick={() => setShowAssignmentForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle dotation</button>
           </div>
         }>
-          {assignmentList.length
+          {assignmentFiltered.length
             ? <DataTable columns={['Code', 'Employé', 'EPI', 'Quantité', 'Date', 'Renouvellement', 'Reçu']}
-                rows={assignmentList.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '—', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '—', <button onClick={(e) => { e.stopPropagation(); setReceiptFor(a); }} className="text-xs" style={{ color: C.blue }}>Voir le reçu</button>])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune dotation enregistrée — utilisez « + Nouvelle dotation » pour commencer</p>}
+                rows={assignmentFiltered.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '—', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '—', <button onClick={(e) => { e.stopPropagation(); setReceiptFor(a); }} className="text-xs" style={{ color: C.blue }}>Voir le reçu</button>])} />
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune dotation enregistrée — utilisez « + Nouvelle dotation » pour commencer'}</p>}
         </Panel>
       )}
 
@@ -6787,8 +6802,11 @@ function SecuriteHygienePage() {
   const [showExpositionForm, setShowExpositionForm] = useState(false);
   const [nouveauFacteur, setNouveauFacteur] = useState('');
   const [tab, setTab] = useState('medecine');
+  // Recherche harmonisée (audit priorité 7, finding #18) — un champ par registre.
+  const [search, setSearch] = useState('');
   if (visites.loading || risques.loading || ergonomies.loading || tmsList.loading || alertesQ.loading || indiceQ.loading || facteursQ.loading || expositionsQ.loading) return <LoadingPanel />;
   if (visites.error) return <ErrorPanel message={visites.error} onRetry={visites.reload} />;
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const list = visites.data || [];
   const risqueList = risques.data || [];
   const ergonomieList = ergonomies.data || [];
@@ -6802,7 +6820,10 @@ function SecuriteHygienePage() {
   const avecReserves = list.filter((v) => v.aptitude === 'Apte avec réserves').length;
   const inaptes = list.filter((v) => v.aptitude === 'Inapte').length;
   const parAptitude = groupCount(list.filter((v) => v.aptitude), (v) => v.aptitude);
-  const sorted = [...list].sort((a, b) => (a.prochaineVisite ? new Date(a.prochaineVisite) : Infinity) - (b.prochaineVisite ? new Date(b.prochaineVisite) : Infinity));
+  const sortedAll = [...list].sort((a, b) => (a.prochaineVisite ? new Date(a.prochaineVisite) : Infinity) - (b.prochaineVisite ? new Date(b.prochaineVisite) : Infinity));
+  const sorted = tab === 'medecine' && search.trim() ? sortedAll.filter((v) => norm(v.employeNom).includes(norm(search))) : sortedAll;
+  const risqueFiltered = tab === 'risques' && search.trim() ? risqueList.filter((r) => norm([r.danger, r.categorie, r.poste, r.zone].join(' ')).includes(norm(search))) : risqueList;
+  const tmsFiltered = tab === 'ergonomie' && search.trim() ? tmsSignalements.filter((t) => norm([t.zoneCorporelle, t.poste, t.activite].join(' ')).includes(norm(search))) : tmsSignalements;
   const risquesCritiques = risqueList.filter((r) => r.criticite >= 12 && r.statut === 'ACTIVE').length;
   const niveauColor = (c) => (c >= 12 ? C.red : c >= 6 ? C.amber : C.green);
   const niveauLabel = (c) => (c >= 12 ? 'Critique' : c >= 6 ? 'Élevé' : 'Faible/Modéré');
@@ -6863,12 +6884,13 @@ function SecuriteHygienePage() {
             <KpiCard label="Aptitudes avec réserves" value={avecReserves} color={C.amber} icon={HeartPulse} />
             <KpiCard label="Inaptes" value={inaptes} color={C.red} icon={AlertTriangle} />
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un employé..." className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={exportVisitesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Panel title="Répartition des aptitudes">{parAptitude.length ? <DonutChart data={parAptitude} colors={[C.green, C.amber, C.red]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune aptitude renseignée</p>}</Panel>
-            <Panel title="Prochaines visites par employé">
+            <Panel title={search.trim() ? `Résultats de recherche (${sorted.length})` : 'Prochaines visites par employé'}>
               {sorted.length ? (
                 <div className="space-y-2">
                   {sorted.map((v) => {
@@ -6899,19 +6921,20 @@ function SecuriteHygienePage() {
             <KpiCard label="Critiques" value={risquesCritiques} color={risquesCritiques > 0 ? C.red : C.green} icon={AlertTriangle} />
             <KpiCard label="Personnes exposées" value={risqueList.reduce((s, r) => s + (r.nombrePersonnesExposees || 0), 0)} color={C.amber} icon={ClipboardList} />
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un risque sanitaire..." className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={exportRisquesSanitairesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
           </div>
-          <Panel title="Évaluation des risques sanitaires">
-            {risqueList.length
+          <Panel title={search.trim() ? `Résultats de recherche (${risqueFiltered.length})` : 'Évaluation des risques sanitaires'}>
+            {risqueFiltered.length
               ? <DataTable columns={['Danger', 'Catégorie', 'Poste/Zone', 'Personnes exposées', 'Criticité', 'Statut']}
-                  rows={risqueList.map((r) => [
+                  rows={risqueFiltered.map((r) => [
                     r.danger, r.categorie || '—', [r.poste, r.zone].filter(Boolean).join(' / ') || '—', r.nombrePersonnesExposees ?? '—',
                     <span style={{ color: niveauColor(r.criticite), fontWeight: 600 }}>{r.criticite} ({niveauLabel(r.criticite)})</span>,
                     <StatusChip statut={r.statut === 'ACTIVE' ? 'Actif' : r.statut === 'MAITRISE' ? 'Maîtrisé' : 'Clôturé'} />,
                   ])}
-                  onRowClick={(i) => setSelectedRisque(risqueList[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun risque sanitaire évalué pour le moment</p>}
+                  onRowClick={(i) => setSelectedRisque(risqueFiltered[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun risque sanitaire évalué pour le moment'}</p>}
           </Panel>
         </div>
       )}
@@ -6946,10 +6969,15 @@ function SecuriteHygienePage() {
             </Panel>
           </div>
           {tmsSignalements.length > 0 && (
-            <Panel title="Registre des signalements TMS" right={<button onClick={exportTmsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>}>
+            <Panel title={search.trim() ? `Résultats de recherche (${tmsFiltered.length})` : 'Registre des signalements TMS'} right={
+              <div className="flex items-center gap-2">
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher (zone, poste, activité...)" className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+                <button onClick={exportTmsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+              </div>
+            }>
               <DataTable columns={['Zone corporelle', 'Poste', 'Activité', 'Date', 'Statut']}
-                rows={tmsSignalements.map((t) => [t.zoneCorporelle, t.poste || '—', t.activite || '—', new Date(t.dateSignalement).toLocaleDateString('fr-FR'), t.statut === 'SIGNALE' ? 'Signalé' : t.statut === 'EN_ANALYSE' ? 'En analyse' : 'Traité'])}
-                onRowClick={(i) => setSelectedTms(tmsSignalements[i])} />
+                rows={tmsFiltered.map((t) => [t.zoneCorporelle, t.poste || '—', t.activite || '—', new Date(t.dateSignalement).toLocaleDateString('fr-FR'), t.statut === 'SIGNALE' ? 'Signalé' : t.statut === 'EN_ANALYSE' ? 'En analyse' : 'Traité'])}
+                onRowClick={(i) => setSelectedTms(tmsFiltered[i])} />
             </Panel>
           )}
         </div>
@@ -8882,6 +8910,8 @@ function NonConformitesPage() {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [showCapaCommon, setShowCapaCommon] = useState(false);
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   useEffect(() => { if (!settingsForm && settingsQ.data) setSettingsForm(settingsQ.data); }, [settingsQ.data]);
   if (ncs.loading || dashboardQ.loading) return <LoadingPanel />;
   if (ncs.error) return <ErrorPanel message={ncs.error} onRetry={ncs.reload} />;
@@ -8889,6 +8919,10 @@ function NonConformitesPage() {
   const dash = dashboardQ.data || {};
   const bySource = groupCount(list, (n) => n.source).map((s) => ({ cause: s.name, occurrences: s.value }));
   const sorted = [...list].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt));
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filtered = search.trim()
+    ? sorted.filter((n) => norm([n.code, n.title, n.source, n.classification, n.workUnit?.name, n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : ''].join(' ')).includes(norm(search)))
+    : sorted;
   const dv = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
   const reloadAll = () => { ncs.reload(); dashboardQ.reload(); };
   const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MODEREE: '#B45309', MINEURE: C.green };
@@ -8902,14 +8936,14 @@ function NonConformitesPage() {
     catch (err) { alert(err.message); }
     setSyntheseLoading(false);
   }
-  function exportNcExcel() {
-    downloadWorkbook([
-      ['Non-conformités', [
-        ['Code', 'Titre', 'Source', 'Type', 'Criticité', 'Score', 'Unité de travail', 'Responsable', 'Date', 'Échéance', 'Statut', 'Efficacité'],
-        ...list.map((n) => [n.code, n.title, n.source || '', n.classification || '', n.criticiteNiveau || '', n.criticiteScore ?? '', n.workUnit?.name || '', n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '', new Date(n.occurredAt).toLocaleDateString('fr-FR'), n.dueDate ? new Date(n.dueDate).toLocaleDateString('fr-FR') : '', n.status, n.effectivenessResult || '']),
-      ]],
-    ], `Non-conformites-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  function ncExportRows() {
+    return [
+      ['Code', 'Titre', 'Source', 'Type', 'Criticité', 'Score', 'Unité de travail', 'Responsable', 'Date', 'Échéance', 'Statut', 'Efficacité'],
+      ...filtered.map((n) => [n.code, n.title, n.source || '', n.classification || '', n.criticiteNiveau || '', n.criticiteScore ?? '', n.workUnit?.name || '', n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '', new Date(n.occurredAt).toLocaleDateString('fr-FR'), n.dueDate ? new Date(n.dueDate).toLocaleDateString('fr-FR') : '', n.status, n.effectivenessResult || '']),
+    ];
   }
+  function exportNcExcel() { downloadWorkbook([['Non-conformités', ncExportRows()]], `Non-conformites-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportNcCsv() { downloadCsv(ncExportRows(), `Non-conformites-${new Date().toISOString().slice(0, 10)}.csv`); }
   async function saveSettings() {
     setSavingSettings(true);
     try { await api.patch('/business/nc-settings', { seuilModeree: Number(settingsForm.seuilModeree), seuilMajeure: Number(settingsForm.seuilMajeure), seuilCritique: Number(settingsForm.seuilCritique), delaiStandardJours: Number(settingsForm.delaiStandardJours) }); settingsQ.reload(); }
@@ -8992,11 +9026,16 @@ function NonConformitesPage() {
               <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
             </div>
           </div>
-          <Panel title="Registre des non-conformités">
-            {sorted.length
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une NC (code, titre, source, unité, responsable...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportNcExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <button onClick={exportNcCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+          </div>
+          <Panel title={search.trim() ? `Résultats de recherche (${filtered.length})` : 'Registre des non-conformités'}>
+            {filtered.length
               ? (multiSelectMode
                   ? <div className="space-y-1">
-                      {sorted.map((n) => (
+                      {filtered.map((n) => (
                         <div key={n.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer" style={{ borderBottom: `1px solid ${C.border}`, backgroundColor: selectedIds.includes(n.id) ? `${C.blue}11` : 'transparent' }}
                           onClick={() => setSelectedIds((ids) => ids.includes(n.id) ? ids.filter((x) => x !== n.id) : [...ids, n.id])}>
                           <input type="checkbox" checked={selectedIds.includes(n.id)} onChange={() => {}} className="w-4 h-4" />
@@ -9010,14 +9049,14 @@ function NonConformitesPage() {
                       ))}
                     </div>
                   : <DataTable columns={['Titre', 'Source', 'Criticité', 'Responsable', 'Date', 'Statut']}
-                      rows={sorted.map((n) => [
+                      rows={filtered.map((n) => [
                         n.title, n.source || '—',
                         n.criticiteNiveau ? <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600 }}>{n.criticiteScore} ({n.criticiteNiveau})</span> : '—',
                         n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '—',
                         new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={n.status} />,
                       ])}
-                      onRowClick={(i) => setViewing(sorted[i])} />)
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée pour le moment</p>}
+                      onRowClick={(i) => setViewing(filtered[i])} />)
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune non-conformité enregistrée pour le moment'}</p>}
           </Panel>
           {multiSelectMode && selectedIds.length > 0 && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg z-40" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
@@ -9527,17 +9566,31 @@ function RegulatoryDomainsTab() {
   const domainsQ = useCollection('/business/regulatory-domains');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (domainsQ.loading) return <LoadingPanel />;
   if (domainsQ.error) return <ErrorPanel message={domainsQ.error} onRetry={domainsQ.reload} />;
   const list = domainsQ.data || [];
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filtered = search.trim() ? list.filter((d) => norm([d.code, d.label].join(' ')).includes(norm(search))) : list;
+  function exportDomainesExcel() {
+    downloadWorkbook([['Domaines réglementaires', [
+      ['Code', 'Libellé', 'Statut'],
+      ...filtered.map((d) => [d.code, d.label, d.actif ? 'Actif' : 'Inactif']),
+    ]]], `Domaines-reglementaires-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
   return (
     <div className="space-y-3">
       {(showForm || selected) && <RegulatoryDomainForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={domainsQ.reload} />}
-      <div className="flex justify-end"><button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau domaine</button></div>
-      <Panel title="Domaines réglementaires">
-        {list.length
-          ? <DataTable columns={['Code', 'Libellé', 'Statut']} rows={list.map((d) => [d.code, d.label, regulatoryBadge(C, d.actif ? 'Actif' : 'Inactif', d.actif ? C.green : C.textMuted)])} onRowClick={(i) => setSelected(list[i])} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun domaine défini</p>}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un domaine..." className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+        <button onClick={exportDomainesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau domaine</button>
+      </div>
+      <Panel title={search.trim() ? `Résultats de recherche (${filtered.length})` : 'Domaines réglementaires'}>
+        {filtered.length
+          ? <DataTable columns={['Code', 'Libellé', 'Statut']} rows={filtered.map((d) => [d.code, d.label, regulatoryBadge(C, d.actif ? 'Actif' : 'Inactif', d.actif ? C.green : C.textMuted)])} onRowClick={(i) => setSelected(filtered[i])} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun domaine défini'}</p>}
       </Panel>
     </div>
   );
@@ -12508,9 +12561,21 @@ function HaccpEtudesTab() {
   const studiesQ = useCollection('/haccp/studies');
   const [showForm, setShowForm] = useState(false);
   const [detailId, setDetailId] = useState(null);
+  // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
+  const [search, setSearch] = useState('');
   if (studiesQ.loading) return <LoadingPanel />;
   if (studiesQ.error) return <ErrorPanel message={studiesQ.error} onRetry={studiesQ.reload} />;
   const list = studiesQ.data || [];
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filtered = search.trim() ? list.filter((s) => norm([s.code, s.name, s.produit].join(' ')).includes(norm(search))) : list;
+  function etudesExportRows() {
+    return [
+      ['Code', 'Nom', 'Produit', 'Version', 'Statut'],
+      ...filtered.map((s) => [s.code, s.name, s.produit || '', s.version, HACCP_STUDY_STATUS_LABELS[s.status] || s.status]),
+    ];
+  }
+  function exportEtudesExcel() { downloadWorkbook([['Études HACCP', etudesExportRows()]], `Etudes-HACCP-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+  function exportEtudesCsv() { downloadCsv(etudesExportRows(), `Etudes-HACCP-${new Date().toISOString().slice(0, 10)}.csv`); }
   return (
     <div className="space-y-4">
       {showForm && <HaccpStudyFormModal onClose={() => setShowForm(false)} onCreated={studiesQ.reload} />}
@@ -12519,12 +12584,17 @@ function HaccpEtudesTab() {
         <LiveBadge />
         <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle étude HACCP</button>
       </div>
-      <Panel title="Études HACCP" subtitle={`${list.length} étude(s)`}>
-        {list.length
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une étude (code, nom, produit...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+        <button onClick={exportEtudesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+        <button onClick={exportEtudesCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+      </div>
+      <Panel title={search.trim() ? `Résultats de recherche (${filtered.length})` : `Études HACCP (${list.length})`}>
+        {filtered.length
           ? <DataTable columns={['Code', 'Nom', 'Produit', 'Version', 'Statut']}
-              rows={list.map((s) => [s.code, s.name, s.produit || '—', s.version, <StatusChip statut={HACCP_STUDY_STATUS_LABELS[s.status] || s.status} />])}
-              onRowClick={(i) => setDetailId(list[i].id)} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune étude HACCP enregistrée pour le moment</p>}
+              rows={filtered.map((s) => [s.code, s.name, s.produit || '—', s.version, <StatusChip statut={HACCP_STUDY_STATUS_LABELS[s.status] || s.status} />])}
+              onRowClick={(i) => setDetailId(filtered[i].id)} />
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune étude HACCP enregistrée pour le moment'}</p>}
       </Panel>
     </div>
   );
@@ -13426,6 +13496,8 @@ function FormationPage() {
   const [tab, setTab] = useState('plan');
   const [typeFilter, setTypeFilter] = useState('TOUS');
   const [employeeFilter, setEmployeeFilter] = useState('');
+  // Recherche harmonisée (audit priorité 7, finding #18).
+  const [search, setSearch] = useState('');
   const [showFormationTrainingForm, setShowFormationTrainingForm] = useState(false);
   const [detailId, setDetailId] = useState(null);
   const [showHabForm, setShowHabForm] = useState(false);
@@ -13461,9 +13533,11 @@ function FormationPage() {
     try { await api.post(`/business/besoins-formation/${b.id}/transformer`, {}); reload(); }
     catch (err) { alert(err.message); }
   }
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const trainingsFiltered = trainings.filter((t) => {
     if (typeFilter !== 'TOUS' && t.type !== typeFilter) return false;
     if (employeeFilter && !(t.participantsList || []).some((p) => p.employeeId === employeeFilter)) return false;
+    if (search.trim() && !norm([t.code, t.title, t.domaine, t.trainer].join(' ')).includes(norm(search))) return false;
     return true;
   });
   const habilitationsFiltered = habilitations.filter((h) => !employeeFilter || h.employeeId === employeeFilter);
@@ -13534,6 +13608,7 @@ function FormationPage() {
               <button key={id} onClick={() => setTypeFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: typeFilter === id ? C.blue : C.cardAlt, color: typeFilter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
             ))}
           </div>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une formation (code, intitulé, domaine, formateur...)" className="w-full max-w-md px-3 py-2 rounded-lg text-xs outline-none" style={inputStyle(C)} />
           <Panel title="Plan de formation" subtitle={`${trainingsFiltered.length} session(s)`}>
             {trainingsFiltered.length ? (
               <DataTable columns={['Code', 'Intitulé', 'Type', 'Domaine', 'Date prévue', 'Statut', 'Obligatoire']}
@@ -14164,9 +14239,12 @@ function EquipmentPage() {
   // faisait planter le composant (page blanche) dès que le chargement se
   // terminait, car le nombre de hooks appelés changeait d'un rendu à l'autre.
   const [showAnalytics, setShowAnalytics] = useState(false);
+  // Recherche harmonisée (audit priorité 7, finding #18).
+  const [search, setSearch] = useState('');
   if (equipment.loading) return <LoadingPanel />;
   if (equipment.error) return <ErrorPanel message={equipment.error} onRetry={equipment.reload} />;
   const list = equipment.data || [];
+  const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filtered = list.filter((e) => {
     if (filter === 'TOUS') return true;
     if (filter === 'A_JOUR') return !equipmentIsOverdue(e) && !equipmentHasNonConformiteOuverte(e) && e.etat === 'ACTIF';
@@ -14176,7 +14254,7 @@ function EquipmentPage() {
     if (filter === 'HORS_SERVICE') return ['HORS_SERVICE', 'CONSIGNE', 'REFORME', 'MIS_AU_REBUT'].includes(e.etat);
     if (filter === 'CRITIQUES') return e.criticiteNiveau === 'CRITIQUE';
     return true;
-  });
+  }).filter((e) => !search.trim() || norm([e.code, e.name, e.categoryEq?.label, e.category, e.site?.name].join(' ')).includes(norm(search)));
   const dash = dashboardQ.data;
   return (
     <div className="space-y-6">
@@ -14226,6 +14304,7 @@ function EquipmentPage() {
           <button key={id} onClick={() => setFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: filter === id ? C.blue : C.cardAlt, color: filter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
         ))}
       </div>
+      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un équipement (code, nom, catégorie, site...)" className="w-full max-w-md px-3 py-2 rounded-lg text-xs outline-none" style={inputStyle(C)} />
       <Panel title="Registre des équipements" subtitle={`${filtered.length} équipement(s)`} right={
         <div className="flex gap-2">
           <button onClick={() => exportEquipmentExcel(filtered)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
