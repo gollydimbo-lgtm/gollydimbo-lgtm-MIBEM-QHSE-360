@@ -17,7 +17,7 @@ export class HaccpController {
   @Get('studies/:id') studyGet(@Param('id') id: string) { return this.s.studyGet(id); }
   @Patch('studies/:id') studyUpdate(@Param('id') id: string, @Body() b: any) { return this.s.studyUpdate(id, b); }
   @Delete('studies/:id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) studyDelete(@Param('id') id: string) { return this.s.studyDelete(id); }
-  @Post('studies/:id/validate') studyValidate(@Param('id') id: string, @Body() b: any) { return this.s.studyValidate(id, b); }
+  @Post('studies/:id/validate') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) studyValidate(@Param('id') id: string, @Body() b: any) { return this.s.studyValidate(id, b); }
   @Post('studies/:id/revise') studyRevise(@Param('id') id: string, @Body() b: any) { return this.s.studyRevise(id, b); }
 
   // --- Équipe ---

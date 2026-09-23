@@ -8,7 +8,7 @@ export class QhsController {
   constructor(private s: QhsService) {}
   @Post('generate') generate() { return this.s.generate(); }
   @Get() list() { return this.s.list(); }
-  @Post(':id/approve') approve(@Param('id') id: string) { return this.s.approve(id); }
+  @Post(':id/approve') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) approve(@Param('id') id: string) { return this.s.approve(id); }
   @Post(':id/deliver') deliver(@Param('id') id: string) { return this.s.deliver(id); }
   @Delete(':id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) remove(@Param('id') id: string) { return this.s.remove(id); }
 
