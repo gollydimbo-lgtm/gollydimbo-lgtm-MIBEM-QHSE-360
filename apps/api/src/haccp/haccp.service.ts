@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { stripSystemFields } from '../common/strip-system-fields';
 
 // Module HACCP — remplace l'ancien HaccpRecord (CRUD plat) par une étude
 // complète (équipe, diagramme de flux, dangers, CCP/CP, surveillance, PRP,
@@ -40,7 +41,7 @@ export class HaccpService {
   }
 
   async studyCreate(b: any) {
-    const created = await this.db.haccpStudy.create({ data: b });
+    const created = await this.db.haccpStudy.create({ data:stripSystemFields(b) });
     await this.log('Création étude HACCP', created.id, b.responsableId, null, b);
     return created;
   }
@@ -48,7 +49,7 @@ export class HaccpService {
   async studyUpdate(id: string, b: any) {
     const current = await this.db.haccpStudy.findUnique({ where: { id } });
     if (!current) throw new BadRequestException('Étude HACCP introuvable');
-    const updated = await this.db.haccpStudy.update({ where: { id }, data: b });
+    const updated = await this.db.haccpStudy.update({ where: { id }, data:stripSystemFields(b) });
     await this.log('Modification étude HACCP', id, b.responsableId, current, updated);
     return updated;
   }
@@ -108,7 +109,7 @@ export class HaccpService {
   }
 
   async teamAdd(studyId: string, b: any) {
-    const created = await this.db.haccpTeamMember.create({ data: { ...b, studyId } });
+    const created = await this.db.haccpTeamMember.create({ data:{...stripSystemFields(b), studyId } });
     await this.log("Ajout d'un membre de l'équipe HACCP", created.id, b.userId);
     return created;
   }
@@ -128,7 +129,7 @@ export class HaccpService {
 
   async stepCreate(studyId: string, b: any) {
     const count = await this.db.haccpProcessStep.count({ where: { studyId } });
-    const created = await this.db.haccpProcessStep.create({ data: { ...b, studyId, ordre: b.ordre ?? count } });
+    const created = await this.db.haccpProcessStep.create({ data:{...stripSystemFields(b), studyId, ordre: b.ordre ?? count } });
     await this.log('Ajout étape du diagramme de flux', created.id, b.responsableId);
     return created;
   }
@@ -136,7 +137,7 @@ export class HaccpService {
   async stepUpdate(id: string, b: any) {
     const current = await this.db.haccpProcessStep.findUnique({ where: { id } });
     if (!current) throw new BadRequestException('Étape introuvable');
-    const updated = await this.db.haccpProcessStep.update({ where: { id }, data: b });
+    const updated = await this.db.haccpProcessStep.update({ where: { id }, data:stripSystemFields(b) });
     await this.log('Modification étape', id, b.responsableId, current, updated);
     return updated;
   }
@@ -179,7 +180,7 @@ export class HaccpService {
     const step = await this.db.haccpProcessStep.findUnique({ where: { id: stepId } });
     if (!step) throw new BadRequestException('Étape introuvable');
     const niveauRisque = this.calculerNiveauRisque(b.gravite, b.probabilite);
-    const created = await this.db.haccpHazard.create({ data: { ...b, studyId: step.studyId, stepId, niveauRisque } });
+    const created = await this.db.haccpHazard.create({ data:{...stripSystemFields(b), studyId: step.studyId, stepId, niveauRisque } });
     await this.log('Danger identifié', created.id);
     return created;
   }
@@ -223,7 +224,7 @@ export class HaccpService {
     if (!hazard) throw new BadRequestException('Danger introuvable');
     const type = b.type === 'CP' ? 'CP' : 'CCP';
     const reference = await this.genererReference(hazard.studyId, type);
-    const created = await this.db.haccpCcp.create({ data: { ...b, type, reference, studyId: hazard.studyId, hazardId, stepId: hazard.stepId } });
+    const created = await this.db.haccpCcp.create({ data:{...stripSystemFields(b), type, reference, studyId: hazard.studyId, hazardId, stepId: hazard.stepId } });
     await this.log('Fiche CCP/CP créée', created.id, b.responsableId);
     return created;
   }
@@ -372,7 +373,7 @@ export class HaccpService {
   }
 
   async prpCreate(b: any) {
-    const created = await this.db.haccpPrp.create({ data: b });
+    const created = await this.db.haccpPrp.create({ data:stripSystemFields(b) });
     await this.log('Création PRP', created.id, b.responsableId);
     return created;
   }
@@ -380,7 +381,7 @@ export class HaccpService {
   async prpUpdate(id: string, b: any) {
     const current = await this.db.haccpPrp.findUnique({ where: { id } });
     if (!current) throw new BadRequestException('PRP introuvable');
-    const updated = await this.db.haccpPrp.update({ where: { id }, data: b });
+    const updated = await this.db.haccpPrp.update({ where: { id }, data:stripSystemFields(b) });
     await this.log('Modification PRP', id, b.responsableId, current, updated);
     return updated;
   }

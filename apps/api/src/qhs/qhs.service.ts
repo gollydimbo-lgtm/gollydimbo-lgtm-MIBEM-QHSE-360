@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
+import { stripSystemFields } from '../common/strip-system-fields';
 
 @Injectable()
 export class QhsService {
@@ -337,7 +338,7 @@ export class QhsService {
     const current = await this.db.safetyTalk.findUnique({ where: { id } });
     if (!current) throw new BadRequestException('Quart d\'heure sécurité introuvable');
     if (current.status === 'DELIVERED') throw new BadRequestException('Une séance déjà réalisée n\'est plus modifiable.');
-    const updated = await this.db.safetyTalk.update({ where: { id }, data: b });
+    const updated = await this.db.safetyTalk.update({ where: { id }, data:stripSystemFields(b) });
     await this.log('Modification', id, b.userId, current, updated);
     return updated;
   }
@@ -398,7 +399,7 @@ export class QhsService {
   }
 
   async addFeedback(id: string, b: any) {
-    const created = await this.db.safetyTalkFeedback.create({ data: { ...b, safetyTalkId: id } });
+    const created = await this.db.safetyTalkFeedback.create({ data:{...stripSystemFields(b), safetyTalkId: id } });
     await this.log('Remontée terrain ajoutée', created.id, b.reportedById);
     return created;
   }

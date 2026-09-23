@@ -3,10 +3,11 @@ import { randomUUID } from 'crypto';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
+import { stripSystemFields } from '../common/strip-system-fields';
 import { saveFile } from '../documents/file-storage.util';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
- qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:b})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:b})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
+ qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:stripSystemFields(b)})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:stripSystemFields(b)})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
  ncList(status?:string,take?:number,skip?:number){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,containmentActions:true,causes:true},orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  ncGet(id:string){return this.db.nonConformity.findUnique({where:{id},include:{actions:{include:{responsible:true}},epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,processus:true,fournisseur:true,containmentActions:{include:{responsable:true},orderBy:{date:'desc'}},causes:{orderBy:{createdAt:'asc'}},costs:{orderBy:{createdAt:'desc'}}}})}
 
@@ -19,7 +20,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async ncSettingsUpdate(b:any){
   const current=await this.ncSettingsGet();
-  return this.db.ncSettings.update({where:{id:current.id},data:b});
+  return this.db.ncSettings.update({where:{id:current.id},data:stripSystemFields(b)});
  }
  private ncNiveau(score:number,seuils:{seuilModeree:number,seuilMajeure:number,seuilCritique:number}){
   if(score>=seuils.seuilCritique) return 'CRITIQUE';
@@ -49,7 +50,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async ncCreate(b:any){
   const calc=await this.calculerCriticiteNc(b);
-  const nc=await this.db.nonConformity.create({data:{...b,...calc}});
+  const nc=await this.db.nonConformity.create({data:{...stripSystemFields(b),...calc}});
   await writeAudit(this.db,'NC','CREATE',nc.id,null,nc);
   return nc;
  }
@@ -58,7 +59,7 @@ import { saveFile } from '../documents/file-storage.util';
   if(!current) throw new NotFoundException('Non-conformité introuvable');
   if(b.status==='CLOSED'&&current.status!=='CLOSED') throw new Error('Utilisez la clôture dédiée (vérification d\'efficacité requise) plutôt qu\'une modification directe du statut.');
   const calc=await this.calculerCriticiteNc({...current,...b,id});
-  const nc=await this.db.nonConformity.update({where:{id},data:{...b,...calc}});
+  const nc=await this.db.nonConformity.update({where:{id},data:{...stripSystemFields(b),...calc}});
   await writeAudit(this.db,'NC','UPDATE',id,current,nc);
   return nc;
  }
@@ -82,19 +83,19 @@ import { saveFile } from '../documents/file-storage.util';
  // Confinement / action immédiate (point 9) — sécurise la situation tout de
  // suite, distinct des actions correctives qui traitent la cause.
  ncContainmentActionList(nonConformityId:string){return this.db.ncContainmentAction.findMany({where:{nonConformityId},include:{responsable:true},orderBy:{date:'desc'}})}
- ncContainmentActionCreate(b:any){return this.db.ncContainmentAction.create({data:b})}
- ncContainmentActionUpdate(id:string,b:any){return this.db.ncContainmentAction.update({where:{id},data:b})}
+ ncContainmentActionCreate(b:any){return this.db.ncContainmentAction.create({data:stripSystemFields(b)})}
+ ncContainmentActionUpdate(id:string,b:any){return this.db.ncContainmentAction.update({where:{id},data:stripSystemFields(b)})}
  async ncContainmentActionDelete(id:string){const row=await this.db.ncContainmentAction.delete({where:{id}});await writeAudit(this.db,'NC_CONTAINMENT_ACTION','DELETE',id,row,null);return row;}
 
  // === NON-CONFORMITÉS — analyse des causes et vérification d'efficacité ===
 
  ncCauseList(nonConformityId:string){return this.db.ncCause.findMany({where:{nonConformityId},orderBy:{createdAt:'asc'}})}
  async ncCauseCreate(b:any){
-  const cause=await this.db.ncCause.create({data:b});
+  const cause=await this.db.ncCause.create({data:stripSystemFields(b)});
   if(b.estRacine) await this.db.nonConformity.update({where:{id:b.nonConformityId},data:{causeRacineIdentifiee:true}});
   return cause;
  }
- ncCauseUpdate(id:string,b:any){return this.db.ncCause.update({where:{id},data:b})}
+ ncCauseUpdate(id:string,b:any){return this.db.ncCause.update({where:{id},data:stripSystemFields(b)})}
  async ncCauseDelete(id:string){const row=await this.db.ncCause.delete({where:{id}});await writeAudit(this.db,'NC_CAUSE','DELETE',id,row,null);return row;}
 
  // Vérification d'efficacité (point 15) — étape obligatoire avant clôture.
@@ -196,8 +197,8 @@ import { saveFile } from '../documents/file-storage.util';
  private async ncRecurrentesCount(){ return (await this.ncRecurrentes()).reduce((s,g)=>s+g.occurrences,0); }
 
  ncCostList(nonConformityId:string){return this.db.ncCost.findMany({where:{nonConformityId},orderBy:{createdAt:'desc'}})}
- ncCostCreate(b:any){return this.db.ncCost.create({data:b})}
- ncCostUpdate(id:string,b:any){return this.db.ncCost.update({where:{id},data:b})}
+ ncCostCreate(b:any){return this.db.ncCost.create({data:stripSystemFields(b)})}
+ ncCostUpdate(id:string,b:any){return this.db.ncCost.update({where:{id},data:stripSystemFields(b)})}
  async ncCostDelete(id:string){const row=await this.db.ncCost.delete({where:{id}});await writeAudit(this.db,'NC_COST','DELETE',id,row,null);return row;}
  private async ncCoutStats(){
   const costs=await this.db.ncCost.findMany({select:{montant:true,nonConformityId:true}});
@@ -309,12 +310,12 @@ import { saveFile } from '../documents/file-storage.util';
   });
  }
  actionGet(id:string){return this.db.action.findUnique({where:{id},include:{nonConformity:true,responsible:true,workUnit:true,processus:true,risk:true,auditFinding:true,parentAction:true,subActions:{include:{responsible:true}},causes:{orderBy:{createdAt:'asc'}},extensions:{include:{demandeur:true,validateur:true},orderBy:{createdAt:'desc'}},links:true}})}
- actionCreate(b:any){return this.db.action.create({data:b})}
+ actionCreate(b:any){return this.db.action.create({data:stripSystemFields(b)})}
  async actionUpdate(id:string,b:any){
   const current=await this.db.action.findUnique({where:{id}});
   if(!current) throw new NotFoundException('Action introuvable');
   if(b.status==='CLOSED'&&current.status!=='CLOSED') throw new Error('Utilisez la clôture dédiée (vérification d\'efficacité requise) plutôt qu\'une modification directe du statut.');
-  const action=await this.db.action.update({where:{id},data:b});
+  const action=await this.db.action.update({where:{id},data:stripSystemFields(b)});
   // La progression d'une CAPA peut se déduire de ses sous-actions plutôt
   // que d'être ressaisie manuellement au niveau parent (point 11).
   if(current.parentActionId) await this.actionRecalcAvancement(current.parentActionId);
@@ -465,7 +466,7 @@ import { saveFile } from '../documents/file-storage.util';
  // Rattache une source supplémentaire à une CAPA déjà existante — c'est ce
  // qui permet à une même action de traiter plusieurs sources (point 8).
  capaLinkAdd(actionId:string,b:any){
-  return this.db.capaLink.create({data:{actionId,sourceModule:b.sourceModule,sourceEntityId:b.sourceEntityId,relationType:b.relationType||'GENEREE_PAR',metadata:b.metadata,createdById:b.createdById||null}});
+  return this.db.capaLink.create({data:{actionId,sourceModule:b.sourceModule,sourceEntityId:b.sourceEntityId,relationType:b.relationType||'GENEREE_PAR',metadata:stripSystemFields(b).metadata,createdById:b.createdById||null}});
  }
  async capaLinkDelete(id:string){const row=await this.db.capaLink.delete({where:{id}});await writeAudit(this.db,'CAPA_LINK','DELETE',id,row,null);return row;}
 
@@ -704,8 +705,8 @@ import { saveFile } from '../documents/file-storage.util';
 
  // La présence d'une ActionCause avec estRacine=true répond à elle seule à
  // « cause racine identifiée ? » — pas besoin d'un champ dupliqué sur Action.
- actionCauseCreate(b:any){return this.db.actionCause.create({data:b})}
- actionCauseUpdate(id:string,b:any){return this.db.actionCause.update({where:{id},data:b})}
+ actionCauseCreate(b:any){return this.db.actionCause.create({data:stripSystemFields(b)})}
+ actionCauseUpdate(id:string,b:any){return this.db.actionCause.update({where:{id},data:stripSystemFields(b)})}
  async actionCauseDelete(id:string){const row=await this.db.actionCause.delete({where:{id}});await writeAudit(this.db,'ACTION_CAUSE','DELETE',id,row,null);return row;}
 
  // Tableau de bord réel (point 1) — chaque KPI reste `null` si non calculable.
@@ -747,7 +748,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async riskSettingsUpdate(b:any){
   const current=await this.riskSettingsGet();
-  return this.db.riskSettings.update({where:{id:current.id},data:b});
+  return this.db.riskSettings.update({where:{id:current.id},data:stripSystemFields(b)});
  }
 
  private riskNiveau(score:number,seuils:{seuilModere:number,seuilEleve:number,seuilCritique:number}){
@@ -797,13 +798,13 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  riskCategoryList(){return this.db.riskCategory.findMany({orderBy:{order:'asc'}})}
- riskCategoryCreate(b:any){return this.db.riskCategory.create({data:b})}
- riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:b})}
+ riskCategoryCreate(b:any){return this.db.riskCategory.create({data:stripSystemFields(b)})}
+ riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:stripSystemFields(b)})}
  async riskCategoryDelete(id:string){const row=await this.db.riskCategory.delete({where:{id}});await writeAudit(this.db,'RISK_CATEGORY','DELETE',id,row,null);return row;}
 
  workUnitList(siteId?:string){return this.db.workUnit.findMany({where:siteId?{siteId}:undefined,include:{site:true},orderBy:{name:'asc'}})}
- workUnitCreate(b:any){return this.db.workUnit.create({data:b})}
- workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:b})}
+ workUnitCreate(b:any){return this.db.workUnit.create({data:stripSystemFields(b)})}
+ workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:stripSystemFields(b)})}
  async workUnitDelete(id:string){const row=await this.db.workUnit.update({where:{id},data:{active:false}});await writeAudit(this.db,'WORK_UNIT','UPDATE',id,null,row);return row;}
 
  riskList(take?:number,skip?:number){return this.db.risk.findMany({where:{archivedAt:null},include:{workUnit:true,category:true,processus:true,fournisseur:true,actions:true},orderBy:{grossScore:'desc'},take:take??500,skip:skip??0})}
@@ -829,7 +830,7 @@ import { saveFile } from '../documents/file-storage.util';
 
  async riskCreate(b:any){
   const calc=await this.calculerRisque(b);
-  const risk=await this.db.risk.create({data:{...b,...calc}});
+  const risk=await this.db.risk.create({data:{...stripSystemFields(b),...calc}});
   await this.db.riskEvaluation.create({data:{riskId:risk.id,severity:calc.severity,probability:calc.probability,exposure:calc.exposure,grossScore:calc.grossScore,grossLevel:calc.grossLevel,residualSeverity:b.residualSeverity,residualProbability:b.residualProbability,residualExposure:b.residualExposure,residualScore:calc.residualScore,residualLevel:calc.residualLevel,evaluatedById:b.evaluatedById,note:'Évaluation initiale'}});
   await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
   await this.declencherActionSiNecessaire(risk);
@@ -840,7 +841,7 @@ import { saveFile } from '../documents/file-storage.util';
   const current=await this.db.risk.findUnique({where:{id}});
   if(!current) throw new NotFoundException('Risque introuvable');
   const calc=await this.calculerRisque({...current,...b});
-  const risk=await this.db.risk.update({where:{id},data:{...b,...calc}});
+  const risk=await this.db.risk.update({where:{id},data:{...stripSystemFields(b),...calc}});
   await writeAudit(this.db,'RISK','UPDATE',id,current,risk);
   await this.declencherActionSiNecessaire(risk);
   return risk;
@@ -853,7 +854,7 @@ import { saveFile } from '../documents/file-storage.util';
   if(!current) throw new NotFoundException('Risque introuvable');
   const merged={...current,...b};
   const calc=await this.calculerRisque(merged);
-  const risk=await this.db.risk.update({where:{id},data:{...b,...calc,reviewedAt:new Date()}});
+  const risk=await this.db.risk.update({where:{id},data:{...stripSystemFields(b),...calc,reviewedAt:new Date()}});
   await this.db.riskEvaluation.create({data:{riskId:id,severity:calc.severity,probability:calc.probability,exposure:calc.exposure,grossScore:calc.grossScore,grossLevel:calc.grossLevel,residualSeverity:merged.residualSeverity,residualProbability:merged.residualProbability,residualExposure:merged.residualExposure,residualScore:calc.residualScore,residualLevel:calc.residualLevel,evaluatedById:b.evaluatedById,note:b.note||'Réévaluation'}});
   await writeAudit(this.db,'RISK','UPDATE',id,current,risk);
   await this.declencherActionSiNecessaire(risk);
@@ -870,8 +871,8 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  riskMeasureList(riskId:string){return this.db.riskMeasure.findMany({where:{riskId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
- riskMeasureCreate(b:any){return this.db.riskMeasure.create({data:b})}
- riskMeasureUpdate(id:string,b:any){return this.db.riskMeasure.update({where:{id},data:b})}
+ riskMeasureCreate(b:any){return this.db.riskMeasure.create({data:stripSystemFields(b)})}
+ riskMeasureUpdate(id:string,b:any){return this.db.riskMeasure.update({where:{id},data:stripSystemFields(b)})}
  async riskMeasureDelete(id:string){const row=await this.db.riskMeasure.delete({where:{id}});await writeAudit(this.db,'RISK_MEASURE','DELETE',id,row,null);return row;}
 
  // Tableau de bord réel : chaque KPI reste `null` si la donnée n'existe pas.
@@ -972,7 +973,7 @@ import { saveFile } from '../documents/file-storage.util';
   const independenceWarning=!!(audit.processus&&audit.auditorId&&(audit.processus.piloteId===audit.auditorId||audit.processus.suppleantId===audit.auditorId));
   return {...audit,independenceWarning};
  }
- auditCreate(b:any){return this.db.qhseAudit.create({data:b})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:b})} async auditDelete(id:string){
+ auditCreate(b:any){return this.db.qhseAudit.create({data:stripSystemFields(b)})} auditUpdate(id:string,b:any){return this.db.qhseAudit.update({where:{id},data:stripSystemFields(b)})} async auditDelete(id:string){
   // Jamais de suppression définitive d'un historique QHSE significatif —
   // on archive plutôt que de supprimer dès qu'un audit a des constats,
   // programmes, réponses ou signatures liés — finding #5.
@@ -1024,11 +1025,11 @@ import { saveFile } from '../documents/file-storage.util';
  // === AUDITS — Phase 2 : check-lists dynamiques et moteur de notation ====
 
  auditChecklistList(){return this.db.auditChecklist.findMany({include:{items:{orderBy:{order:'asc'}},referential:true,type:true},orderBy:{title:'asc'}})}
- auditChecklistCreate(b:any){return this.db.auditChecklist.create({data:b})}
- auditChecklistUpdate(id:string,b:any){return this.db.auditChecklist.update({where:{id},data:b})}
+ auditChecklistCreate(b:any){return this.db.auditChecklist.create({data:stripSystemFields(b)})}
+ auditChecklistUpdate(id:string,b:any){return this.db.auditChecklist.update({where:{id},data:stripSystemFields(b)})}
  async auditChecklistDelete(id:string){const row=await this.db.auditChecklist.delete({where:{id}});await writeAudit(this.db,'AUDIT_CHECKLIST','DELETE',id,row,null);return row;}
- auditChecklistItemCreate(b:any){return this.db.auditChecklistItem.create({data:b})}
- auditChecklistItemUpdate(id:string,b:any){return this.db.auditChecklistItem.update({where:{id},data:b})}
+ auditChecklistItemCreate(b:any){return this.db.auditChecklistItem.create({data:stripSystemFields(b)})}
+ auditChecklistItemUpdate(id:string,b:any){return this.db.auditChecklistItem.update({where:{id},data:stripSystemFields(b)})}
  async auditChecklistItemDelete(id:string){const row=await this.db.auditChecklistItem.delete({where:{id}});await writeAudit(this.db,'AUDIT_CHECKLIST_ITEM','DELETE',id,row,null);return row;}
 
  // Valeur numérique (0 à 1) attribuée à chaque résultat possible — les
@@ -1151,21 +1152,21 @@ import { saveFile } from '../documents/file-storage.util';
  // === AUDITS — Phase 1 : programme, types, référentiels, dashboard ========
 
  auditTypeList(){return this.db.auditType.findMany({orderBy:{order:'asc'}})}
- auditTypeCreate(b:any){return this.db.auditType.create({data:b})}
- auditTypeUpdate(id:string,b:any){return this.db.auditType.update({where:{id},data:b})}
+ auditTypeCreate(b:any){return this.db.auditType.create({data:stripSystemFields(b)})}
+ auditTypeUpdate(id:string,b:any){return this.db.auditType.update({where:{id},data:stripSystemFields(b)})}
  async auditTypeDelete(id:string){const row=await this.db.auditType.delete({where:{id}});await writeAudit(this.db,'AUDIT_TYPE','DELETE',id,row,null);return row;}
 
  auditReferentialList(){return this.db.auditReferential.findMany({include:{items:{orderBy:{order:'asc'}}},orderBy:{label:'asc'}})}
- auditReferentialCreate(b:any){return this.db.auditReferential.create({data:b})}
- auditReferentialUpdate(id:string,b:any){return this.db.auditReferential.update({where:{id},data:b})}
+ auditReferentialCreate(b:any){return this.db.auditReferential.create({data:stripSystemFields(b)})}
+ auditReferentialUpdate(id:string,b:any){return this.db.auditReferential.update({where:{id},data:stripSystemFields(b)})}
  async auditReferentialDelete(id:string){const row=await this.db.auditReferential.delete({where:{id}});await writeAudit(this.db,'AUDIT_REFERENTIAL','DELETE',id,row,null);return row;}
- auditReferentialItemCreate(b:any){return this.db.auditReferentialItem.create({data:b})}
- auditReferentialItemUpdate(id:string,b:any){return this.db.auditReferentialItem.update({where:{id},data:b})}
+ auditReferentialItemCreate(b:any){return this.db.auditReferentialItem.create({data:stripSystemFields(b)})}
+ auditReferentialItemUpdate(id:string,b:any){return this.db.auditReferentialItem.update({where:{id},data:stripSystemFields(b)})}
  async auditReferentialItemDelete(id:string){const row=await this.db.auditReferentialItem.delete({where:{id}});await writeAudit(this.db,'AUDIT_REFERENTIAL_ITEM','DELETE',id,row,null);return row;}
 
  auditProgramList(){return this.db.auditProgram.findMany({include:{type:true,referential:true,workUnit:true,processus:true,auditeurPrincipal:true,audit:true},orderBy:{datePrevue:'asc'}})}
- auditProgramCreate(b:any){return this.db.auditProgram.create({data:b})}
- auditProgramUpdate(id:string,b:any){return this.db.auditProgram.update({where:{id},data:b})}
+ auditProgramCreate(b:any){return this.db.auditProgram.create({data:stripSystemFields(b)})}
+ auditProgramUpdate(id:string,b:any){return this.db.auditProgram.update({where:{id},data:stripSystemFields(b)})}
  async auditProgramDelete(id:string){const row=await this.db.auditProgram.delete({where:{id}});await writeAudit(this.db,'AUDIT_PROGRAM','DELETE',id,row,null);return row;}
  // Génère l'audit réel à partir d'une ligne de programme, préremplie,
  // jamais ressaisie — même principe que pour le Registre des risques.
@@ -1307,7 +1308,7 @@ import { saveFile } from '../documents/file-storage.util';
    genereLe:new Date(),
   };
  }
- envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:b})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:b})} async envDelete(id:string){const row=await this.db.environmentRecord.delete({where:{id}});await writeAudit(this.db,'ENVIRONMENT_RECORD','DELETE',id,row,null);return row;}
+ envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:stripSystemFields(b)})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:stripSystemFields(b)})} async envDelete(id:string){const row=await this.db.environmentRecord.delete({where:{id}});await writeAudit(this.db,'ENVIRONMENT_RECORD','DELETE',id,row,null);return row;}
 
  // Aspects & impacts environnementaux — la criticité et le caractère
  // significatif se recalculent à chaque écriture depuis la méthode de
@@ -1319,11 +1320,11 @@ import { saveFile } from '../documents/file-storage.util';
  }
  environnementAspectList(){return this.db.environnementAspect.findMany({include:{site:true,processus:true,responsable:true,actions:true,risk:true},orderBy:{criticite:'desc'}})}
  environnementAspectGet(id:string){return this.db.environnementAspect.findUnique({where:{id},include:{site:true,processus:true,responsable:true,actions:{include:{responsible:true}},risk:true}})}
- environnementAspectCreate(b:any){return this.db.environnementAspect.create({data:{...b,...this.calculerAspect(b)}})}
+ environnementAspectCreate(b:any){return this.db.environnementAspect.create({data:{...stripSystemFields(b),...this.calculerAspect(b)}})}
  async environnementAspectUpdate(id:string,b:any){
   const current=await this.db.environnementAspect.findUnique({where:{id}});
   const merged={...current,...b};
-  return this.db.environnementAspect.update({where:{id},data:{...b,...this.calculerAspect(merged)}});
+  return this.db.environnementAspect.update({where:{id},data:{...stripSystemFields(b),...this.calculerAspect(merged)}});
  }
  async environnementAspectDelete(id:string){const row=await this.db.environnementAspect.delete({where:{id}});await writeAudit(this.db,'ENVIRONNEMENT_ASPECT','DELETE',id,row,null);return row;}
 
@@ -1431,8 +1432,8 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  produitChimiqueList(){return this.db.produitChimique.findMany({include:{fournisseur:true},orderBy:{nom:'asc'}})}
- produitChimiqueCreate(b:any){return this.db.produitChimique.create({data:b})}
- produitChimiqueUpdate(id:string,b:any){return this.db.produitChimique.update({where:{id},data:b})}
+ produitChimiqueCreate(b:any){return this.db.produitChimique.create({data:stripSystemFields(b)})}
+ produitChimiqueUpdate(id:string,b:any){return this.db.produitChimique.update({where:{id},data:stripSystemFields(b)})}
  async produitChimiqueDelete(id:string){const row=await this.db.produitChimique.delete({where:{id}});await writeAudit(this.db,'PRODUIT_CHIMIQUE','DELETE',id,row,null);return row;}
 
  // Tendances mensuelles — calculées uniquement sur les mois où des
@@ -1460,14 +1461,14 @@ import { saveFile } from '../documents/file-storage.util';
  trainingList(){return this.db.training.findMany({include:this.trainingInclude,orderBy:{scheduledAt:'desc'}})}
  trainingGet(id:string){return this.db.training.findUnique({where:{id},include:this.trainingInclude})}
  async trainingCreate(b:any){
-  const t=await this.db.training.create({data:b});
+  const t=await this.db.training.create({data:stripSystemFields(b)});
   await writeAudit(this.db,'TRAINING','CREATE',t.id,null,t);
   return t;
  }
  async trainingUpdate(id:string,b:any){
   const current=await this.db.training.findUnique({where:{id}});
   if(!current) throw new NotFoundException('Formation introuvable');
-  const t=await this.db.training.update({where:{id},data:b});
+  const t=await this.db.training.update({where:{id},data:stripSystemFields(b)});
   await writeAudit(this.db,'TRAINING','UPDATE',id,current,t);
   return t;
  }
@@ -1487,8 +1488,8 @@ import { saveFile } from '../documents/file-storage.util';
   return this.db.trainingParticipant.findMany({where:{trainingId},include:{employee:true}});
  }
  trainingCategoryList(){return this.db.trainingCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
- trainingCategoryCreate(b:any){return this.db.trainingCategory.create({data:b})}
- trainingCategoryUpdate(id:string,b:any){return this.db.trainingCategory.update({where:{id},data:b})}
+ trainingCategoryCreate(b:any){return this.db.trainingCategory.create({data:stripSystemFields(b)})}
+ trainingCategoryUpdate(id:string,b:any){return this.db.trainingCategory.update({where:{id},data:stripSystemFields(b)})}
  async trainingCategoryDelete(id:string){const row=await this.db.trainingCategory.delete({where:{id}});await writeAudit(this.db,'TRAINING_CATEGORY','DELETE',id,row,null);return row;}
  async trainingSettingsGet(){
   let s=await this.db.trainingSettings.findFirst();
@@ -1497,7 +1498,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async trainingSettingsUpdate(b:any){
   const current=await this.trainingSettingsGet();
-  return this.db.trainingSettings.update({where:{id:current.id},data:b});
+  return this.db.trainingSettings.update({where:{id:current.id},data:stripSystemFields(b)});
  }
  // Statut d'une habilitation — calcule uniquement a partir de la date
  // d'expiration reelle et des seuils configures, jamais suppose ni laisse
@@ -1529,7 +1530,7 @@ import { saveFile } from '../documents/file-storage.util';
  async habilitationCreate(b:any){
   const settings=await this.trainingSettingsGet();
   const statut=this.habilitationStatutCalcule(b.dateExpiration?new Date(b.dateExpiration):null,b.statut,settings);
-  const h=await this.db.habilitation.create({data:{...b,statut}});
+  const h=await this.db.habilitation.create({data:{...stripSystemFields(b),statut}});
   await writeAudit(this.db,'HABILITATION','CREATE',h.id,null,h);
   return h;
  }
@@ -1539,7 +1540,7 @@ import { saveFile } from '../documents/file-storage.util';
   const settings=await this.trainingSettingsGet();
   const dateExpiration=b.dateExpiration!==undefined?(b.dateExpiration?new Date(b.dateExpiration):null):current.dateExpiration;
   const statut=this.habilitationStatutCalcule(dateExpiration,b.statut??current.statut,settings);
-  const h=await this.db.habilitation.update({where:{id},data:{...b,statut}});
+  const h=await this.db.habilitation.update({where:{id},data:{...stripSystemFields(b),statut}});
   await writeAudit(this.db,'HABILITATION','UPDATE',id,current,h);
   return h;
  }
@@ -1550,8 +1551,8 @@ import { saveFile } from '../documents/file-storage.util';
   return this.db.habilitation.delete({where:{id}});
  }
  habilitationCategoryList(){return this.db.habilitationCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
- habilitationCategoryCreate(b:any){return this.db.habilitationCategory.create({data:b})}
- habilitationCategoryUpdate(id:string,b:any){return this.db.habilitationCategory.update({where:{id},data:b})}
+ habilitationCategoryCreate(b:any){return this.db.habilitationCategory.create({data:stripSystemFields(b)})}
+ habilitationCategoryUpdate(id:string,b:any){return this.db.habilitationCategory.update({where:{id},data:stripSystemFields(b)})}
  async habilitationCategoryDelete(id:string){const row=await this.db.habilitationCategory.delete({where:{id}});await writeAudit(this.db,'HABILITATION_CATEGORY','DELETE',id,row,null);return row;}
  // Tableau de bord FORMATION — uniquement des comptages et taux derives de
  // donnees reellement saisies ; jamais de valeur par defaut quand
@@ -1601,12 +1602,12 @@ import { saveFile } from '../documents/file-storage.util';
  // fait QUE proposer : jamais de formation creee automatiquement sans
  // validation humaine.
  competenceNiveauList(){return this.db.competenceNiveau.findMany({orderBy:{ordre:'asc'}})}
- competenceNiveauCreate(b:any){return this.db.competenceNiveau.create({data:b})}
- competenceNiveauUpdate(id:string,b:any){return this.db.competenceNiveau.update({where:{id},data:b})}
+ competenceNiveauCreate(b:any){return this.db.competenceNiveau.create({data:stripSystemFields(b)})}
+ competenceNiveauUpdate(id:string,b:any){return this.db.competenceNiveau.update({where:{id},data:stripSystemFields(b)})}
  async competenceNiveauDelete(id:string){const row=await this.db.competenceNiveau.delete({where:{id}});await writeAudit(this.db,'COMPETENCE_NIVEAU','DELETE',id,row,null);return row;}
  competenceList(){return this.db.competence.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
- competenceCreate(b:any){return this.db.competence.create({data:b})}
- competenceUpdate(id:string,b:any){return this.db.competence.update({where:{id},data:b})}
+ competenceCreate(b:any){return this.db.competence.create({data:stripSystemFields(b)})}
+ competenceUpdate(id:string,b:any){return this.db.competence.update({where:{id},data:stripSystemFields(b)})}
  async competenceDelete(id:string){const row=await this.db.competence.delete({where:{id}});await writeAudit(this.db,'COMPETENCE','DELETE',id,row,null);return row;}
 
  employeeCompetenceInclude = { employee:true, competence:true, niveauRequis:true, niveauActuel:true, formationAssociee:true, habilitationAssociee:true };
@@ -1804,7 +1805,7 @@ import { saveFile } from '../documents/file-storage.util';
  async efficaciteEvaluationUpdate(id:string,b:any){
   const current=await this.db.trainingEfficaciteEvaluation.findUnique({where:{id}});
   if(!current) throw new NotFoundException("Évaluation d'efficacité introuvable");
-  const row=await this.db.trainingEfficaciteEvaluation.update({where:{id},data:b});
+  const row=await this.db.trainingEfficaciteEvaluation.update({where:{id},data:stripSystemFields(b)});
   await writeAudit(this.db,'TRAINING_EFFICACITE','UPDATE',id,current,row);
   return row;
  }
@@ -1890,7 +1891,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentSettingsUpdate(b:any){
   const current=await this.equipmentSettingsGet();
-  return this.db.equipmentSettings.update({where:{id:current.id},data:b});
+  return this.db.equipmentSettings.update({where:{id:current.id},data:stripSystemFields(b)});
  }
  private async calculerCriticiteEquipement(b:any){
   const settings=await this.equipmentSettingsGet();
@@ -1905,7 +1906,7 @@ import { saveFile } from '../documents/file-storage.util';
  async equipmentCreate(b:any){
   const hasCriticite=b.criticiteSecurite!=null||b.criticiteQualite!=null||b.criticiteEnvironnement!=null||b.criticiteProduction!=null;
   const calc=hasCriticite?await this.calculerCriticiteEquipement(b):{};
-  const eq=await this.db.equipment.create({data:{...b,...calc,qrToken:randomUUID()}});
+  const eq=await this.db.equipment.create({data:{...stripSystemFields(b),...calc,qrToken:randomUUID()}});
   await writeAudit(this.db,'EQUIPMENT','CREATE',eq.id,null,eq);
   return eq;
  }
@@ -1930,7 +1931,7 @@ import { saveFile } from '../documents/file-storage.util';
    criticiteEnvironnement:b.criticiteEnvironnement??current.criticiteEnvironnement,
    criticiteProduction:b.criticiteProduction??current.criticiteProduction,
   }):{};
-  const eq=await this.db.equipment.update({where:{id},data:{...b,...calc}});
+  const eq=await this.db.equipment.update({where:{id},data:{...stripSystemFields(b),...calc}});
   await writeAudit(this.db,'EQUIPMENT','UPDATE',id,current,eq);
   return eq;
  }
@@ -1949,8 +1950,8 @@ import { saveFile } from '../documents/file-storage.util';
   return this.db.equipment.delete({where:{id}});
  }
  equipmentCategoryList(){return this.db.equipmentCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
- equipmentCategoryCreate(b:any){return this.db.equipmentCategory.create({data:b})}
- equipmentCategoryUpdate(id:string,b:any){return this.db.equipmentCategory.update({where:{id},data:b})}
+ equipmentCategoryCreate(b:any){return this.db.equipmentCategory.create({data:stripSystemFields(b)})}
+ equipmentCategoryUpdate(id:string,b:any){return this.db.equipmentCategory.update({where:{id},data:stripSystemFields(b)})}
  async equipmentCategoryDelete(id:string){const row=await this.db.equipmentCategory.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CATEGORY','DELETE',id,row,null);return row;}
  // Phase 4C — analytics avancées : répartitions, indice de conformité
  // (même calcul que dans la bibliothèque indicateursAuto(), jamais un
@@ -2039,13 +2040,13 @@ import { saveFile } from '../documents/file-storage.util';
  // === MODULE ÉQUIPEMENTS — Phase 2 : maintenance préventive/corrective,
  // contrôles réglementaires, étalonnage, inspections, consignation ===
  equipmentMaintenancePlanList(equipmentId?:string){return this.db.equipmentMaintenancePlan.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true,equipment:true},orderBy:{dateProchaine:'asc'}})}
- equipmentMaintenancePlanCreate(b:any){return this.db.equipmentMaintenancePlan.create({data:b})}
- equipmentMaintenancePlanUpdate(id:string,b:any){return this.db.equipmentMaintenancePlan.update({where:{id},data:b})}
+ equipmentMaintenancePlanCreate(b:any){return this.db.equipmentMaintenancePlan.create({data:stripSystemFields(b)})}
+ equipmentMaintenancePlanUpdate(id:string,b:any){return this.db.equipmentMaintenancePlan.update({where:{id},data:stripSystemFields(b)})}
  async equipmentMaintenancePlanDelete(id:string){const row=await this.db.equipmentMaintenancePlan.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_MAINTENANCE_PLAN','DELETE',id,row,null);return row;}
 
  equipmentMaintenanceRecordList(equipmentId?:string){return this.db.equipmentMaintenanceRecord.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true,plan:true},orderBy:{createdAt:'desc'}})}
  async equipmentMaintenanceRecordCreate(b:any){
-  const record=await this.db.equipmentMaintenanceRecord.create({data:b});
+  const record=await this.db.equipmentMaintenanceRecord.create({data:stripSystemFields(b)});
   // Une intervention préventive terminée met à jour automatiquement le plan
   // (dernière date + prochaine échéance calendaire) — jamais ressaisi à la main.
   if(record.type==='PREVENTIVE' && record.statut==='TERMINEE' && record.planId){
@@ -2059,7 +2060,7 @@ import { saveFile } from '../documents/file-storage.util';
   await writeAudit(this.db,'EQUIPMENT_MAINTENANCE','CREATE',record.id,null,record);
   return record;
  }
- equipmentMaintenanceRecordUpdate(id:string,b:any){return this.db.equipmentMaintenanceRecord.update({where:{id},data:b})}
+ equipmentMaintenanceRecordUpdate(id:string,b:any){return this.db.equipmentMaintenanceRecord.update({where:{id},data:stripSystemFields(b)})}
  async equipmentMaintenanceRecordDelete(id:string){const row=await this.db.equipmentMaintenanceRecord.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_MAINTENANCE_RECORD','DELETE',id,row,null);return row;}
 
  // MTBF/MTTR/disponibilité calculés à la demande depuis l'historique réel des
@@ -2081,8 +2082,8 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  equipmentControlList(equipmentId?:string){return this.db.equipmentControl.findMany({where:equipmentId?{equipmentId}:undefined,include:{controleur:true,nonConformity:true},orderBy:{dateProchainControle:'asc'}})}
- equipmentControlCreate(b:any){return this.db.equipmentControl.create({data:b})}
- equipmentControlUpdate(id:string,b:any){return this.db.equipmentControl.update({where:{id},data:b})}
+ equipmentControlCreate(b:any){return this.db.equipmentControl.create({data:stripSystemFields(b)})}
+ equipmentControlUpdate(id:string,b:any){return this.db.equipmentControl.update({where:{id},data:stripSystemFields(b)})}
  async equipmentControlDelete(id:string){const row=await this.db.equipmentControl.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CONTROL','DELETE',id,row,null);return row;}
  async equipmentControlGenerateNc(id:string,b?:any){
   const control=await this.db.equipmentControl.findUnique({where:{id},include:{equipment:true}});
@@ -2102,11 +2103,11 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentCalibrationList(equipmentId?:string){return this.db.equipmentCalibration.findMany({where:equipmentId?{equipmentId}:undefined,include:{nonConformity:true},orderBy:{dateProchaineEtalonnage:'asc'}})}
  equipmentCalibrationCreate(b:any){
   const nePasUtiliser=b.resultat&&b.resultat!=='CONFORME'?true:!!b.nePasUtiliser;
-  return this.db.equipmentCalibration.create({data:{...b,nePasUtiliser}});
+  return this.db.equipmentCalibration.create({data:{...stripSystemFields(b),nePasUtiliser}});
  }
  equipmentCalibrationUpdate(id:string,b:any){
   const nePasUtiliser=b.resultat!=null?(b.resultat!=='CONFORME'):undefined;
-  return this.db.equipmentCalibration.update({where:{id},data:{...b,...(nePasUtiliser!=null?{nePasUtiliser}:{})}});
+  return this.db.equipmentCalibration.update({where:{id},data:{...stripSystemFields(b),...(nePasUtiliser!=null?{nePasUtiliser}:{})}});
  }
  async equipmentCalibrationDelete(id:string){const row=await this.db.equipmentCalibration.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CALIBRATION','DELETE',id,row,null);return row;}
  // Un étalonnage non conforme n'est jamais transformé en NC automatiquement —
@@ -2128,14 +2129,14 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  equipmentInspectionList(equipmentId?:string){return this.db.equipmentInspection.findMany({where:equipmentId?{equipmentId}:undefined,include:{inspecteur:true},orderBy:{date:'desc'}})}
- equipmentInspectionCreate(b:any){return this.db.equipmentInspection.create({data:b})}
- equipmentInspectionUpdate(id:string,b:any){return this.db.equipmentInspection.update({where:{id},data:b})}
+ equipmentInspectionCreate(b:any){return this.db.equipmentInspection.create({data:stripSystemFields(b)})}
+ equipmentInspectionUpdate(id:string,b:any){return this.db.equipmentInspection.update({where:{id},data:stripSystemFields(b)})}
  async equipmentInspectionDelete(id:string){const row=await this.db.equipmentInspection.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_INSPECTION','DELETE',id,row,null);return row;}
 
  equipmentConsignationList(equipmentId?:string){return this.db.equipmentConsignation.findMany({where:equipmentId?{equipmentId}:undefined,include:{responsable:true},orderBy:{dateDebut:'desc'}})}
  async equipmentConsignationCreate(b:any){
   return this.db.$transaction(async(tx)=>{
-   const c=await tx.equipmentConsignation.create({data:b});
+   const c=await tx.equipmentConsignation.create({data:stripSystemFields(b)});
    await tx.equipment.update({where:{id:b.equipmentId},data:{etat:'CONSIGNE'}});
    return c;
   });
@@ -2154,8 +2155,8 @@ import { saveFile } from '../documents/file-storage.util';
 
  events(take?:number,skip?:number,siteId?:string){return this.db.safetyEvent.findMany({where:siteId?{siteId}:undefined,include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'},take:take??500,skip:skip??0})}
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
- eventCreate(b:any){return this.db.safetyEvent.create({data:b})}
- eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:b})}
+ eventCreate(b:any){return this.db.safetyEvent.create({data:stripSystemFields(b)})}
+ eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:stripSystemFields(b)})}
  async eventDelete(id:string){
   // Jamais de suppression définitive d'un historique QHSE significatif —
   // on archive plutôt que de supprimer dès qu'un événement a des actions
@@ -2242,13 +2243,13 @@ import { saveFile } from '../documents/file-storage.util';
    qualityControls:true,
  }}},orderBy:{createdAt:'desc'}})}
  processusGet(id:string){return this.db.processus.findUnique({where:{id},include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:{include:{user:true}},responsible:true},orderBy:{order:'asc'}},exigences:{include:{responsable:true}},risks:true,actions:{include:{responsible:true}},nonConformities:true,audits:true,documents:true,trainings:true,objectifsQhse:true,qualityControls:true}})}
- processusCreate(b:any){return this.db.processus.create({data:b})}
- processusUpdate(id:string,b:any){return this.db.processus.update({where:{id},data:b})}
+ processusCreate(b:any){return this.db.processus.create({data:stripSystemFields(b)})}
+ processusUpdate(id:string,b:any){return this.db.processus.update({where:{id},data:stripSystemFields(b)})}
  async processusDelete(id:string){const row=await this.db.processus.delete({where:{id}});await writeAudit(this.db,'PROCESSUS','DELETE',id,row,null);return row;}
 
  processusActivityList(processusId:string){return this.db.processusActivity.findMany({where:{processusId},include:{responsible:true,racis:{include:{user:true}}},orderBy:{order:'asc'}})}
- processusActivityCreate(b:any){return this.db.processusActivity.create({data:b})}
- processusActivityUpdate(id:string,b:any){return this.db.processusActivity.update({where:{id},data:b})}
+ processusActivityCreate(b:any){return this.db.processusActivity.create({data:stripSystemFields(b)})}
+ processusActivityUpdate(id:string,b:any){return this.db.processusActivity.update({where:{id},data:stripSystemFields(b)})}
  async processusActivityDelete(id:string){const row=await this.db.processusActivity.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_ACTIVITY','DELETE',id,row,null);return row;}
 
  processusRaciUpsert(activityId:string,b:any){
@@ -2260,14 +2261,14 @@ import { saveFile } from '../documents/file-storage.util';
  async processusRaciDelete(id:string){const row=await this.db.processusRaci.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_RACI','DELETE',id,row,null);return row;}
 
  processusExigenceList(processusId:string){return this.db.processusExigence.findMany({where:{processusId},include:{responsable:true},orderBy:{createdAt:'desc'}})}
- processusExigenceCreate(b:any){return this.db.processusExigence.create({data:b})}
- processusExigenceUpdate(id:string,b:any){return this.db.processusExigence.update({where:{id},data:b})}
+ processusExigenceCreate(b:any){return this.db.processusExigence.create({data:stripSystemFields(b)})}
+ processusExigenceUpdate(id:string,b:any){return this.db.processusExigence.update({where:{id},data:stripSystemFields(b)})}
  async processusExigenceDelete(id:string){const row=await this.db.processusExigence.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_EXIGENCE','DELETE',id,row,null);return row;}
 
  processusLinkList(){return this.db.processusLink.findMany()}
  processusLinkCreate(b:any){return this.db.processusLink.create({data:{sourceId:b.sourceId,targetId:b.targetId,label:b.label}})}
  async processusLinkDelete(id:string){const row=await this.db.processusLink.delete({where:{id}});await writeAudit(this.db,'PROCESSUS_LINK','DELETE',id,row,null);return row;}
- indicateurList(domaine?:string){return this.db.indicateurQualite.findMany({where:domaine?{domaine}:undefined,include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...b,actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...b,...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} async indicateurDelete(id:string){const row=await this.db.indicateurQualite.delete({where:{id}});await writeAudit(this.db,'INDICATEUR_QUALITE','DELETE',id,row,null);return row;}
+ indicateurList(domaine?:string){return this.db.indicateurQualite.findMany({where:domaine?{domaine}:undefined,include:{processus:true,mesures:{orderBy:{periode:'desc'},take:12}},orderBy:{createdAt:'desc'}})} indicateurCreate(b:any){return this.db.indicateurQualite.create({data:{...stripSystemFields(b),actuel:Number(b.actuel),cible:Number(b.cible),seuilVert:b.seuilVert!==undefined?Number(b.seuilVert):undefined,seuilOrange:b.seuilOrange!==undefined?Number(b.seuilOrange):undefined}})} indicateurUpdate(id:string,b:any){return this.db.indicateurQualite.update({where:{id},data:{...stripSystemFields(b),...(b.actuel!==undefined?{actuel:Number(b.actuel)}:{}),...(b.cible!==undefined?{cible:Number(b.cible)}:{}),...(b.seuilVert!==undefined?{seuilVert:Number(b.seuilVert)}:{}),...(b.seuilOrange!==undefined?{seuilOrange:Number(b.seuilOrange)}:{})}})} async indicateurDelete(id:string){const row=await this.db.indicateurQualite.delete({where:{id}});await writeAudit(this.db,'INDICATEUR_QUALITE','DELETE',id,row,null);return row;}
 
  // Ajouter une mesure met aussi à jour la valeur actuelle affichée sur
  // la fiche — pas besoin de le faire deux fois séparément.
@@ -2369,8 +2370,8 @@ import { saveFile } from '../documents/file-storage.util';
   return list.map(r=>({...r,coutTotal:[r.coutRemboursement,r.coutRemplacement,r.coutTransport,r.coutMainOeuvre,r.coutAutres,r.actionCurativeCout].reduce((s:number,v)=>s+(v||0),0)}));
  }
  reclamationGet(id:string){return this.db.reclamation.findUnique({where:{id},include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:{include:{responsible:true}}}})}
- reclamationCreate(b:any){return this.db.reclamation.create({data:b})}
- reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:b})}
+ reclamationCreate(b:any){return this.db.reclamation.create({data:stripSystemFields(b)})}
+ reclamationUpdate(id:string,b:any){return this.db.reclamation.update({where:{id},data:stripSystemFields(b)})}
  async reclamationDelete(id:string){
   // Jamais de suppression définitive d'un historique QHSE significatif —
   // on archive plutôt que de supprimer dès qu'une réclamation a des
@@ -2492,13 +2493,13 @@ import { saveFile } from '../documents/file-storage.util';
  }
  fournisseurList(){return this.db.fournisseur.findMany({include:{responsableInterne:true,certifications:true,_count:{select:{nonConformities:{where:{status:'OPEN'}},actions:{where:{status:{not:'CLOSED'}}},audits:true,risks:{where:{status:'ACTIVE'}}}}},orderBy:{nom:'asc'}})}
  fournisseurGet(id:string){return this.db.fournisseur.findUnique({where:{id},include:{responsableInterne:true,certifications:true,nonConformities:true,actions:{include:{responsible:true}},audits:true,risks:true,qualityControls:true,reclamations:true}})}
- fournisseurCreate(b:any){return this.db.fournisseur.create({data:b})}
- fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:b})}
+ fournisseurCreate(b:any){return this.db.fournisseur.create({data:stripSystemFields(b)})}
+ fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:stripSystemFields(b)})}
  async fournisseurDelete(id:string){const row=await this.db.fournisseur.delete({where:{id}});await writeAudit(this.db,'FOURNISSEUR','DELETE',id,row,null);return row;}
 
  fournisseurCertificationList(fournisseurId:string){return this.db.fournisseurCertification.findMany({where:{fournisseurId},orderBy:{dateExpiration:'asc'}})}
- fournisseurCertificationCreate(b:any){return this.db.fournisseurCertification.create({data:b})}
- fournisseurCertificationUpdate(id:string,b:any){return this.db.fournisseurCertification.update({where:{id},data:b})}
+ fournisseurCertificationCreate(b:any){return this.db.fournisseurCertification.create({data:stripSystemFields(b)})}
+ fournisseurCertificationUpdate(id:string,b:any){return this.db.fournisseurCertification.update({where:{id},data:stripSystemFields(b)})}
  async fournisseurCertificationDelete(id:string){const row=await this.db.fournisseurCertification.delete({where:{id}});await writeAudit(this.db,'FOURNISSEUR_CERTIFICATION','DELETE',id,row,null);return row;}
 
  // Composante "Qualité (auto)" — recalculée à chaque lecture depuis les
@@ -2604,7 +2605,7 @@ import { saveFile } from '../documents/file-storage.util';
   const risks=await this.db.risk.findMany({where:{fournisseurId:{not:null},status:'ACTIVE'},include:{fournisseur:true},orderBy:{score:'desc'}});
   return risks.map(r=>({id:r.id,fournisseur:r.fournisseur?.nom,hazard:r.hazard,severity:r.severity,probability:r.probability,score:r.score}));
  }
- visiteMedicaleList(){return this.db.visiteMedicale.findMany({include:{employee:true},orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:b})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:b})} async visiteMedicaleDelete(id:string){const row=await this.db.visiteMedicale.delete({where:{id}});await writeAudit(this.db,'VISITE_MEDICALE','DELETE',id,row,null);return row;}
+ visiteMedicaleList(){return this.db.visiteMedicale.findMany({include:{employee:true},orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:stripSystemFields(b)})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:stripSystemFields(b)})} async visiteMedicaleDelete(id:string){const row=await this.db.visiteMedicale.delete({where:{id}});await writeAudit(this.db,'VISITE_MEDICALE','DELETE',id,row,null);return row;}
 
  // Risques sanitaires — la criticité se recalcule à chaque écriture,
  // jamais ressaisie séparément par l'utilisateur.
@@ -2612,17 +2613,17 @@ import { saveFile } from '../documents/file-storage.util';
  risqueSanitaireGet(id:string){return this.db.risqueSanitaire.findUnique({where:{id},include:{site:true,processus:true,responsable:true,expositions:{include:{employee:true}},actions:{include:{responsible:true}}}})}
  risqueSanitaireCreate(b:any){
   const gravite=Number(b.gravite)||1,probabilite=Number(b.probabilite)||1;
-  return this.db.risqueSanitaire.create({data:{...b,gravite,probabilite,criticite:gravite*probabilite}});
+  return this.db.risqueSanitaire.create({data:{...stripSystemFields(b),gravite,probabilite,criticite:gravite*probabilite}});
  }
  async risqueSanitaireUpdate(id:string,b:any){
   const current=await this.db.risqueSanitaire.findUnique({where:{id}});
   const gravite=b.gravite!==undefined?Number(b.gravite):current?.gravite??1;
   const probabilite=b.probabilite!==undefined?Number(b.probabilite):current?.probabilite??1;
-  return this.db.risqueSanitaire.update({where:{id},data:{...b,gravite,probabilite,criticite:gravite*probabilite}});
+  return this.db.risqueSanitaire.update({where:{id},data:{...stripSystemFields(b),gravite,probabilite,criticite:gravite*probabilite}});
  }
  async risqueSanitaireDelete(id:string){const row=await this.db.risqueSanitaire.delete({where:{id}});await writeAudit(this.db,'RISQUE_SANITAIRE','DELETE',id,row,null);return row;}
 
- expositionCreate(b:any){return this.db.expositionSurveillance.create({data:{...b,valeurMesuree:b.valeurMesuree!==undefined?Number(b.valeurMesuree):undefined,valeurLimite:b.valeurLimite!==undefined?Number(b.valeurLimite):undefined,conforme:b.valeurMesuree!=null&&b.valeurLimite!=null?Number(b.valeurMesuree)<=Number(b.valeurLimite):b.conforme}})}
+ expositionCreate(b:any){return this.db.expositionSurveillance.create({data:{...stripSystemFields(b),valeurMesuree:b.valeurMesuree!==undefined?Number(b.valeurMesuree):undefined,valeurLimite:b.valeurLimite!==undefined?Number(b.valeurLimite):undefined,conforme:b.valeurMesuree!=null&&b.valeurLimite!=null?Number(b.valeurMesuree)<=Number(b.valeurLimite):b.conforme}})}
  async expositionDelete(id:string){const row=await this.db.expositionSurveillance.delete({where:{id}});await writeAudit(this.db,'EXPOSITION_SURVEILLANCE','DELETE',id,row,null);return row;}
 
  // Ergonomie — le score se recalcule depuis les facteurs cochés à
@@ -2634,25 +2635,25 @@ import { saveFile } from '../documents/file-storage.util';
  }
  analyseErgonomiqueList(){return this.db.analyseErgonomique.findMany({include:{site:true,processus:true,evaluateur:true,tmsSignalements:true,actions:true},orderBy:{createdAt:'desc'}})}
  analyseErgonomiqueGet(id:string){return this.db.analyseErgonomique.findUnique({where:{id},include:{site:true,processus:true,evaluateur:true,tmsSignalements:{include:{employee:true}},actions:{include:{responsible:true}}}})}
- analyseErgonomiqueCreate(b:any){return this.db.analyseErgonomique.create({data:{...b,scoreErgonomique:this.calculerScoreErgonomique(b)}})}
+ analyseErgonomiqueCreate(b:any){return this.db.analyseErgonomique.create({data:{...stripSystemFields(b),scoreErgonomique:this.calculerScoreErgonomique(b)}})}
  async analyseErgonomiqueUpdate(id:string,b:any){
   const current=await this.db.analyseErgonomique.findUnique({where:{id}});
   const merged={...current,...b};
-  return this.db.analyseErgonomique.update({where:{id},data:{...b,scoreErgonomique:this.calculerScoreErgonomique(merged)}});
+  return this.db.analyseErgonomique.update({where:{id},data:{...stripSystemFields(b),scoreErgonomique:this.calculerScoreErgonomique(merged)}});
  }
  async analyseErgonomiqueDelete(id:string){const row=await this.db.analyseErgonomique.delete({where:{id}});await writeAudit(this.db,'ANALYSE_ERGONOMIQUE','DELETE',id,row,null);return row;}
 
  tmsSignalementList(){return this.db.tmsSignalement.findMany({include:{employee:true,analyseErgonomique:true},orderBy:{dateSignalement:'desc'}})}
- tmsSignalementCreate(b:any){return this.db.tmsSignalement.create({data:b})}
- tmsSignalementUpdate(id:string,b:any){return this.db.tmsSignalement.update({where:{id},data:b})}
+ tmsSignalementCreate(b:any){return this.db.tmsSignalement.create({data:stripSystemFields(b)})}
+ tmsSignalementUpdate(id:string,b:any){return this.db.tmsSignalement.update({where:{id},data:stripSystemFields(b)})}
  async tmsSignalementDelete(id:string){const row=await this.db.tmsSignalement.delete({where:{id}});await writeAudit(this.db,'TMS_SIGNALEMENT','DELETE',id,row,null);return row;}
 
  penibiliteFactorList(){return this.db.penibiliteFactor.findMany({where:{actif:true},orderBy:{nom:'asc'}})}
- penibiliteFactorCreate(b:any){return this.db.penibiliteFactor.create({data:b})}
+ penibiliteFactorCreate(b:any){return this.db.penibiliteFactor.create({data:stripSystemFields(b)})}
  async penibiliteFactorDelete(id:string){const row=await this.db.penibiliteFactor.update({where:{id},data:{actif:false}});await writeAudit(this.db,'PENIBILITE_FACTOR','UPDATE',id,null,row);return row;}
 
  penibiliteExpositionList(){return this.db.penibiliteExposition.findMany({include:{employee:true,facteur:true},orderBy:{dateEvaluation:'desc'}})}
- penibiliteExpositionCreate(b:any){return this.db.penibiliteExposition.create({data:b})}
+ penibiliteExpositionCreate(b:any){return this.db.penibiliteExposition.create({data:stripSystemFields(b)})}
  async penibiliteExpositionDelete(id:string){const row=await this.db.penibiliteExposition.delete({where:{id}});await writeAudit(this.db,'PENIBILITE_EXPOSITION','DELETE',id,row,null);return row;}
 
  // Alertes automatiques hygiène au travail — chaque critère est
@@ -2721,7 +2722,7 @@ import { saveFile } from '../documents/file-storage.util';
   });
   return {indice:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
- veilleList(){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:b})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:b})} async veilleDelete(id:string){const row=await this.db.veilleReglementaire.delete({where:{id}});await writeAudit(this.db,'VEILLE_REGLEMENTAIRE','DELETE',id,row,null);return row;}
+ veilleList(){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:stripSystemFields(b)})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:stripSystemFields(b)})} async veilleDelete(id:string){const row=await this.db.veilleReglementaire.delete({where:{id}});await writeAudit(this.db,'VEILLE_REGLEMENTAIRE','DELETE',id,row,null);return row;}
 
  // === MODULE VEILLE RÉGLEMENTAIRE — Phase 1 : fondations et chaîne centrale
  // (Texte → Exigence → Applicabilité → Évaluation → Preuve → NC → CAPA →
@@ -2729,8 +2730,8 @@ import { saveFile } from '../documents/file-storage.util';
  // (catalogue simple) reste inchangé, lié depuis Documents. ===================
 
  async regulatoryDomainList(){return this.db.regulatoryDomain.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
- regulatoryDomainCreate(b:any){return this.db.regulatoryDomain.create({data:b})}
- regulatoryDomainUpdate(id:string,b:any){return this.db.regulatoryDomain.update({where:{id},data:b})}
+ regulatoryDomainCreate(b:any){return this.db.regulatoryDomain.create({data:stripSystemFields(b)})}
+ regulatoryDomainUpdate(id:string,b:any){return this.db.regulatoryDomain.update({where:{id},data:stripSystemFields(b)})}
  async regulatoryDomainDelete(id:string){const row=await this.db.regulatoryDomain.delete({where:{id}});await writeAudit(this.db,'REGULATORY_DOMAIN','DELETE',id,row,null);return row;}
 
  async regulatorySettingsGet(){
@@ -2740,21 +2741,21 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async regulatorySettingsUpdate(b:any){
   const current=await this.regulatorySettingsGet();
-  return this.db.regulatorySettings.update({where:{id:current.id},data:b});
+  return this.db.regulatorySettings.update({where:{id:current.id},data:stripSystemFields(b)});
  }
 
  regulatoryTextInclude={ domain:true, verifiePar:true, requirements:{orderBy:{code:'asc' as const}} };
  regulatoryTextList(){return this.db.regulatoryText.findMany({include:this.regulatoryTextInclude,orderBy:{createdAt:'desc'}})}
  regulatoryTextGet(id:string){return this.db.regulatoryText.findUnique({where:{id},include:this.regulatoryTextInclude})}
  async regulatoryTextCreate(b:any){
-  const text=await this.db.regulatoryText.create({data:b});
+  const text=await this.db.regulatoryText.create({data:stripSystemFields(b)});
   await writeAudit(this.db,'REGULATORY_TEXT','CREATE',text.id,null,text);
   return text;
  }
  async regulatoryTextUpdate(id:string,b:any){
   const current=await this.db.regulatoryText.findUnique({where:{id}});
   if(!current) throw new NotFoundException('Texte réglementaire introuvable');
-  const text=await this.db.regulatoryText.update({where:{id},data:b});
+  const text=await this.db.regulatoryText.update({where:{id},data:stripSystemFields(b)});
   await writeAudit(this.db,'REGULATORY_TEXT','UPDATE',id,current,text);
   // Un texte modifié doit déclencher une analyse d'impact — jamais une
   // conclusion automatique, seulement un signal sur les exigences liées.
@@ -2791,14 +2792,14 @@ import { saveFile } from '../documents/file-storage.util';
   return {...req,evidences:this.regulatoryDecorateEvidences(req.evidences)};
  }
  async regulatoryRequirementCreate(b:any){
-  const req=await this.db.regulatoryRequirement.create({data:b});
+  const req=await this.db.regulatoryRequirement.create({data:stripSystemFields(b)});
   await writeAudit(this.db,'REGULATORY_REQUIREMENT','CREATE',req.id,null,req);
   return req;
  }
  async regulatoryRequirementUpdate(id:string,b:any){
   const current=await this.db.regulatoryRequirement.findUnique({where:{id}});
   if(!current) throw new NotFoundException('Exigence réglementaire introuvable');
-  const req=await this.db.regulatoryRequirement.update({where:{id},data:b});
+  const req=await this.db.regulatoryRequirement.update({where:{id},data:stripSystemFields(b)});
   await writeAudit(this.db,'REGULATORY_REQUIREMENT','UPDATE',id,current,req);
   return req;
  }
@@ -2834,7 +2835,7 @@ import { saveFile } from '../documents/file-storage.util';
  async regulatoryEvaluationCreate(requirementId:string,b:any){
   const req=await this.db.regulatoryRequirement.findUnique({where:{id:requirementId}});
   if(!req) throw new NotFoundException('Exigence réglementaire introuvable');
-  const evaluation=await this.db.regulatoryEvaluation.create({data:{...b,requirementId}});
+  const evaluation=await this.db.regulatoryEvaluation.create({data:{...stripSystemFields(b),requirementId}});
   const dateProchaine=req.frequenceEvaluationMois?new Date(evaluation.dateControle.getFullYear(),evaluation.dateControle.getMonth()+req.frequenceEvaluationMois,evaluation.dateControle.getDate()):null;
   await this.db.regulatoryRequirement.update({where:{id:requirementId},data:{
    statutConformite:evaluation.statut, dateDerniereEvaluation:evaluation.dateControle, dateProchaineEvaluation:dateProchaine,
@@ -2845,8 +2846,8 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  async regulatoryEvidenceList(requirementId?:string){const list=await this.db.regulatoryEvidence.findMany({where:requirementId?{requirementId}:undefined,include:{document:true,responsable:true},orderBy:{dateExpiration:'asc'}});return this.regulatoryDecorateEvidences(list)}
- regulatoryEvidenceCreate(requirementId:string,b:any){return this.db.regulatoryEvidence.create({data:{...b,requirementId}})}
- regulatoryEvidenceUpdate(id:string,b:any){return this.db.regulatoryEvidence.update({where:{id},data:b})}
+ regulatoryEvidenceCreate(requirementId:string,b:any){return this.db.regulatoryEvidence.create({data:{...stripSystemFields(b),requirementId}})}
+ regulatoryEvidenceUpdate(id:string,b:any){return this.db.regulatoryEvidence.update({where:{id},data:stripSystemFields(b)})}
  async regulatoryEvidenceDelete(id:string){const row=await this.db.regulatoryEvidence.delete({where:{id}});await writeAudit(this.db,'REGULATORY_EVIDENCE','DELETE',id,row,null);return row;}
 
  // Liaison exigence ↔ risque et ↔ document GED — tables de jointure,
@@ -3043,7 +3044,7 @@ import { saveFile } from '../documents/file-storage.util';
  async regulatoryRiskReevaluationUpdate(id:string,b:{statut?:string,raison?:string,responsableId?:string,dateLimite?:string}){
   const current=await this.db.regulatoryRiskReevaluationRequest.findUnique({where:{id}});
   if(!current) throw new NotFoundException('Demande de réévaluation introuvable');
-  const demande=await this.db.regulatoryRiskReevaluationRequest.update({where:{id},data:b as any});
+  const demande=await this.db.regulatoryRiskReevaluationRequest.update({where:{id},data:stripSystemFields(b) as any});
   await writeAudit(this.db,'REGULATORY_RISK_REEVALUATION','UPDATE',id,current,demande);
   return demande;
  }
@@ -3586,7 +3587,7 @@ import { saveFile } from '../documents/file-storage.util';
   await writeAudit(this.db,'OBJECTIF_RECETTE','UPDATE',id,current,updated);
   return updated;
  }
- workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...b,hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...b,...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} async workedHoursDelete(id:string){const row=await this.db.workedHours.delete({where:{id}});await writeAudit(this.db,'WORKED_HOURS','DELETE',id,row,null);return row;}
+ workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...stripSystemFields(b),hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...stripSystemFields(b),...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} async workedHoursDelete(id:string){const row=await this.db.workedHours.delete({where:{id}});await writeAudit(this.db,'WORKED_HOURS','DELETE',id,row,null);return row;}
 
  // ============================================================================
  // RAPPORTS QHSE — Phase 1 : identite de l'entreprise + moteur de

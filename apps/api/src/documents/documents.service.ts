@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
 import { DocumentGroup } from '@prisma/client';
 import { existsSync, unlinkSync } from 'fs';
+import { stripSystemFields } from '../common/strip-system-fields';
 import { randomUUID } from 'crypto';
 import { saveFile } from './file-storage.util';
 
@@ -304,7 +305,7 @@ export class DocumentsService {
 
   linkCreate(id: string, b: { sourceModule: string; sourceEntityId: string; relationType?: string; metadata?: any; createdById?: string }) {
     return this.db.documentLink.create({
-      data: { documentId: id, sourceModule: b.sourceModule, sourceEntityId: b.sourceEntityId, relationType: b.relationType ?? 'ASSOCIE', metadata: b.metadata, createdById: b.createdById },
+      data: { documentId: id, sourceModule: b.sourceModule, sourceEntityId: b.sourceEntityId, relationType: b.relationType ?? 'ASSOCIE', metadata:stripSystemFields(b).metadata, createdById: b.createdById },
     });
   }
 
@@ -352,10 +353,10 @@ export class DocumentsService {
     return this.db.documentType.findMany({ orderBy: { name: 'asc' } });
   }
   typeCreate(b: any) {
-    return this.db.documentType.create({ data: b });
+    return this.db.documentType.create({ data:stripSystemFields(b) });
   }
   typeUpdate(id: string, b: any) {
-    return this.db.documentType.update({ where: { id }, data: b });
+    return this.db.documentType.update({ where: { id }, data:stripSystemFields(b) });
   }
   async typeDelete(id: string) {
     const row = await this.db.documentType.delete({ where: { id } });
@@ -367,10 +368,10 @@ export class DocumentsService {
     return this.db.documentCategoryNode.findMany({ orderBy: { ordre: 'asc' } });
   }
   categoryCreate(b: any) {
-    return this.db.documentCategoryNode.create({ data: b });
+    return this.db.documentCategoryNode.create({ data:stripSystemFields(b) });
   }
   categoryUpdate(id: string, b: any) {
-    return this.db.documentCategoryNode.update({ where: { id }, data: b });
+    return this.db.documentCategoryNode.update({ where: { id }, data:stripSystemFields(b) });
   }
   async categoryDelete(id: string) {
     const row = await this.db.documentCategoryNode.delete({ where: { id } });
