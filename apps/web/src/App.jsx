@@ -2036,6 +2036,93 @@ function VisiteMedicaleForm({ record, onClose, onCreated }) {
   );
 }
 
+// Lien CAPA manquant promu dans l'UI (audit finding #31) : une surveillance
+// d'exposition (bruit, chimique...) dépassant le seuil réglementaire n'avait
+// aucune voie directe vers une Action CAPA — seul un détour manuel existait.
+// Ce détail, jusqu'ici absent (le clic sur une ligne ouvrait directement le
+// formulaire d'édition), affiche désormais les expositions mesurées et
+// promeut la création d'une CAPA pour toute mesure non conforme.
+function ExpositionForm({ risqueSanitaireId, onClose, onCreated }) {
+  const C = useTheme();
+  const employeesQ = useCollection('/epi/employees');
+  const [form, setForm] = useState({ employeeId: '', agentDangereux: '', poste: '', niveauExposition: '', frequence: '', duree: '', valeurMesuree: '', valeurLimite: '', unite: '', commentaire: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try {
+      await api.post('/business/expositions', { ...form, risqueSanitaireId, employeeId: form.employeeId || null, valeurMesuree: form.valeurMesuree === '' ? null : form.valeurMesuree, valeurLimite: form.valeurLimite === '' ? null : form.valeurLimite });
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setSaving(false);
+  }
+  return (
+    <Modal title="Nouvelle mesure d'exposition" onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Agent dangereux (bruit, chimique...)"><input value={form.agentDangereux} onChange={(e) => setForm({ ...form, agentDangereux: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Employé exposé"><select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}><option value="">—</option>{(employeesQ.data || []).map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></FormField>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Poste"><input value={form.poste} onChange={(e) => setForm({ ...form, poste: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Fréquence / durée"><input value={form.frequence} onChange={(e) => setForm({ ...form, frequence: e.target.value })} placeholder="Ex. quotidienne, 4h/jour" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FormField label="Valeur mesurée"><input type="number" step="any" value={form.valeurMesuree} onChange={(e) => setForm({ ...form, valeurMesuree: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Valeur limite"><input type="number" step="any" value={form.valeurLimite} onChange={(e) => setForm({ ...form, valeurLimite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+          <FormField label="Unité"><input value={form.unite} onChange={(e) => setForm({ ...form, unite: e.target.value })} placeholder="dB, ppm..." className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+        </div>
+        <FormField label="Commentaire (optionnel)"><textarea value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle(C)} /></FormField>
+        {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
+        <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: saving ? 0.7 : 1 }}>{saving ? 'Enregistrement…' : 'Enregistrer la mesure'}</button>
+      </form>
+    </Modal>
+  );
+}
+function RisqueSanitaireDetailModal({ risque, onClose, onEdit, onChanged }) {
+  const C = useTheme();
+  const detailQ = useCollection(`/business/risques-sanitaires/${risque.id}`);
+  const [showExpoForm, setShowExpoForm] = useState(false);
+  if (detailQ.loading) return <Modal title={risque.danger} onClose={onClose}><LoadingPanel /></Modal>;
+  const d = detailQ.data || risque;
+  const expositions = d.expositions || [];
+  function reload() { detailQ.reload(); onChanged(); }
+  async function deleteExposition(id) {
+    try { await api.del(`/business/expositions/${id}`); reload(); } catch (err) { alert(err.message); }
+  }
+  return (
+    <Modal title={d.danger} onClose={onClose} wide>
+      {showExpoForm && <ExpositionForm risqueSanitaireId={d.id} onClose={() => setShowExpoForm(false)} onCreated={reload} />}
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs" style={{ color: C.textMuted }}>{d.categorie || 'Sans catégorie'} · {[d.poste, d.zone].filter(Boolean).join(' / ') || 'Sans poste/zone'} · Criticité {d.criticite}</p>
+        <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
+      </div>
+      <CapaLinksPanel sourceModule="RISQUE_SANITAIRE" sourceEntityId={d.id} prefill={{ title: `Traiter le risque sanitaire — ${d.danger}`, source: 'Risques sanitaires', criticite: d.criticite >= 12 ? 'CRITIQUE' : d.criticite >= 6 ? 'MAJEURE' : 'MINEURE' }} />
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold" style={{ color: C.text }}>Mesures d'exposition ({expositions.length})</p>
+        <button onClick={() => setShowExpoForm(true)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Mesure</button>
+      </div>
+      {expositions.length
+        ? <div className="space-y-2 mb-2">{expositions.map((ex) => {
+            const depassement = ex.conforme === false;
+            return (
+              <div key={ex.id} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: depassement ? `1px solid ${C.red}` : 'none' }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm" style={{ color: C.text }}>{ex.agentDangereux || 'Agent non précisé'}{ex.employee ? ` — ${ex.employee.firstName} ${ex.employee.lastName}` : ''}</span>
+                  <div className="flex items-center gap-2">
+                    {depassement && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Seuil dépassé</span>}
+                    <button onClick={() => deleteExposition(ex.id)} className="text-[11px]" style={{ color: C.red }}>Supprimer</button>
+                  </div>
+                </div>
+                <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>{ex.valeurMesuree != null ? `${ex.valeurMesuree}${ex.unite || ''}` : '—'}{ex.valeurLimite != null ? ` (limite ${ex.valeurLimite}${ex.unite || ''})` : ''} · {new Date(ex.dateMesure).toLocaleDateString('fr-FR')}</p>
+                {depassement && <div className="mt-2"><CapaLinksPanel sourceModule="EXPOSITION_SURVEILLANCE" sourceEntityId={ex.id} prefill={{ title: `Exposition hors seuil — ${ex.agentDangereux || d.danger}`, source: 'Surveillance d\'exposition', criticite: 'CRITIQUE' }} /></div>}
+              </div>
+            );
+          })}</div>
+        : <p className="text-xs mb-2" style={{ color: C.textMuted }}>Aucune mesure d'exposition enregistrée</p>}
+    </Modal>
+  );
+}
 function RisqueSanitaireForm({ record, onClose, onCreated }) {
   const C = useTheme();
   const editing = !!record;
@@ -4784,6 +4871,15 @@ function ControlDetailModal({ controlId, onClose, onChanged }) {
         </div>
       )}
 
+      {(control.status === 'NON_COMPLIANT' || control.finalDecision === 'REFUSE') && (
+        // Lien CAPA manquant promu dans l'UI (audit finding #31) : un contrôle
+        // qualité non conforme n'avait aucune voie directe vers une Action
+        // CAPA (retouche immédiate) sans passer par une NC formelle — le
+        // préremplissage backend existait déjà (capaPrefillFromSource,
+        // sourceModule='CONTROLE') mais rien ne l'exposait ici.
+        <CapaLinksPanel sourceModule="CONTROLE" sourceEntityId={control.id} prefill={{ title: `Traiter le contrôle non conforme — ${control.code}`, source: 'Contrôle qualité' }} />
+      )}
+
       {!closed && sampling && (
         <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}` }}>
           <p className="text-xs font-medium mb-2" style={{ color: C.text }}>Échantillonnage (optionnel)</p>
@@ -6903,6 +6999,7 @@ function SecuriteHygienePage() {
   const [selected, setSelected] = useState(null);
   const [showRisqueForm, setShowRisqueForm] = useState(false);
   const [selectedRisque, setSelectedRisque] = useState(null);
+  const [detailRisque, setDetailRisque] = useState(null);
   const [showErgonomieForm, setShowErgonomieForm] = useState(false);
   const [selectedErgonomie, setSelectedErgonomie] = useState(null);
   const [showTmsForm, setShowTmsForm] = useState(false);
@@ -6971,6 +7068,7 @@ function SecuriteHygienePage() {
     <div className="space-y-6">
       {(showForm || selected) && <VisiteMedicaleForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={visites.reload} />}
       {(showRisqueForm || selectedRisque) && <RisqueSanitaireForm record={selectedRisque} onClose={() => { setShowRisqueForm(false); setSelectedRisque(null); }} onCreated={risques.reload} />}
+      {detailRisque && <RisqueSanitaireDetailModal risque={detailRisque} onClose={() => setDetailRisque(null)} onEdit={() => { setSelectedRisque(detailRisque); setDetailRisque(null); }} onChanged={risques.reload} />}
       {(showErgonomieForm || selectedErgonomie) && <AnalyseErgonomiqueForm record={selectedErgonomie} onClose={() => { setShowErgonomieForm(false); setSelectedErgonomie(null); }} onCreated={ergonomies.reload} />}
       {(showTmsForm || selectedTms) && <TmsSignalementForm record={selectedTms} onClose={() => { setShowTmsForm(false); setSelectedTms(null); }} onCreated={tmsList.reload} />}
       {showExpositionForm && <PenibiliteExpositionForm facteurs={facteurs} onClose={() => setShowExpositionForm(false)} onCreated={expositionsQ.reload} />}
@@ -7042,7 +7140,7 @@ function SecuriteHygienePage() {
                     <span style={{ color: niveauColor(r.criticite), fontWeight: 600 }}>{r.criticite} ({niveauLabel(r.criticite)})</span>,
                     <StatusChip statut={r.statut === 'ACTIVE' ? 'Actif' : r.statut === 'MAITRISE' ? 'Maîtrisé' : 'Clôturé'} />,
                   ])}
-                  onRowClick={(i) => setSelectedRisque(risqueFiltered[i])} />
+                  onRowClick={(i) => setDetailRisque(risqueFiltered[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun risque sanitaire évalué pour le moment'}</p>}
           </Panel>
         </div>

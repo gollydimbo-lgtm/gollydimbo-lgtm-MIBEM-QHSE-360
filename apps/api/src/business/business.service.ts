@@ -635,6 +635,26 @@ import { saveFile } from '../documents/file-storage.util';
      attachments:await this.capaAttachmentsDisponibles('AUDIT',f.auditId),
     };
    }
+   case 'EXPOSITION_SURVEILLANCE':{
+    const ex=await this.db.expositionSurveillance.findUnique({where:{id:sourceEntityId},include:{risqueSanitaire:true,employee:true}});
+    if(!ex) throw new NotFoundException('Mesure d\'exposition introuvable');
+    return {
+     title:`Exposition hors seuil — ${ex.agentDangereux||ex.risqueSanitaire?.danger||'Agent non précisé'}`,
+     description:`Valeur mesurée ${ex.valeurMesuree??'?'}${ex.unite||''} pour une limite de ${ex.valeurLimite??'?'}${ex.unite||''}${ex.poste?` — poste ${ex.poste}`:''}.`,
+     date:ex.dateMesure, criticite:'CRITIQUE', priority:this.capaPrioriteProposee('CRITIQUE'),
+     actionType:'CORRECTIVE', dueDate:this.capaEcheanceProposee('CRITIQUE'), attachments:[],
+    };
+   }
+   case 'RISQUE_SANITAIRE':{
+    const rs=await this.db.risqueSanitaire.findUnique({where:{id:sourceEntityId}});
+    if(!rs) throw new NotFoundException('Risque sanitaire introuvable');
+    const niveau=rs.criticite>=12?'CRITIQUE':rs.criticite>=6?'MAJEURE':'MODEREE';
+    return {
+     title:`Traiter le risque sanitaire — ${rs.danger}`, description:rs.mesuresSupplementaires||rs.danger, date:new Date(),
+     processusId:rs.processusId, criticite:niveau, priority:this.capaPrioriteProposee(niveau),
+     actionType:'PREVENTIVE', dueDate:rs.echeance||this.capaEcheanceProposee(niveau), attachments:[],
+    };
+   }
    case 'SAFETY_EVENT':{
     const ev=await this.db.safetyEvent.findUnique({where:{id:sourceEntityId}});
     if(!ev) throw new NotFoundException('Événement introuvable');
