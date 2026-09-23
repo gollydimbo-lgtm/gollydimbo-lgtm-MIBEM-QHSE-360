@@ -7251,6 +7251,7 @@ function EnvironnementPage() {
   const [selected, setSelected] = useState(null);
   const [showAspectForm, setShowAspectForm] = useState(false);
   const [selectedAspect, setSelectedAspect] = useState(null);
+  const [generatingRiskAspectId, setGeneratingRiskAspectId] = useState(null);
   const [showVeilleForm, setShowVeilleForm] = useState(false);
   const [selectedVeille, setSelectedVeille] = useState(null);
   const [showProduitForm, setShowProduitForm] = useState(false);
@@ -7267,6 +7268,12 @@ function EnvironnementPage() {
   const tendances = tendancesQ.data || [];
   const veilleEnv = (veilleQ.data || []).filter((v) => v.domaine === 'Environnement');
   const produits = produitsQ.data || [];
+  async function generateRiskFromAspect(id) {
+    setGeneratingRiskAspectId(id);
+    try { await api.post(`/business/environnement-aspects/${id}/generate-risk`, {}); aspects.reload(); }
+    catch (err) { alert(err.message); }
+    setGeneratingRiskAspectId(null);
+  }
   const now2 = new Date();
   const byCategorie = groupCount(list.filter((r) => r.categorie), (r) => r.categorie);
   const sorted = [...list].sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
@@ -7416,12 +7423,15 @@ function EnvironnementPage() {
           </div>
           <Panel title="Registre des aspects & impacts environnementaux" subtitle="Criticité = Fréquence × Gravité × Probabilité ÷ Maîtrise — significatif à partir de 12.">
             {aspectList.length
-              ? <DataTable columns={['Aspect', 'Milieu', 'Situation', 'Criticité', 'Significatif', 'Statut']}
+              ? <DataTable columns={['Aspect', 'Milieu', 'Situation', 'Criticité', 'Significatif', 'Statut', 'Risque']}
                   rows={aspectList.map((a) => [
                     a.aspect, a.milieu || '—', situationLabel[a.situation] || a.situation,
                     <span style={{ color: criticiteColor(a.criticite), fontWeight: 600 }}>{a.criticite}</span>,
                     a.significatif ? <span style={{ color: C.red }}>Oui</span> : 'Non',
                     <StatusChip statut={a.statut === 'ACTIVE' ? 'Actif' : a.statut === 'MAITRISE' ? 'Maîtrisé' : 'Clôturé'} />,
+                    a.riskId ? <span style={{ color: C.green }}>Créé</span>
+                      : a.significatif ? <button onClick={(e) => { e.stopPropagation(); generateRiskFromAspect(a.id); }} disabled={generatingRiskAspectId === a.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{generatingRiskAspectId === a.id ? '…' : 'Générer un risque'}</button>
+                      : '—',
                   ])}
                   onRowClick={(i) => setSelectedAspect(aspectList[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun aspect environnemental identifié pour le moment</p>}

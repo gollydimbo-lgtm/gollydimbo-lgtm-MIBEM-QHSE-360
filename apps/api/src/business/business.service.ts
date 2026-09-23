@@ -1439,6 +1439,26 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async environnementAspectDelete(id:string){const row=await this.db.environnementAspect.delete({where:{id}});await writeAudit(this.db,'ENVIRONNEMENT_ASPECT','DELETE',id,row,null);return row;}
 
+ // Point 34 — un aspect environnemental significatif peut générer un risque
+ // formel dans le registre des risques, sur le même modèle que les autres
+ // "generate-X-from-Y" (accidents, non-conformités, équipements) : cotation
+ // recalculée via calculerRisque, jamais ressaisie à la main, et l'aspect
+ // reste relié au risque créé pour éviter tout doublon (riskId déjà posé = refus).
+ async environnementAspectGenerateRisk(id:string){
+  const aspect=await this.db.environnementAspect.findUnique({where:{id}});
+  if(!aspect) throw new NotFoundException('Aspect environnemental introuvable');
+  if(aspect.riskId) throw new Error('Cet aspect est déjà relié à un risque');
+  const calc=await this.calculerRisque({severity:aspect.gravite||3,probability:aspect.frequence||3});
+  const risk=await this.db.risk.create({data:{
+   code:`RISK-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+   hazard:aspect.aspect, hazardousEvent:aspect.source||undefined, potentialDamage:aspect.impact||undefined,
+   activity:aspect.activite, processusId:aspect.processusId, ...calc,
+  }});
+  await writeAudit(this.db,'RISK','CREATE',risk.id,null,risk);
+  await this.db.environnementAspect.update({where:{id},data:{riskId:risk.id}});
+  return risk;
+ }
+
  // Environnement — tableau de bord réel : chaque valeur reste `null`
  // si la donnée n'existe pas, jamais une valeur inventée à la place.
  async environnementDashboard(){
