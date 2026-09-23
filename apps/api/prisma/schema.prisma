@@ -120,6 +120,14 @@ model User {
   lastName String
   status UserStatus @default(ACTIVE)
   employeeId String? @unique
+  // Cloisonnement multi-site (chantier "généricité multi-site", finding
+  // #37) : null = vue consolidée tous sites (comportement historique
+  // MIBEM mono-site, et cas des rôles ADMINISTRATEUR/RESPONSABLE_QHSE qui
+  // gardent toujours la vue groupe quel que soit ce champ — voir
+  // currentSiteScope() dans common/audit-context.ts). Un site assigné
+  // restreint la lecture des données de ce compte à ce site.
+  siteId String?
+  site Site? @relation(fields:[siteId], references:[id], onDelete:SetNull)
   roles UserRole[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1042,6 +1050,7 @@ model Site {
   name String
   location String?
   active Boolean @default(true)
+  users User[]
   lines ProductionLine[]
   qualityControls QualityControl[]
   controlSchedules ControlSchedule[]

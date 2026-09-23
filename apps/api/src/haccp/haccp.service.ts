@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { stripSystemFields } from '../common/strip-system-fields';
+import { currentSiteScope } from '../common/audit-context';
 
 // Module HACCP — remplace l'ancien HaccpRecord (CRUD plat) par une étude
 // complète (équipe, diagramme de flux, dangers, CCP/CP, surveillance, PRP,
@@ -25,7 +26,7 @@ export class HaccpService {
   // ÉTUDES HACCP
   // =========================================================================
   studiesList() {
-    return this.db.haccpStudy.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.db.haccpStudy.findMany({ where: { ...currentSiteScope() }, orderBy: { createdAt: 'desc' } });
   }
 
   studyGet(id: string) {

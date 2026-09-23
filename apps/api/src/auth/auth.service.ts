@@ -24,14 +24,17 @@ export class AuthService {
   private async issueTokens(u: any) {
     const permissions = [...new Set(u.roles.flatMap((r: any) => r.role.permissions.map((p: any) => p.permission.code)))];
     const roles = u.roles.map((r: any) => r.role.name);
-    const accessToken = this.jwtSvc.sign({ sub: u.id, email: u.email, roles, permissions });
+    // Cloisonnement multi-site (finding #37) : le siteId voyage dans le JWT
+    // pour que auditContextMiddleware puisse alimenter currentSiteScope()
+    // sans requête base supplémentaire à chaque appel.
+    const accessToken = this.jwtSvc.sign({ sub: u.id, email: u.email, roles, permissions, siteId: u.siteId ?? null });
     const refreshToken = jwt.sign({ sub: u.id }, this.config.get('REFRESH_SECRET')!, { expiresIn: REFRESH_EXPIRES_IN });
     await this.db.refreshToken.create({
       data: { userId: u.id, tokenHash: this.hashToken(refreshToken), expiresAt: new Date(Date.now() + REFRESH_EXPIRES_MS) },
     });
     return {
       accessToken, refreshToken,
-      user: { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, roles, permissions },
+      user: { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, roles, permissions, siteId: u.siteId ?? null },
     };
   }
 

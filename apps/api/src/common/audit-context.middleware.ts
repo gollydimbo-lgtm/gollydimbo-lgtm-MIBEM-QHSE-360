@@ -9,16 +9,20 @@ import { auditContext } from './audit-context';
 // simplement les entrées d'audit anonymes pour cette requête.
 export function auditContextMiddleware(req: Request, _res: Response, next: NextFunction) {
   let userId: string | null = null;
+  let siteId: string | null = null;
+  let roles: string[] = [];
   const header = req.headers['authorization'];
   if (header && header.startsWith('Bearer ')) {
     try {
       const token = header.slice(7);
       const secret = process.env.JWT_SECRET || '';
-      const payload = jwt.verify(token, secret) as { sub?: string };
+      const payload = jwt.verify(token, secret) as { sub?: string; siteId?: string | null; roles?: string[] };
       userId = payload?.sub || null;
+      siteId = payload?.siteId ?? null;
+      roles = payload?.roles ?? [];
     } catch {
       userId = null;
     }
   }
-  auditContext.run({ userId }, () => next());
+  auditContext.run({ userId, siteId, roles }, () => next());
 }

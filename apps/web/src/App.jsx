@@ -3364,7 +3364,8 @@ const ROLE_LABELS = {
 
 function NewUserForm({ onClose, onCreated }) {
   const C = useTheme();
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'CONSULTATION' });
+  const sitesQ = useCollection('/quality/catalog/sites');
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'CONSULTATION', siteId: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   async function submit(e) {
@@ -3387,6 +3388,11 @@ function NewUserForm({ onClose, onCreated }) {
         <FormField label="Rôle (définit l'accès)">
           <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Site (optionnel — restreint la vue aux données de ce site)">
+          <select value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
+            <option value="">Tous sites (vue consolidée)</option>{(sitesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </FormField>
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
@@ -3457,6 +3463,7 @@ function ChangeMyPasswordForm({ email, onClose }) {
 function UtilisateursPage() {
   const C = useTheme();
   const users = useCollection('/users');
+  const sitesQ = useCollection('/quality/catalog/sites');
   const [showForm, setShowForm] = useState(false);
   const [resettingUser, setResettingUser] = useState(null);
   // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
@@ -3467,6 +3474,10 @@ function UtilisateursPage() {
 
   async function toggleStatus(u) {
     await api.patch(`/users/${u.id}/status`, { status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' });
+    users.reload();
+  }
+  async function changeSite(u, siteId) {
+    await api.patch(`/users/${u.id}/site`, { siteId: siteId || null });
     users.reload();
   }
   async function del(u) {
@@ -3506,7 +3517,7 @@ function UtilisateursPage() {
           <table className="w-full text-sm">
             <thead><tr style={{ color: C.textMuted }}>
               <th className="text-left font-normal pb-2">Nom</th><th className="text-left font-normal pb-2">Email</th>
-              <th className="text-left font-normal pb-2">Rôle</th><th className="text-left font-normal pb-2">Statut</th><th className="text-left font-normal pb-2">Actions</th>
+              <th className="text-left font-normal pb-2">Rôle</th><th className="text-left font-normal pb-2">Site</th><th className="text-left font-normal pb-2">Statut</th><th className="text-left font-normal pb-2">Actions</th>
             </tr></thead>
             <tbody>
               {filteredUsers.map((u) => (
@@ -3514,6 +3525,11 @@ function UtilisateursPage() {
                   <td className="py-2" style={{ color: C.text }}>{u.firstName} {u.lastName}</td>
                   <td className="py-2" style={{ color: C.textMuted }}>{u.email}</td>
                   <td className="py-2" style={{ color: C.textMuted }}>{u.roles.map((r) => ROLE_LABELS[r.role.name] || r.role.name).join(', ') || '—'}</td>
+                  <td className="py-2">
+                    <select value={u.siteId || ''} onChange={(e) => changeSite(u, e.target.value)} className="text-xs px-2 py-1 rounded-lg outline-none" style={inputStyle(C)}>
+                      <option value="">Tous sites</option>{(sitesQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </td>
                   <td className="py-2"><StatusChip statut={u.status === 'ACTIVE' ? 'Conforme' : 'Non conforme'} /></td>
                   <td className="py-2">
                     <div className="flex gap-2">

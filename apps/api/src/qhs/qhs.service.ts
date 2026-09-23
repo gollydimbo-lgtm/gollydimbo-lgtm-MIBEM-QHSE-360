@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
 import { stripSystemFields } from '../common/strip-system-fields';
+import { currentSiteScope } from '../common/audit-context';
 
 @Injectable()
 export class QhsService {
@@ -79,7 +80,7 @@ export class QhsService {
   }
 
   list() {
-    return this.db.safetyTalk.findMany({ orderBy: { weekStart: 'desc' }, take: 20 });
+    return this.db.safetyTalk.findMany({ where: { ...currentSiteScope() }, orderBy: { weekStart: 'desc' }, take: 20 });
   }
 
   approve(id: string) {

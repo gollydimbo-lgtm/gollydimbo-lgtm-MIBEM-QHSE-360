@@ -3,11 +3,12 @@ import { randomUUID } from 'crypto';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../common/prisma.service';
 import { writeAudit } from '../common/audit-log.helper';
+import { currentSiteScope } from '../common/audit-context';
 import { stripSystemFields } from '../common/strip-system-fields';
 import { saveFile } from '../documents/file-storage.util';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
- qualityList(take?:number,skip?:number){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'},take:take??500,skip:skip??0})} qualityCreate(b:any){return this.db.qualityControl.create({data:stripSystemFields(b)})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:stripSystemFields(b)})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
+ qualityList(take?:number,skip?:number){return this.db.qualityControl.findMany({where:currentSiteScope(),orderBy:{controlDate:'desc'},take:take??500,skip:skip??0})} qualityCreate(b:any){return this.db.qualityControl.create({data:stripSystemFields(b)})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:stripSystemFields(b)})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
  ncList(status?:string,take?:number,skip?:number){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,containmentActions:true,causes:true},orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  ncGet(id:string){return this.db.nonConformity.findUnique({where:{id},include:{actions:{include:{responsible:true}},epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,processus:true,fournisseur:true,containmentActions:{include:{responsable:true},orderBy:{date:'desc'}},causes:{orderBy:{createdAt:'asc'}},costs:{orderBy:{createdAt:'desc'}}}})}
 
@@ -802,7 +803,7 @@ import { saveFile } from '../documents/file-storage.util';
  riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:stripSystemFields(b)})}
  async riskCategoryDelete(id:string){const row=await this.db.riskCategory.delete({where:{id}});await writeAudit(this.db,'RISK_CATEGORY','DELETE',id,row,null);return row;}
 
- workUnitList(siteId?:string){return this.db.workUnit.findMany({where:siteId?{siteId}:undefined,include:{site:true},orderBy:{name:'asc'}})}
+ workUnitList(siteId?:string){return this.db.workUnit.findMany({where:{...(siteId?{siteId}:{}),...currentSiteScope()},include:{site:true},orderBy:{name:'asc'}})}
  workUnitCreate(b:any){return this.db.workUnit.create({data:stripSystemFields(b)})}
  workUnitUpdate(id:string,b:any){return this.db.workUnit.update({where:{id},data:stripSystemFields(b)})}
  async workUnitDelete(id:string){const row=await this.db.workUnit.update({where:{id},data:{active:false}});await writeAudit(this.db,'WORK_UNIT','UPDATE',id,null,row);return row;}
@@ -1318,7 +1319,7 @@ import { saveFile } from '../documents/file-storage.util';
   const criticite=Math.round((frequence*gravite*probabilite)/maitrise);
   return {frequence,gravite,probabilite,maitrise,criticite,significatif:criticite>=12};
  }
- environnementAspectList(){return this.db.environnementAspect.findMany({include:{site:true,processus:true,responsable:true,actions:true,risk:true},orderBy:{criticite:'desc'}})}
+ environnementAspectList(){return this.db.environnementAspect.findMany({where:currentSiteScope(),include:{site:true,processus:true,responsable:true,actions:true,risk:true},orderBy:{criticite:'desc'}})}
  environnementAspectGet(id:string){return this.db.environnementAspect.findUnique({where:{id},include:{site:true,processus:true,responsable:true,actions:{include:{responsible:true}},risk:true}})}
  environnementAspectCreate(b:any){return this.db.environnementAspect.create({data:{...stripSystemFields(b),...this.calculerAspect(b)}})}
  async environnementAspectUpdate(id:string,b:any){
@@ -1882,7 +1883,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentInclude = { categoryEq:true, site:true, workUnit:true, responsable:true, fournisseur:true,
   risks:{orderBy:{code:'desc' as const}}, nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}}, safetyEvents:{orderBy:{occurredAt:'desc' as const}},
   maintenancePlans:{where:{actif:true},orderBy:{dateProchaine:'asc' as const}}, controls:{orderBy:{dateProchainControle:'asc' as const}}, calibrations:{orderBy:{dateProchaineEtalonnage:'asc' as const}}, consignations:{where:{statut:'EN_COURS'},orderBy:{dateDebut:'desc' as const}} };
- equipmentList(siteId?:string,take?:number,skip?:number){return this.db.equipment.findMany({where:siteId?{siteId}:undefined,include:this.equipmentInclude,orderBy:{name:'asc'},take:take??500,skip:skip??0})}
+ equipmentList(siteId?:string,take?:number,skip?:number){return this.db.equipment.findMany({where:{...(siteId?{siteId}:{}),...currentSiteScope()},include:this.equipmentInclude,orderBy:{name:'asc'},take:take??500,skip:skip??0})}
  equipmentGet(id:string){return this.db.equipment.findUnique({where:{id},include:this.equipmentInclude})}
  async equipmentSettingsGet(){
   let s=await this.db.equipmentSettings.findFirst();
@@ -2153,7 +2154,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async equipmentConsignationDelete(id:string){const row=await this.db.equipmentConsignation.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CONSIGNATION','DELETE',id,row,null);return row;}
 
- events(take?:number,skip?:number,siteId?:string){return this.db.safetyEvent.findMany({where:siteId?{siteId}:undefined,include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'},take:take??500,skip:skip??0})}
+ events(take?:number,skip?:number,siteId?:string){return this.db.safetyEvent.findMany({where:{...(siteId?{siteId}:{}),...currentSiteScope()},include:{site:true,employee:true,enqueteur:true,risk:true,processus:true,fournisseur:true,actions:true},orderBy:{occurredAt:'desc'},take:take??500,skip:skip??0})}
  eventGet(id:string){return this.db.safetyEvent.findUnique({where:{id},include:{site:true,employee:true,enqueteur:true,risk:true,epi:true,epc:true,processus:true,fournisseur:true,nonConformity:true,actions:{include:{responsible:true}}}})}
  eventCreate(b:any){return this.db.safetyEvent.create({data:stripSystemFields(b)})}
  eventUpdate(id:string,b:any){return this.db.safetyEvent.update({where:{id},data:stripSystemFields(b)})}
@@ -2236,7 +2237,7 @@ import { saveFile } from '../documents/file-storage.util';
   };
  }
 
- processusList(siteId?:string){return this.db.processus.findMany({where:siteId?{siteId}:undefined,include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
+ processusList(siteId?:string){return this.db.processus.findMany({where:{...(siteId?{siteId}:{}),...currentSiteScope()},include:{pilote:true,suppleant:true,site:true,activities:{include:{racis:true}},exigences:true,trainings:true,objectifsQhse:true,documents:true,audits:true,_count:{select:{
    risks:{where:{status:'ACTIVE'}},
    actions:{where:{status:{not:'CLOSED'}}},
    nonConformities:{where:{status:'OPEN'}},
@@ -2366,7 +2367,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  async reclamationList(take?:number,skip?:number){
-  const list=await this.db.reclamation.findMany({include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:true},orderBy:{date:'desc'},take:take??500,skip:skip??0});
+  const list=await this.db.reclamation.findMany({where:currentSiteScope(),include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:true},orderBy:{date:'desc'},take:take??500,skip:skip??0});
   return list.map(r=>({...r,coutTotal:[r.coutRemboursement,r.coutRemplacement,r.coutTransport,r.coutMainOeuvre,r.coutAutres,r.actionCurativeCout].reduce((s:number,v)=>s+(v||0),0)}));
  }
  reclamationGet(id:string){return this.db.reclamation.findUnique({where:{id},include:{site:true,processus:true,fournisseur:true,nonConformity:true,actionCurativeResponsable:true,actions:{include:{responsible:true}}}})}
@@ -2609,7 +2610,7 @@ import { saveFile } from '../documents/file-storage.util';
 
  // Risques sanitaires — la criticité se recalcule à chaque écriture,
  // jamais ressaisie séparément par l'utilisateur.
- risqueSanitaireList(){return this.db.risqueSanitaire.findMany({include:{site:true,processus:true,responsable:true,expositions:true,actions:true},orderBy:{criticite:'desc'}})}
+ risqueSanitaireList(){return this.db.risqueSanitaire.findMany({where:currentSiteScope(),include:{site:true,processus:true,responsable:true,expositions:true,actions:true},orderBy:{criticite:'desc'}})}
  risqueSanitaireGet(id:string){return this.db.risqueSanitaire.findUnique({where:{id},include:{site:true,processus:true,responsable:true,expositions:{include:{employee:true}},actions:{include:{responsible:true}}}})}
  risqueSanitaireCreate(b:any){
   const gravite=Number(b.gravite)||1,probabilite=Number(b.probabilite)||1;
@@ -2633,7 +2634,7 @@ import { saveFile } from '../documents/file-storage.util';
   const count=facteurs.filter(f=>b[f]===true).length;
   return count>=6?'CRITIQUE':count>=4?'ELEVE':count>=2?'MODERE':'FAIBLE';
  }
- analyseErgonomiqueList(){return this.db.analyseErgonomique.findMany({include:{site:true,processus:true,evaluateur:true,tmsSignalements:true,actions:true},orderBy:{createdAt:'desc'}})}
+ analyseErgonomiqueList(){return this.db.analyseErgonomique.findMany({where:currentSiteScope(),include:{site:true,processus:true,evaluateur:true,tmsSignalements:true,actions:true},orderBy:{createdAt:'desc'}})}
  analyseErgonomiqueGet(id:string){return this.db.analyseErgonomique.findUnique({where:{id},include:{site:true,processus:true,evaluateur:true,tmsSignalements:{include:{employee:true}},actions:{include:{responsible:true}}}})}
  analyseErgonomiqueCreate(b:any){return this.db.analyseErgonomique.create({data:{...stripSystemFields(b),scoreErgonomique:this.calculerScoreErgonomique(b)}})}
  async analyseErgonomiqueUpdate(id:string,b:any){
@@ -2783,6 +2784,7 @@ import { saveFile } from '../documents/file-storage.util';
   const list=await this.db.regulatoryRequirement.findMany({where:{
    textId:filters?.textId||undefined, domainId:filters?.domainId||undefined, siteId:filters?.siteId||undefined,
    applicabilite:filters?.applicabilite||undefined, statutConformite:filters?.statutConformite||undefined,
+   ...currentSiteScope(),
   },include:this.regulatoryRequirementInclude,orderBy:{code:'asc'},take:take??500,skip:skip??0});
   return list.map(r=>({...r,evidences:this.regulatoryDecorateEvidences(r.evidences)}));
  }
@@ -3231,7 +3233,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  async objectifList(filters?:{famille?:string,statut?:string,responsableId?:string,siteId?:string,priorite?:string,archived?:string}){
-  const where:any={archivedAt:filters?.archived==='true'?{not:null}:null};
+  const where:any={archivedAt:filters?.archived==='true'?{not:null}:null,...currentSiteScope()};
   if(filters?.famille) where.famille=filters.famille;
   if(filters?.responsableId) where.responsableId=filters.responsableId;
   if(filters?.siteId) where.siteId=filters.siteId;
@@ -3722,7 +3724,7 @@ import { saveFile } from '../documents/file-storage.util';
  // ============================================================================
 
  rapportList(filters?:{statut?:string,siteId?:string}){
-  const where:any={};
+  const where:any={...currentSiteScope()};
   if(filters?.statut) where.statut=filters.statut;
   if(filters?.siteId) where.siteId=filters.siteId;
   return this.db.rapportQhse.findMany({where,orderBy:{createdAt:'desc'},include:{site:true,distributions:true}});

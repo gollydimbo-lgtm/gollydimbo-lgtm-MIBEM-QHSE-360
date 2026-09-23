@@ -6,6 +6,7 @@ import { existsSync, unlinkSync } from 'fs';
 import { stripSystemFields } from '../common/strip-system-fields';
 import { randomUUID } from 'crypto';
 import { saveFile } from './file-storage.util';
+import { currentSiteScope } from '../common/audit-context';
 
 const DOC_INCLUDE_LIST = {
   versions: { orderBy: { version: 'desc' as const } },
@@ -69,7 +70,7 @@ export class DocumentsService {
       const contains = { contains: f.q, mode: 'insensitive' as const };
       where.OR = [{ title: contains }, { code: contains }, { description: contains }, { motsCles: contains }];
     }
-    return this.db.document.findMany({ where, include: DOC_INCLUDE_LIST, orderBy: { updatedAt: 'desc' } });
+    return this.db.document.findMany({ where: { ...where, ...currentSiteScope() }, include: DOC_INCLUDE_LIST, orderBy: { updatedAt: 'desc' } });
   }
 
   groups() {
