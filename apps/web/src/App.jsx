@@ -360,6 +360,27 @@ function StatusChip({ statut }) {
 // personne ne clique « Soumettre », validationStatus reste 'APPROUVEE'
 // (comportement historique inchangé) — voir business.service.ts.
 const VALIDATION_STATUS_LABELS = { APPROUVEE: 'Validée', SOUMISE: 'Soumise à validation', REJETEE: 'Rejetée' };
+// Historique des modifications visible (audit finding #24) : NC, CAPA,
+// Risques, Audits, Accidents n'affichaient aucune trace de leurs
+// changements de statut/valeurs — l'écriture existait déjà (writeAudit,
+// exposée par GET /audit-logs) mais rien ne l'affichait pour ces modules
+// (contrairement à Documentation/Objectifs/Équipements). Composant
+// générique réutilisé sur les 5 détails concernés.
+function HistoryPanel({ module, entityId }) {
+  const C = useTheme();
+  const historyQ = useCollection(`/audit-logs?module=${module}&entityId=${entityId}`);
+  const actionLabel = { CREATE: 'Création', UPDATE: 'Modification', DELETE: 'Suppression' };
+  return (
+    <div className="mb-5">
+      <p className="text-sm font-semibold mb-2" style={{ color: C.text }}>Historique des modifications {historyQ.data ? `(${historyQ.data.length})` : ''}</p>
+      {historyQ.loading ? <LoadingPanel /> : (historyQ.data || []).length
+        ? <DataTable columns={['Date', 'Utilisateur', 'Action']}
+            rows={historyQ.data.map((l) => [new Date(l.createdAt).toLocaleString('fr-FR'), l.user ? `${l.user.firstName} ${l.user.lastName}` : 'Système', actionLabel[l.action] || l.action])} />
+        : <p className="text-xs" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
+    </div>
+  );
+}
+
 function ValidationWorkflowPanel({ item, endpointBase, onChanged }) {
   const C = useTheme();
   const [busy, setBusy] = useState(false);
@@ -907,6 +928,7 @@ function AuditDetailModal({ audit, onClose, onChanged, onEdit }) {
       )}
 
       <CapaLinksPanel sourceModule="AUDIT" sourceEntityId={audit.id} prefill={{ title: `Traiter les écarts — ${audit.title}`, source: 'Audit', processusId: audit.processusId }} />
+      <HistoryPanel module="AUDIT" entityId={audit.id} />
       <DocumentLinksPanel sourceModule="AUDIT" sourceEntityId={audit.id} />
 
       {showReport && detailQ.data && (
@@ -6324,6 +6346,7 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
         </div>
 
         <CapaLinksPanel sourceModule="SAFETY_EVENT" sourceEntityId={ev.id} prefill={{ title: `Action — ${ev.title}`, source: 'Accident / incident', safetyEventId: ev.id }} />
+        <HistoryPanel module="SAFETY_EVENT" entityId={ev.id} />
 
         <AttachmentsPanel ownerType="SAFETY_EVENT" ownerId={ev.id} />
 
@@ -7423,6 +7446,7 @@ function RiskDetailModal({ risk, onClose, onChanged, onEdit }) {
       </div>
 
       <ValidationWorkflowPanel item={d} endpointBase={`/business/risks/${d.id}`} onChanged={detailQ.reload} />
+      <HistoryPanel module="RISK" entityId={d.id} />
       <CapaLinksPanel sourceModule="RISK" sourceEntityId={d.id} prefill={{ title: `Traiter le risque — ${d.hazard}`, source: 'Registre des risques', riskId: d.id, criticite: d.grossLevel }} />
 
       <div className="flex items-center justify-between mb-2">
@@ -8872,6 +8896,7 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
       </div>
 
       <ValidationWorkflowPanel item={d} endpointBase={`/business/non-conformities/${d.id}`} onChanged={detailQ.reload} />
+      <HistoryPanel module="NC" entityId={d.id} />
       <CapaLinksPanel sourceModule="NON_CONFORMITY" sourceEntityId={d.id} prefill={{ title: `Traiter — ${d.title}`, source: 'Non-conformité', nonConformityId: d.id, criticite: d.criticiteNiveau }} />
       <DocumentLinksPanel sourceModule="NON_CONFORMITY" sourceEntityId={d.id} />
 
@@ -9328,6 +9353,7 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
         </div>
 
         <ValidationWorkflowPanel item={d} endpointBase={`/business/actions/${d.id}`} onChanged={detailQ.reload} />
+        <HistoryPanel module="ACTION" entityId={d.id} />
 
         {(d.links || []).length > 0 && (
           <div className="mb-5">
