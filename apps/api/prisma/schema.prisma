@@ -160,6 +160,12 @@ model User {
   auditSignatures AuditSignature[]
   nonConformitiesDeclarees NonConformity[] @relation("NcDeclarant")
   nonConformitiesResponsable NonConformity[] @relation("NcResponsible")
+  nonConformitiesValidationDemandee NonConformity[] @relation("NcValidationDemandeePar")
+  nonConformitiesValidees NonConformity[] @relation("NcValidePar")
+  actionsValidationDemandee Action[] @relation("ActionValidationDemandeePar")
+  actionsValidees Action[] @relation("ActionValidePar")
+  risksValidationDemandee Risk[] @relation("RiskValidationDemandeePar")
+  risksValidees Risk[] @relation("RiskValidePar")
   ncContainmentActionsResponsable NcContainmentAction[]
   actionExtensionsDemandees ActionExtension[] @relation("ActionExtensionDemandeur")
   actionExtensionsValidees ActionExtension[] @relation("ActionExtensionValidateur")
