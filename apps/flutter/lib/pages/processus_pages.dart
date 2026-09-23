@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 const Map<String, String> kProcessTypeLabels = {
   'STRATEGIQUE': 'Stratégique', 'OPERATIONNEL': 'Opérationnel', 'SUPPORT': 'Support', 'AUTRE': 'Autre',
@@ -478,6 +479,7 @@ class _ProcessusHomeState extends State<ProcessusHome> {
   List items = [];
   List links = [];
   bool loading = true;
+  Object? error;
   int tabIndex = 0;
   bool linkMode = false;
   String? linkSourceId;
@@ -486,11 +488,11 @@ class _ProcessusHomeState extends State<ProcessusHome> {
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       items = List.from(await api.get('/business/processus'));
       links = List.from(await api.get('/business/processus-links'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -541,6 +543,8 @@ class _ProcessusHomeState extends State<ProcessusHome> {
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : IndexedStack(index: tabIndex, children: [
                 // Tableau de bord
                 RefreshIndicator(

@@ -5,6 +5,7 @@ import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
+import 'load_error_view.dart';
 
 Color _niveauColor(String? n) => {
       'CRITIQUE': QhseColors.red,
@@ -41,6 +42,7 @@ class _RisksPageState extends State<RisksPage> {
   List items = [], categories = [], workUnits = [], alertes = [], top10 = [];
   Map dashboard = {};
   bool loading = true;
+  Object? error;
   final searchCtrl = TextEditingController();
   List? searchResults;
   int _searchToken = 0;
@@ -49,7 +51,7 @@ class _RisksPageState extends State<RisksPage> {
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       items = List.from(await api.get('/business/risks'));
       dashboard = Map.from(await api.get('/business/risk-dashboard'));
@@ -57,7 +59,7 @@ class _RisksPageState extends State<RisksPage> {
       categories = List.from(await api.get('/business/risk-categories'));
       workUnits = List.from(await api.get('/business/work-units'));
       top10 = List.from(await api.get('/business/risk-top10'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -94,6 +96,8 @@ class _RisksPageState extends State<RisksPage> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? LoadErrorView(error: error, onRetry: load)
           : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildHierarchisation(c), _buildCartographie(c), _buildTop10(c), _buildParametrage(c)]),
     ),
   );

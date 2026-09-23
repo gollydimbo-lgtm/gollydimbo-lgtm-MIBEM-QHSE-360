@@ -7,6 +7,7 @@ import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'document_link_widget.dart';
+import 'load_error_view.dart';
 
 const _auditStatusLabels = {
   'DRAFT': 'Brouillon', 'PLANNED': 'Planifié', 'TO_PREPARE': 'À préparer', 'PREPARING': 'Préparation en cours',
@@ -42,18 +43,19 @@ class _AuditsPageState extends State<AuditsPage> {
   List ncRecurrentes = [];
   Map? synthese;
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       items = List.from(await api.get('/business/audits'));
       dashboard = Map.from(await api.get('/business/audit-dashboard'));
       trends = List.from(await api.get('/business/audit-trends'));
       ncRecurrentes = List.from(await api.get('/business/audit-nc-recurrentes'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -78,7 +80,7 @@ class _AuditsPageState extends State<AuditsPage> {
         icon: const Icon(Icons.add),
         label: const Text('Planifier'),
       ),
-      body: loading ? const Center(child: CircularProgressIndicator()) : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildAnalyses(c)]),
+      body: loading ? const Center(child: CircularProgressIndicator()) : error != null ? LoadErrorView(error: error, onRetry: load) : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildAnalyses(c)]),
     ),
   );
 
@@ -633,13 +635,14 @@ class _AuditeursPageState extends State<AuditeursPage> {
   final api = Api();
   List items = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { items = List.from(await api.get('/business/auditeurs')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { items = List.from(await api.get('/business/auditeurs')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -683,6 +686,8 @@ class _AuditeursPageState extends State<AuditeursPage> {
     appBar: AppBar(title: const Text('Auditeurs')),
     body: loading
         ? const Center(child: CircularProgressIndicator())
+        : error != null
+            ? LoadErrorView(error: error, onRetry: load)
         : RefreshIndicator(
             onRefresh: load,
             child: items.isEmpty
@@ -733,13 +738,14 @@ class _AuditTypesTabState extends State<_AuditTypesTab> {
   final api = Api();
   List items = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { items = List.from(await api.get('/business/audit-types')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { items = List.from(await api.get('/business/audit-types')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -765,6 +771,8 @@ class _AuditTypesTabState extends State<_AuditTypesTab> {
     floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
     body: loading
         ? const Center(child: CircularProgressIndicator())
+        : error != null
+            ? LoadErrorView(error: error, onRetry: load)
         : RefreshIndicator(
             onRefresh: load,
             child: ListView.builder(
@@ -793,13 +801,14 @@ class _AuditReferentialsTabState extends State<_AuditReferentialsTab> {
   final api = Api();
   List items = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { items = List.from(await api.get('/business/audit-referentials')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { items = List.from(await api.get('/business/audit-referentials')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -829,6 +838,8 @@ class _AuditReferentialsTabState extends State<_AuditReferentialsTab> {
     floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
     body: loading
         ? const Center(child: CircularProgressIndicator())
+        : error != null
+            ? LoadErrorView(error: error, onRetry: load)
         : RefreshIndicator(
             onRefresh: load,
             child: ListView.builder(
@@ -857,13 +868,14 @@ class _AuditChecklistsTabState extends State<_AuditChecklistsTab> {
   final api = Api();
   List items = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { items = List.from(await api.get('/business/audit-checklists')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { items = List.from(await api.get('/business/audit-checklists')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -916,6 +928,8 @@ class _AuditChecklistsTabState extends State<_AuditChecklistsTab> {
     floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
     body: loading
         ? const Center(child: CircularProgressIndicator())
+        : error != null
+            ? LoadErrorView(error: error, onRetry: load)
         : RefreshIndicator(
             onRefresh: load,
             child: ListView.builder(
@@ -948,18 +962,19 @@ class _AuditProgramTabState extends State<_AuditProgramTab> {
   final api = Api();
   List items = [], types = [], workUnits = [], users = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       items = List.from(await api.get('/business/audit-programs'));
       types = List.from(await api.get('/business/audit-types'));
       workUnits = List.from(await api.get('/business/work-units'));
       users = List.from(await api.get('/users'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -1019,6 +1034,8 @@ class _AuditProgramTabState extends State<_AuditProgramTab> {
     floatingActionButton: FloatingActionButton(onPressed: addDialog, child: const Icon(Icons.add)),
     body: loading
         ? const Center(child: CircularProgressIndicator())
+        : error != null
+            ? LoadErrorView(error: error, onRetry: load)
         : RefreshIndicator(
             onRefresh: load,
             child: items.isEmpty

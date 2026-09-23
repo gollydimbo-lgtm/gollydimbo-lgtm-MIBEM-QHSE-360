@@ -3,6 +3,7 @@ import '../services/api.dart';
 import '../theme.dart';
 import 'safety_talk_detail_page.dart';
 import 'safety_talk_form_page.dart';
+import 'load_error_view.dart';
 
 const statusLabels = {
   'DRAFT': 'Brouillon',
@@ -83,16 +84,17 @@ class _OverviewTabState extends State<_OverviewTab> {
   Map dash = {};
   List recommendations = [];
   bool loading = true, refreshingReco = false;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       dash = Map.from(await api.get('/safety-talks/dashboard'));
       recommendations = List.from(await api.get('/safety-talks/recommendations'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -131,6 +133,7 @@ class _OverviewTabState extends State<_OverviewTab> {
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     int n(String k) => dash[k] is num ? (dash[k] as num).toInt() : 0;
     return RefreshIndicator(
       onRefresh: load,
@@ -239,14 +242,15 @@ class _SeancesTabState extends State<_SeancesTab> {
   final api = Api();
   List talks = [];
   bool loading = true;
+  Object? error;
   String? statusFilter;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { talks = List.from(await api.get('/safety-talks')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { talks = List.from(await api.get('/safety-talks')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -266,6 +270,8 @@ class _SeancesTabState extends State<_SeancesTab> {
       Expanded(
         child: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : RefreshIndicator(
                 onRefresh: load,
                 child: _filtered.isEmpty
@@ -311,19 +317,21 @@ class _MatrixTabState extends State<_MatrixTab> {
   final api = Api();
   List rows = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { rows = List.from(await api.get('/safety-talks/matrice')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { rows = List.from(await api.get('/safety-talks/matrice')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     if (rows.isEmpty) {
       return RefreshIndicator(onRefresh: load, child: ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune donnée')))]));
     }

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 const Map<String, String> kDomainLabels = {
   'QUALITE': 'Qualité (centré produit/ligne/lot)',
@@ -165,6 +166,7 @@ class _QualityHomeState extends State<QualityHome> {
   List schedules = [];
   Map<String, dynamic> buckets = {'overdue': [], 'dueSoon': [], 'upcoming': []};
   bool loading = true;
+  Object? error;
   String domainFilter = '';
   int tabIndex = 0;
   bool generatingId = false;
@@ -173,13 +175,13 @@ class _QualityHomeState extends State<QualityHome> {
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       controls = List.from(await api.get('/quality/controls'));
       types = List.from(await api.get('/quality/types'));
       schedules = List.from(await api.get('/quality/schedules'));
       buckets = Map<String, dynamic>.from(await api.get('/quality/schedules-buckets'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -312,6 +314,8 @@ class _QualityHomeState extends State<QualityHome> {
             : FloatingActionButton.extended(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NewControlPage())).then((_) => load()), icon: const Icon(Icons.add), label: const Text('Nouveau contrôle')),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : IndexedStack(index: tabIndex, children: [
                 // Tableau de bord
                 RefreshIndicator(

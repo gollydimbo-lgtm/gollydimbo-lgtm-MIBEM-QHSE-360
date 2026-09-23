@@ -8,6 +8,7 @@ import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'document_link_widget.dart';
 import 'attachments_widget.dart';
+import 'load_error_view.dart';
 
 const _ncStatusLabels = {'OPEN': 'Ouverte', 'IN_PROGRESS': 'En cours', 'CLOSED': 'Clôturée'};
 const _ncCriticiteLabels = {'MINEURE': 'Mineure', 'MODEREE': 'Modérée', 'MAJEURE': 'Majeure', 'CRITIQUE': 'Critique'};
@@ -32,6 +33,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   Map? syntheseDirection;
   bool syntheseLoading = false;
   bool loading = true;
+  Object? error;
   String? filter;
   bool multiSelectMode = false;
   Set<String> selectedIds = {};
@@ -52,7 +54,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
       }[n] ?? QhseColors.textSecondary;
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       final q = filter != null ? '?status=$filter' : '';
       items = List.from(await api.get('/business/non-conformities$q'));
@@ -61,7 +63,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
       trends = List.from(await api.get('/business/nc-trends'));
       ncSettings = Map.from(await api.get('/business/nc-settings'));
       alertes = List.from(await api.get('/business/nc-alertes'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -149,6 +151,8 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
             ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? LoadErrorView(error: error, onRetry: load)
           : TabBarView(children: [_buildRegistre(c), _buildRecurrence(), _buildAnalyses()]),
     ),
   );
@@ -491,7 +495,7 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
   void initState() { super.initState(); load(); loadSuggestions(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try { nc = Map.from(await api.get('/business/non-conformities/${widget.ncId}')); }
     catch (e) { error = '$e'; }
     setState(() => loading = false);
@@ -501,7 +505,7 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
     try {
       final r = await api.post('/recommendations/suggest', {'title': nc?['title'] ?? '', 'description': nc?['description'] ?? ''});
       suggestions = List.from(r['suggestions'] ?? []);
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loadingSuggestions = false);
   }
 

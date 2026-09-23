@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 // ============================================================================
 // ÉQUIPEMENTS — module terrain + gestion (Phase 4B puis extension parité
@@ -446,12 +447,13 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
   Map? stats;
   List users = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       final results = await Future.wait([
         api.get('/business/equipment-maintenance-plans?equipmentId=${widget.equipmentId}'),
@@ -463,7 +465,7 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
       records = List.from(results[1]);
       stats = Map.from(results[2]);
       users = List.from(results[3]);
-    } catch (_) {}
+    } catch (e) { error = e; }
     if (mounted) setState(() => loading = false);
   }
 
@@ -606,6 +608,7 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     final s = stats;
     return RefreshIndicator(
       onRefresh: load,
@@ -657,14 +660,15 @@ class _EquipmentControlsTabState extends State<_EquipmentControlsTab> {
   final api = Api();
   List controls = [];
   bool loading = true;
+  Object? error;
   String? genId;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { controls = List.from(await api.get('/business/equipment-controls?equipmentId=${widget.equipmentId}')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { controls = List.from(await api.get('/business/equipment-controls?equipmentId=${widget.equipmentId}')); } catch (e) { error = e; }
     if (mounted) setState(() => loading = false);
   }
 
@@ -685,6 +689,7 @@ class _EquipmentControlsTabState extends State<_EquipmentControlsTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -722,14 +727,15 @@ class _EquipmentCalibrationsTabState extends State<_EquipmentCalibrationsTab> {
   final api = Api();
   List calibrations = [];
   bool loading = true;
+  Object? error;
   String? genId;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { calibrations = List.from(await api.get('/business/equipment-calibrations?equipmentId=${widget.equipmentId}')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { calibrations = List.from(await api.get('/business/equipment-calibrations?equipmentId=${widget.equipmentId}')); } catch (e) { error = e; }
     if (mounted) setState(() => loading = false);
   }
 
@@ -809,6 +815,7 @@ class _EquipmentCalibrationsTabState extends State<_EquipmentCalibrationsTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -847,13 +854,14 @@ class _EquipmentConsignationsTabState extends State<_EquipmentConsignationsTab> 
   List consignations = [];
   List users = [];
   bool loading = true;
+  Object? error;
   String? busyId;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       final results = await Future.wait([
         api.get('/business/equipment-consignations?equipmentId=${widget.equipmentId}'),
@@ -861,7 +869,7 @@ class _EquipmentConsignationsTabState extends State<_EquipmentConsignationsTab> 
       ]);
       consignations = List.from(results[0]);
       users = List.from(results[1]);
-    } catch (_) {}
+    } catch (e) { error = e; }
     if (mounted) setState(() => loading = false);
   }
 
@@ -931,6 +939,7 @@ class _EquipmentConsignationsTabState extends State<_EquipmentConsignationsTab> 
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(16), children: [

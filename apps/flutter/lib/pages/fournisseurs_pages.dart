@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'capa_link_widget.dart';
+import 'load_error_view.dart';
 
 const Map<String, String> kFournisseurStatutLabels = {
   'PROSPECT': 'Prospect', 'EN_QUALIFICATION': 'En qualification', 'EN_ATTENTE_HOMOLOGATION': "En attente d'homologation",
@@ -28,19 +29,20 @@ class _FournisseursHomeState extends State<FournisseursHome> {
   List alertes = [];
   List matrice = [];
   bool loading = true;
+  Object? error;
   int tabIndex = 0;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       items = List.from(await api.get('/business/fournisseurs'));
       classement = Map.from(await api.get('/business/fournisseurs-classement'));
       alertes = List.from(await api.get('/business/fournisseurs-alertes'));
       matrice = List.from(await api.get('/business/fournisseurs-matrice-risque'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -64,6 +66,8 @@ class _FournisseursHomeState extends State<FournisseursHome> {
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : IndexedStack(index: tabIndex, children: [
                 RefreshIndicator(
                   onRefresh: load,

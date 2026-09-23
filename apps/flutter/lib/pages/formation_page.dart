@@ -3,6 +3,7 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
+import 'load_error_view.dart';
 
 // ============================================================================
 // FORMATION & COMPÉTENCES — Phase 1 (parité avec FormationPage côté web) :
@@ -61,13 +62,14 @@ class _FormationPageState extends State<FormationPage> {
   Map matrice = {'collaborateurs': [], 'tauxCouverture': null, 'competencesCritiquesInsuffisantes': 0};
   Map accueilSecurite = {'collaborateursActifs': 0, 'collaborateursCouverts': 0, 'tauxAccueilSecurite': null, 'collaborateursNonCouverts': []};
   bool loading = true;
+  Object? error;
   bool detecting = false;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       trainings = List.from(await api.get('/business/trainings'));
       habilitations = List.from(await api.get('/business/habilitations'));
@@ -77,7 +79,7 @@ class _FormationPageState extends State<FormationPage> {
       matrice = Map.from(await api.get('/business/competence-matrice'));
       formationsAEvaluer = List.from(await api.get('/business/formations-a-evaluer-efficacite'));
       accueilSecurite = Map.from(await api.get('/business/accueil-securite-stats'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     if (mounted) setState(() => loading = false);
   }
 
@@ -150,6 +152,8 @@ class _FormationPageState extends State<FormationPage> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? LoadErrorView(error: error, onRetry: load)
           : Column(children: [_buildKpis(c), Expanded(child: TabBarView(children: [_buildPlan(c), _buildHabilitations(c), _buildCompetences(c), _buildEfficacite(c)]))]),
       floatingActionButton: Builder(builder: (bc) {
         final tabIndex = DefaultTabController.of(bc).index;

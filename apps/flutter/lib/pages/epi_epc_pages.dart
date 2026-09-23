@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 // --- Catégories (réutilisé pour EPI et EPC — une seule entrée : le nom) ---
 class CategoryListTab extends StatefulWidget {
@@ -19,12 +20,14 @@ class _CategoryListTabState extends State<CategoryListTab> {
   final api = Api();
   List items = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    try { items = List.from(await api.get(widget.endpoint)); } catch (_) {}
+    error = null;
+    try { items = List.from(await api.get(widget.endpoint)); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -67,6 +70,7 @@ class _CategoryListTabState extends State<CategoryListTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -93,12 +97,14 @@ class _EmployeeTabState extends State<EmployeeTab> {
   final api = Api();
   List items = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    try { items = List.from(await api.get('/epi/employees')); } catch (_) {}
+    error = null;
+    try { items = List.from(await api.get('/epi/employees')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -154,6 +160,7 @@ class _EmployeeTabState extends State<EmployeeTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -186,15 +193,17 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
   List items = [];
   List categories = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
+    error = null;
     try {
       items = List.from(await api.get('/epi/epc'));
       categories = List.from(await api.get('/epi/epc-categories'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -262,6 +271,7 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -459,17 +469,19 @@ class _InspectionsTabState extends State<InspectionsTab> {
   final api = Api();
   List epiInsp = [], epcInsp = [], epis = [], epcs = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
+    error = null;
     try {
       epiInsp = List.from(await api.get('/epi/epi-inspections'));
       epcInsp = List.from(await api.get('/epi/epc-inspections'));
       epis = List.from(await api.get('/epi/catalog'));
       epcs = List.from(await api.get('/epi/epc'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -577,6 +589,7 @@ class _InspectionsTabState extends State<InspectionsTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -646,15 +659,17 @@ class _EpcMaintenanceTabState extends State<EpcMaintenanceTab> {
   final api = Api();
   List items = [], epcs = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
+    error = null;
     try {
       items = List.from(await api.get('/epi/maintenance'));
       epcs = List.from(await api.get('/epi/epc'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -724,6 +739,7 @@ class _EpcMaintenanceTabState extends State<EpcMaintenanceTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -754,16 +770,18 @@ class _MatrixTabState extends State<MatrixTab> {
   final api = Api();
   List items = [], epis = [], epcs = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
+    error = null;
     try {
       items = List.from(await api.get('/epi/job-risk-protection'));
       epis = List.from(await api.get('/epi/catalog'));
       epcs = List.from(await api.get('/epi/epc'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -829,6 +847,7 @@ class _MatrixTabState extends State<MatrixTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -921,16 +940,18 @@ class _AttributionTabState extends State<AttributionTab> {
   final api = Api();
   List items = [], epis = [], employees = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
+    error = null;
     try {
       items = List.from(await api.get('/epi/assignments'));
       epis = List.from(await api.get('/epi/catalog'));
       employees = List.from(await api.get('/epi/employees'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -1009,6 +1030,7 @@ class _AttributionTabState extends State<AttributionTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -1038,12 +1060,14 @@ class _RenewalBucketsTabState extends State<RenewalBucketsTab> {
   final api = Api();
   Map<String, dynamic> buckets = {'expired': [], 'within30': [], 'within60': [], 'within90': []};
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    try { buckets = Map<String, dynamic>.from(await api.get('/epi/renewal-buckets')); } catch (_) {}
+    error = null;
+    try { buckets = Map<String, dynamic>.from(await api.get('/epi/renewal-buckets')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -1065,6 +1089,7 @@ class _RenewalBucketsTabState extends State<RenewalBucketsTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(

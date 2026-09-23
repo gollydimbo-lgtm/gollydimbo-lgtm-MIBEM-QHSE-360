@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 Color _niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
 Color _criticiteColor(int c) => c >= 12 ? QhseColors.red : c >= 6 ? QhseColors.amber : QhseColors.green;
@@ -27,12 +28,13 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
   List releves = [], aspects = [], veille = [], produits = [], indicateurs = [], alertes = [], tendances = [];
   Map dashboard = {};
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       releves = List.from(await api.get('/business/environment'));
       aspects = List.from(await api.get('/business/environnement-aspects'));
@@ -42,7 +44,7 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
       veille = List.from(await api.get('/business/veille-reglementaire'));
       produits = List.from(await api.get('/business/produits-chimiques'));
       indicateurs = List.from(await api.get('/business/indicateurs-qualite?domaine=ENVIRONNEMENT'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -61,6 +63,8 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : TabBarView(children: [
                 _buildApercu(c),
                 _buildReleves(c),

@@ -3,6 +3,7 @@ import '../services/api.dart';
 import '../theme.dart';
 import 'document_detail_page.dart';
 import 'document_link_widget.dart';
+import 'load_error_view.dart';
 
 const _libStatusLabels = {
   'DRAFT': 'Brouillon', 'REVIEW': 'En vérification', 'APPROVED': 'Approuvé',
@@ -57,19 +58,21 @@ class _GedOverviewTabState extends State<_GedOverviewTab> {
   final api = Api();
   Map dash = {};
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { dash = Map.from(await api.get('/documents/dashboard')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { dash = Map.from(await api.get('/documents/dashboard')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     int n(String k) => dash[k] is num ? (dash[k] as num).toInt() : 0;
     final repartition = List.from(dash['repartitionParStatut'] ?? []);
     return RefreshIndicator(
@@ -198,13 +201,14 @@ class _GedToTreatTabState extends State<_GedToTreatTab> {
   final api = Api();
   Map data = {};
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { data = Map.from(await api.get('/documents/a-traiter')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { data = Map.from(await api.get('/documents/a-traiter')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -215,6 +219,7 @@ class _GedToTreatTabState extends State<_GedToTreatTab> {
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
@@ -252,19 +257,21 @@ class _GedMatrixTabState extends State<_GedMatrixTab> {
   final api = Api();
   List rows = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
-    try { rows = List.from(await api.get('/documents/matrice')); } catch (_) {}
+    setState(() { loading = true; error = null; });
+    try { rows = List.from(await api.get('/documents/matrice')); } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return LoadErrorView(error: error, onRetry: load);
     if (rows.isEmpty) {
       return RefreshIndicator(onRefresh: load, child: ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune donnée')))]));
     }

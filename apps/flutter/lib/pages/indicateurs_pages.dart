@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 Map<String, dynamic> indicateurStatus(double? actuel, double? cible, bool sensInverse, double? seuilVert, double? seuilOrange) {
   if (actuel == null) return {'color': null, 'label': '—'};
@@ -30,6 +31,7 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
   List autoItems = [];
   Map indiceGlobal = {'indice': null, 'detail': []};
   bool loading = true;
+  Object? error;
   bool showPonderation = false;
   String? categorieFilter;
 
@@ -37,12 +39,12 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       items = List.from(await api.get('/business/indicateurs-qualite'));
       autoItems = List.from(await api.get('/business/indicateurs-auto-compare'));
       indiceGlobal = Map.from(await api.get('/business/indice-global-qualite'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -243,6 +245,8 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
       floatingActionButton: FloatingActionButton.extended(onPressed: () => _addOrEdit(), icon: const Icon(Icons.add), label: const Text('Indicateur')),
       body: loading
           ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? LoadErrorView(error: error, onRetry: load)
           : RefreshIndicator(
               onRefresh: load,
               child: ListView(padding: const EdgeInsets.all(12), children: [

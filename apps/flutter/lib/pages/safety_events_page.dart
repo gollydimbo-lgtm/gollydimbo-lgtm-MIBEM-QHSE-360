@@ -5,6 +5,7 @@ import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'attachments_widget.dart';
+import 'load_error_view.dart';
 
 const _types = {
   'ACCIDENT': ('Accident', Icons.local_hospital, Colors.red),
@@ -40,14 +41,14 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       events = List.from(await api.get('/business/safety-events'));
       stats = Map.from(await api.get('/business/safety-events-stats'));
       alertes = List.from(await api.get('/business/safety-events-alertes'));
       recidives = Map.from(await api.get('/business/safety-events-recidives'));
       workedHours = List.from(await api.get('/business/worked-hours'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -125,6 +126,8 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : IndexedStack(index: tabIndex, children: [
                 RefreshIndicator(
                   onRefresh: load,

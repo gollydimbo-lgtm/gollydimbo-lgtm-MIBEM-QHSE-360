@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 Color _niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
 Color _criticiteColor(int c) => c >= 12 ? QhseColors.red : c >= 6 ? QhseColors.amber : QhseColors.green;
@@ -21,12 +22,13 @@ class _HygieneHomeState extends State<HygieneHome> with SingleTickerProviderStat
   List visites = [], risques = [], ergonomies = [], tms = [], alertes = [], facteurs = [], expositions = [];
   Map indice = {'indice': null, 'detail': []};
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       visites = List.from(await api.get('/business/visites-medicales'));
       risques = List.from(await api.get('/business/risques-sanitaires'));
@@ -36,7 +38,7 @@ class _HygieneHomeState extends State<HygieneHome> with SingleTickerProviderStat
       indice = Map.from(await api.get('/business/hygiene-indice-global'));
       facteurs = List.from(await api.get('/business/penibilite-facteurs'));
       expositions = List.from(await api.get('/business/penibilite-expositions'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -97,6 +99,8 @@ class _HygieneHomeState extends State<HygieneHome> with SingleTickerProviderStat
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : TabBarView(children: [
                 _buildMedecine(c),
                 _buildRisques(c),

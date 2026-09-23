@@ -5,6 +5,7 @@ import '../services/sync_queue.dart';
 import '../main.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
+import 'load_error_view.dart';
 
 const _capaStatusLabels = {
   'DRAFT': 'Brouillon', 'TO_ANALYZE': 'À analyser', 'PLANNED': 'Planifiée', 'ASSIGNED': 'Assignée',
@@ -42,12 +43,13 @@ class _ActionsPageState extends State<ActionsPage> {
   List trends = [];
   List alertes = [];
   bool loading = true;
+  Object? error;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       final all = List.from(await api.get('/business/actions'));
       items = all.where((a) => a['parentActionId'] == null).toList();
@@ -55,7 +57,7 @@ class _ActionsPageState extends State<ActionsPage> {
       score = Map.from(await api.get('/business/action-performance-score'));
       trends = List.from(await api.get('/business/action-trends'));
       alertes = List.from(await api.get('/business/action-alertes'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -80,6 +82,8 @@ class _ActionsPageState extends State<ActionsPage> {
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : TabBarView(children: [
                 _buildList(c, items, now, empty: 'Aucune action'),
                 _buildList(c, critiques, now, empty: 'Aucune action critique — tout est sous contrôle'),

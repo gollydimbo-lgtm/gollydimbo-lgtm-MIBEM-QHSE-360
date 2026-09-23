@@ -5,6 +5,7 @@ import 'attachment_helpers.dart';
 import 'environnement_pages.dart';
 import 'equipment_page.dart';
 import 'haccp_page.dart';
+import 'load_error_view.dart';
 
 // -------------------- Hub --------------------
 class OtherModulesPage extends StatelessWidget {
@@ -48,8 +49,10 @@ class TrainingsPage extends StatefulWidget {
 class _TrainingsPageState extends State<TrainingsPage> {
   final api = Api();
   List items = []; bool loading = true;
+  Object? error;
   @override void initState() { super.initState(); load(); }
-  Future<void> load() async { try { items = List.from(await api.get('/business/trainings')); } catch (_) {} setState(() => loading = false); }
+  Future<void> load() async { error = null;
+    try { items = List.from(await api.get('/business/trainings')); } catch (e) { error = e; } setState(() => loading = false); }
 
   Future<void> create() async {
     final title = TextEditingController(), trainer = TextEditingController();
@@ -82,7 +85,7 @@ class _TrainingsPageState extends State<TrainingsPage> {
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Formations')),
     floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: const Text('Planifier')),
-    body: loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
+    body: loading ? const Center(child: CircularProgressIndicator()) : error != null ? LoadErrorView(error: error, onRetry: load) : RefreshIndicator(
       onRefresh: load,
       child: items.isEmpty
           ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune formation planifiée')))])

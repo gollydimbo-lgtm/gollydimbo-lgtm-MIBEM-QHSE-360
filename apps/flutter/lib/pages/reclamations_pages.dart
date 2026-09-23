@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import 'load_error_view.dart';
 
 const Map<String, String> kCanalLabels = {
   'TELEPHONE': 'Téléphone', 'EMAIL': 'Email', 'SITE_WEB': 'Site web', 'RESEAUX_SOCIAUX': 'Réseaux sociaux',
@@ -122,19 +123,20 @@ class _ReclamationsHomeState extends State<ReclamationsHome> {
   List alertes = [];
   Map score = {'score': null, 'detail': []};
   bool loading = true;
+  Object? error;
   int tabIndex = 0;
 
   @override
   void initState() { super.initState(); load(); }
 
   Future<void> load() async {
-    setState(() => loading = true);
+    setState(() { loading = true; error = null; });
     try {
       items = List.from(await api.get('/business/reclamations'));
       stats = Map.from(await api.get('/business/reclamations-stats'));
       alertes = List.from(await api.get('/business/reclamations-alertes'));
       score = Map.from(await api.get('/business/reclamations-score'));
-    } catch (_) {}
+    } catch (e) { error = e; }
     setState(() => loading = false);
   }
 
@@ -156,6 +158,8 @@ class _ReclamationsHomeState extends State<ReclamationsHome> {
         floatingActionButton: FloatingActionButton.extended(onPressed: () => showReclamationDialog(context, api, onSaved: load), icon: const Icon(Icons.add), label: const Text('Réclamation')),
         body: loading
             ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? LoadErrorView(error: error, onRetry: load)
             : IndexedStack(index: tabIndex, children: [
                 // Tableau de bord
                 RefreshIndicator(
