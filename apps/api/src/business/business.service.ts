@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../common/prisma.service';
@@ -801,7 +801,7 @@ import { saveFile } from '../documents/file-storage.util';
  riskCategoryList(){return this.db.riskCategory.findMany({orderBy:{order:'asc'}})}
  riskCategoryCreate(b:any){return this.db.riskCategory.create({data:stripSystemFields(b)})}
  riskCategoryUpdate(id:string,b:any){return this.db.riskCategory.update({where:{id},data:stripSystemFields(b)})}
- async riskCategoryDelete(id:string){const row=await this.db.riskCategory.delete({where:{id}});await writeAudit(this.db,'RISK_CATEGORY','DELETE',id,row,null);return row;}
+ async riskCategoryDelete(id:string,force?:boolean){const nbLies=await this.db.risk.count({where:{categoryId:id}});if(nbLies>0&&!force)throw new BadRequestException(`Cette catégorie est utilisée par ${nbLies} risque(s). Confirmez la suppression pour la dissocier de ces enregistrements.`);const row=await this.db.riskCategory.delete({where:{id}});await writeAudit(this.db,'RISK_CATEGORY','DELETE',id,row,null);return row;}
 
  workUnitList(siteId?:string){return this.db.workUnit.findMany({where:{...(siteId?{siteId}:{}),...currentSiteScope()},include:{site:true},orderBy:{name:'asc'}})}
  workUnitCreate(b:any){return this.db.workUnit.create({data:stripSystemFields(b)})}
@@ -1491,7 +1491,7 @@ import { saveFile } from '../documents/file-storage.util';
  trainingCategoryList(){return this.db.trainingCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  trainingCategoryCreate(b:any){return this.db.trainingCategory.create({data:stripSystemFields(b)})}
  trainingCategoryUpdate(id:string,b:any){return this.db.trainingCategory.update({where:{id},data:stripSystemFields(b)})}
- async trainingCategoryDelete(id:string){const row=await this.db.trainingCategory.delete({where:{id}});await writeAudit(this.db,'TRAINING_CATEGORY','DELETE',id,row,null);return row;}
+ async trainingCategoryDelete(id:string,force?:boolean){const nbLies=await this.db.training.count({where:{categoryId:id}});if(nbLies>0&&!force)throw new BadRequestException(`Cette catégorie est utilisée par ${nbLies} formation(s). Confirmez la suppression pour la dissocier de ces enregistrements.`);const row=await this.db.trainingCategory.delete({where:{id}});await writeAudit(this.db,'TRAINING_CATEGORY','DELETE',id,row,null);return row;}
  async trainingSettingsGet(){
   let s=await this.db.trainingSettings.findFirst();
   if(!s) s=await this.db.trainingSettings.create({data:{}});
@@ -1554,7 +1554,7 @@ import { saveFile } from '../documents/file-storage.util';
  habilitationCategoryList(){return this.db.habilitationCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  habilitationCategoryCreate(b:any){return this.db.habilitationCategory.create({data:stripSystemFields(b)})}
  habilitationCategoryUpdate(id:string,b:any){return this.db.habilitationCategory.update({where:{id},data:stripSystemFields(b)})}
- async habilitationCategoryDelete(id:string){const row=await this.db.habilitationCategory.delete({where:{id}});await writeAudit(this.db,'HABILITATION_CATEGORY','DELETE',id,row,null);return row;}
+ async habilitationCategoryDelete(id:string,force?:boolean){const nbLies=await this.db.habilitation.count({where:{categoryId:id}});if(nbLies>0&&!force)throw new BadRequestException(`Cette catégorie est utilisée par ${nbLies} habilitation(s). Confirmez la suppression pour la dissocier de ces enregistrements.`);const row=await this.db.habilitationCategory.delete({where:{id}});await writeAudit(this.db,'HABILITATION_CATEGORY','DELETE',id,row,null);return row;}
  // Tableau de bord FORMATION — uniquement des comptages et taux derives de
  // donnees reellement saisies ; jamais de valeur par defaut quand
  // l'echantillon est vide (cf. principe anti-fabrication du Cockpit QHSE 360).
@@ -1762,10 +1762,16 @@ import { saveFile } from '../documents/file-storage.util';
    });
   }
 
+  // Correctif audit finding #8 (N+1) : un seul findMany de contrôle sur
+  // toutes les sourceKey candidates au lieu d'un findUnique par itération —
+  // avant, chaque candidat coûtait 2 requêtes séquentielles (lecture +
+  // écriture), y compris pour les doublons déjà connus.
+  const sourceKeys=candidats.map(c=>c.sourceKey);
+  const existants=sourceKeys.length?await this.db.besoinFormation.findMany({where:{sourceKey:{in:sourceKeys}},select:{sourceKey:true}}):[];
+  const sourceKeysExistantes=new Set(existants.map(e=>e.sourceKey));
+  const nouveaux=candidats.filter(c=>!sourceKeysExistantes.has(c.sourceKey));
   const crees:any[]=[];
-  for(const cand of candidats){
-   const existe=await this.db.besoinFormation.findUnique({where:{sourceKey:cand.sourceKey}});
-   if(existe) continue;
+  for(const cand of nouveaux){
    const row=await this.db.besoinFormation.create({data:{code:`BF-${Date.now().toString().slice(-8)}-${crees.length}`,...cand}});
    crees.push(row);
   }
@@ -1953,7 +1959,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentCategoryList(){return this.db.equipmentCategory.findMany({orderBy:[{order:'asc'},{label:'asc'}]})}
  equipmentCategoryCreate(b:any){return this.db.equipmentCategory.create({data:stripSystemFields(b)})}
  equipmentCategoryUpdate(id:string,b:any){return this.db.equipmentCategory.update({where:{id},data:stripSystemFields(b)})}
- async equipmentCategoryDelete(id:string){const row=await this.db.equipmentCategory.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CATEGORY','DELETE',id,row,null);return row;}
+ async equipmentCategoryDelete(id:string,force?:boolean){const nbLies=await this.db.equipment.count({where:{categoryId:id}});if(nbLies>0&&!force)throw new BadRequestException(`Cette catégorie est utilisée par ${nbLies} équipement(s). Confirmez la suppression pour la dissocier de ces enregistrements.`);const row=await this.db.equipmentCategory.delete({where:{id}});await writeAudit(this.db,'EQUIPMENT_CATEGORY','DELETE',id,row,null);return row;}
  // Phase 4C — analytics avancées : répartitions, indice de conformité
  // (même calcul que dans la bibliothèque indicateursAuto(), jamais un
  // second calcul divergent), coûts de maintenance/étalonnage/contrôle et

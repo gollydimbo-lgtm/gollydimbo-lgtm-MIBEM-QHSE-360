@@ -327,9 +327,22 @@ function Panel({ title, subtitle, children, className = '', right = null, onClic
     </div>
   );
 }
+// Audit findings #13/#20 : plusieurs pages passaient une enum backend brute
+// (ev.type, a.status, n.status...) directement à StatusChip au lieu d'un
+// libellé français — l'utilisateur voyait par ex. "ACCIDENT_TRAVAIL" au
+// lieu de "Accident du travail". Objets *_LABELS dédiés, dans le même style
+// que QUALITY_CONTROL_STATUS_LABELS/EQUIPMENT_ETAT_LABELS, pour couvrir les
+// modules qui n'en avaient aucun (Non-conformités, CAPA, Audits, Accidents).
+const NC_STATUS_LABELS = { OPEN: 'Ouverte', CLOSED: 'Clôturée' };
+const ACTION_STATUS_LABELS = { DRAFT: 'Brouillon', TO_ANALYZE: 'À analyser', PLANNED: 'Planifiée', ASSIGNED: 'Assignée', OPEN: 'En cours', VALIDATION_PENDING: 'Soumise à validation', COMPLETED: 'Action réalisée', EFFECTIVENESS_CHECK: "Évaluation de l'efficacité", VALIDATED: 'Validée', CLOSED: 'Clôturée', SUSPENDED: 'Suspendue', BLOCKED: 'Bloquée', REJECTED: 'Rejetée', TO_REDO: 'À reprendre', CANCELLED: 'Annulée' };
+const AUDIT_STATUS_LABELS = { DRAFT: 'Brouillon', PLANNED: 'Planifié', TO_PREPARE: 'À préparer', PREPARING: 'Préparation en cours', READY: 'Prêt', IN_PROGRESS: 'En cours', COMPLETED: 'Réalisé', REPORT_PENDING: 'Rapport à finaliser', VALIDATION_PENDING: 'En attente de validation', VALIDATED: 'Validé', CLOSED: 'Clôturé', POSTPONED: 'Reporté', CANCELLED: 'Annulé' };
+const SAFETY_EVENT_TYPE_LABELS = { ACCIDENT: 'Accident', INCIDENT: 'Incident', PRESQU_ACCIDENT: "Presqu'accident", SITUATION_DANGEREUSE: 'Situation dangereuse' };
 function StatusChip({ statut }) {
   const C = useTheme();
   const map = {
+    Ouverte: C.red, Clôturée: C.green, Assignée: C.blue, 'Soumise à validation': C.amber, 'Action réalisée': C.blue, "Évaluation de l'efficacité": C.amber, Validée: C.green, Suspendue: C.amber, Bloquée: C.red, Rejetée: C.red, 'À reprendre': C.red, Annulée: C.textMuted, 'À analyser': C.blue,
+    'À préparer': C.blue, 'Préparation en cours': C.blue, Prêt: C.blue, Réalisé: C.green, 'Rapport à finaliser': C.amber, 'En attente de validation': C.amber, Reporté: C.amber,
+    Accident: C.red, Incident: C.amber, "Presqu'accident": C.amber, 'Situation dangereuse': C.amber,
     Terminée: C.green, Terminé: C.green, 'En cours': C.blue, 'En retard': C.red, Ouvert: C.red, Clôturé: C.green, Planifié: C.blue,
     Conforme: C.green, 'Partiellement conforme': C.amber, 'Non conforme': C.red, 'Sous surveillance': C.blue,
     Homologué: C.green, 'À traiter': C.red, Intégrée: C.green, Valide: C.green, 'Expire bientôt': C.amber, Expirée: C.red,
@@ -520,7 +533,23 @@ function inputStyle(C) { return { backgroundColor: C.cardAlt, border: `1px solid
 function genCode(prefix) { return `${prefix}-${Date.now().toString().slice(-8)}`; }
 async function confirmAndDelete(label, endpoint, onDone) {
   if (!window.confirm(`Supprimer définitivement « ${label} » ? Cette action est irréversible.`)) return;
-  await api.del(endpoint);
+  try {
+    await api.del(endpoint);
+  } catch (err) {
+    // Audit finding #10 : certaines catégories refusent la suppression tant
+    // que des enregistrements y sont encore liés (le backend renvoie un 400
+    // avec le nombre concerné) — on relance avec confirmation explicite et
+    // ?force=true pour dissocier ces enregistrements (FK en SetNull) plutôt
+    // que de bloquer sans recours.
+    if (err.message && err.message.includes('est utilisée par')) {
+      if (!window.confirm(`${err.message}
+
+Supprimer quand même et dissocier ces enregistrements ?`)) return;
+      await api.del(`${endpoint}${endpoint.includes('?') ? '&' : '?'}force=true`);
+    } else {
+      throw err;
+    }
+  }
   onDone();
 }
 
@@ -1731,7 +1760,7 @@ function ReclamationDetailModal({ reclamationId, onClose, onChanged, onEdit }) {
           <button type="button" onClick={() => setShowActionForm(true)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Action</button>
         </div>
         {(r.actions || []).length
-          ? <div className="space-y-1 mb-3">{r.actions.map((a) => <div key={a.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{a.title}</span><StatusChip statut={a.status} /></div>)}</div>
+          ? <div className="space-y-1 mb-3">{r.actions.map((a) => <div key={a.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{a.title}</span><StatusChip statut={ACTION_STATUS_LABELS[a.status] || a.status} /></div>)}</div>
           : <p className="text-xs mb-3" style={{ color: C.textMuted }}>Aucune action liée pour le moment</p>}
 
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
@@ -4166,6 +4195,7 @@ const NAV_GROUPS = [
     { id: 'securite-accidents', label: 'Accidents & incidents', icon: AlertTriangle },
     { id: 'securite-epi', label: 'Gestion EPI/EPC', icon: HardHat },
     { id: 'securite-hygiene', label: 'Hygiène au travail', icon: HeartPulse },
+    { id: 'quart-heure-securite', label: "Quart d'heure sécurité", icon: Shield },
   ] },
   { label: 'ENVIRONNEMENT (ISO 14001:2015)', items: [{ id: 'environnement', label: 'Environnement', icon: Leaf }] },
   { label: 'RISQUES & AUDITS', items: [
@@ -4176,7 +4206,6 @@ const NAV_GROUPS = [
   ] },
   { label: 'SYSTÈME', items: [
     { id: 'documentation', label: 'Documentation (GED)', icon: BookOpen },
-    { id: 'quart-heure-securite', label: "Quart d'heure sécurité", icon: Shield },
     { id: 'formation', label: 'Formation & Compétences', icon: GraduationCap },
     { id: 'haccp', label: 'HACCP', icon: UtensilsCrossed },
     { id: 'equipements', label: 'Équipements', icon: Cog },
@@ -5879,7 +5908,7 @@ function FournisseurDetailModal({ fournisseurId, onClose, onEdit }) {
         <>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Non-conformités récentes</p>
           <div className="space-y-1 mb-4">
-            {f.nonConformities.slice(0, 5).map((n) => <div key={n.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{n.title}</span><StatusChip statut={n.status} /></div>)}
+            {f.nonConformities.slice(0, 5).map((n) => <div key={n.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{n.title}</span><StatusChip statut={NC_STATUS_LABELS[n.status] || n.status} /></div>)}
           </div>
         </>
       )}
@@ -5888,7 +5917,7 @@ function FournisseurDetailModal({ fournisseurId, onClose, onEdit }) {
         <>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Actions</p>
           <div className="space-y-1">
-            {f.actions.slice(0, 5).map((a) => <div key={a.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{a.title}</span><StatusChip statut={a.status} /></div>)}
+            {f.actions.slice(0, 5).map((a) => <div key={a.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{a.title}</span><StatusChip statut={ACTION_STATUS_LABELS[a.status] || a.status} /></div>)}
           </div>
         </>
       )}
@@ -6241,7 +6270,7 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
       {showActionForm && <ActionForm prefill={{ title: `Action — ${ev.title}`, safetyEventId: ev.id }} onClose={() => setShowActionForm(false)} onCreated={() => { onChanged(); load(); }} />}
       <Modal title={ev.title} onClose={onClose} wide>
         <div className="flex flex-wrap items-center gap-2 text-xs mb-4" style={{ color: C.textMuted }}>
-          <span>{new Date(ev.occurredAt).toLocaleDateString('fr-FR')}</span>·<StatusChip statut={ev.type} />·<span>Sévérité {ev.severity}</span>
+          <span>{new Date(ev.occurredAt).toLocaleDateString('fr-FR')}</span>·<StatusChip statut={SAFETY_EVENT_TYPE_LABELS[ev.type] || ev.type} />·<span>Sévérité {ev.severity}</span>
           <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg ml-2" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Modifier</button>
           {ev.employee && <span>· {ev.employee.firstName} {ev.employee.lastName}</span>}
         </div>
@@ -6298,7 +6327,7 @@ function SafetyEventDetailModal({ eventId, onClose, onChanged, onEdit }) {
           <button type="button" onClick={() => setShowActionForm(true)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Action</button>
         </div>
         {(ev.actions || []).length
-          ? <div className="space-y-1 mb-3">{ev.actions.map((a) => <div key={a.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{a.title}</span><StatusChip statut={a.status} /></div>)}</div>
+          ? <div className="space-y-1 mb-3">{ev.actions.map((a) => <div key={a.id} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{a.title}</span><StatusChip statut={ACTION_STATUS_LABELS[a.status] || a.status} /></div>)}</div>
           : <p className="text-xs mb-3" style={{ color: C.textMuted }}>Aucune action liée pour le moment</p>}
 
         {error && <p className="text-xs mb-3" style={{ color: C.red }}>{error}</p>}
@@ -8182,7 +8211,7 @@ function AuditsPage() {
           </div>
           <Panel title={searchResults ? `Résultats de recherche (${sorted.length})` : "Programme d'audits"}>
             {sorted.length
-              ? <DataTable columns={['Titre', 'Type', 'Référentiel', 'Date', 'Statut', 'Score', 'Constats']} rows={sorted.map((a) => [a.title, a.type?.label || '—', a.referential?.label || '—', new Date(a.auditDate).toLocaleDateString('fr-FR'), <StatusChip statut={a.status} />, a.score != null ? `${a.score}%` : '—', (a.auditFindings || []).length])}
+              ? <DataTable columns={['Titre', 'Type', 'Référentiel', 'Date', 'Statut', 'Score', 'Constats']} rows={sorted.map((a) => [a.title, a.type?.label || '—', a.referential?.label || '—', new Date(a.auditDate).toLocaleDateString('fr-FR'), <StatusChip statut={AUDIT_STATUS_LABELS[a.status] || a.status} />, a.score != null ? `${a.score}%` : '—', (a.auditFindings || []).length])}
                   onRowClick={(i) => setViewing(sorted[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucun audit programmé pour le moment'}</p>}
           </Panel>
@@ -9060,7 +9089,7 @@ function NonConformitesPage() {
                             <p className="text-[11px]" style={{ color: C.textMuted }}>{n.source || '—'} · {new Date(n.occurredAt).toLocaleDateString('fr-FR')}</p>
                           </div>
                           {n.criticiteNiveau && <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600, fontSize: 11 }}>{n.criticiteScore} ({n.criticiteNiveau})</span>}
-                          <StatusChip statut={n.status} />
+                          <StatusChip statut={NC_STATUS_LABELS[n.status] || n.status} />
                         </div>
                       ))}
                     </div>
@@ -9069,7 +9098,7 @@ function NonConformitesPage() {
                         n.title, n.source || '—',
                         n.criticiteNiveau ? <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600 }}>{n.criticiteScore} ({n.criticiteNiveau})</span> : '—',
                         n.responsible ? `${n.responsible.firstName} ${n.responsible.lastName}` : '—',
-                        new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={n.status} />,
+                        new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={NC_STATUS_LABELS[n.status] || n.status} />,
                       ])}
                       onRowClick={(i) => setViewing(filtered[i])} />)
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune non-conformité enregistrée pour le moment'}</p>}
@@ -9276,7 +9305,7 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
               <div key={sa.id} className="p-2 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
                 <div className="flex items-center justify-between">
                   <span className="text-sm" style={{ color: C.text }}>{sa.title}</span>
-                  <StatusChip statut={sa.status} />
+                  <StatusChip statut={ST_STATUS_LABEL[sa.status] || sa.status} />
                 </div>
                 <p className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{sa.responsible ? `${sa.responsible.firstName} ${sa.responsible.lastName} · ` : ''}Avancement {sa.avancement || 0}%</p>
               </div>
@@ -9475,7 +9504,7 @@ function CapaPage() {
                     a.criticite ? <span style={{ color: criticiteColor[a.criticite], fontWeight: 600 }}>{a.criticite}</span> : '—',
                     a.priority, `${a.avancement || 0}%`,
                     a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—',
-                    <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : a.status} />,
+                    <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : (ACTION_STATUS_LABELS[a.status] || a.status)} />,
                   ])}
                   onRowClick={(i) => setViewing(sorted[i])} />
               : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucune action enregistrée pour le moment'}</p>}
@@ -10076,12 +10105,12 @@ function RegulatoryRequirementDetailModal({ requirementId, onClose, onChanged })
           </Panel>
           <Panel title={`Non-conformités liées (${(req.nonConformities || []).length})`}>
             {(req.nonConformities || []).length
-              ? <DataTable columns={['Code', 'Titre', 'Statut']} rows={req.nonConformities.map((n) => [n.code, n.title, <StatusChip statut={n.status} />])} />
+              ? <DataTable columns={['Code', 'Titre', 'Statut']} rows={req.nonConformities.map((n) => [n.code, n.title, <StatusChip statut={NC_STATUS_LABELS[n.status] || n.status} />])} />
               : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune non-conformité liée</p>}
           </Panel>
           <Panel title={`Actions CAPA liées (${(req.actions || []).length})`}>
             {(req.actions || []).length
-              ? <DataTable columns={['Code', 'Titre', 'Statut', 'Échéance']} rows={req.actions.map((a) => [a.code, a.title, <StatusChip statut={a.status} />, a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—'])} />
+              ? <DataTable columns={['Code', 'Titre', 'Statut', 'Échéance']} rows={req.actions.map((a) => [a.code, a.title, <StatusChip statut={ACTION_STATUS_LABELS[a.status] || a.status} />, a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—'])} />
               : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune action CAPA liée</p>}
           </Panel>
         </div>
@@ -13269,7 +13298,7 @@ function EquipmentLinksTab({ equipment, onChanged }) {
         {risks.length ? <DataTable columns={['Code', 'Danger', 'Niveau', 'Statut']} rows={risks.map((r) => [r.code, r.hazard, r.grossLevel || '—', r.status])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun risque lié</p>}
       </Panel>
       <Panel title={`Non-conformités liées (${ncs.length})`}>
-        {ncs.length ? <DataTable columns={['Code', 'Titre', 'Statut']} rows={ncs.map((n) => [n.code, n.title, n.status])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune non-conformité liée</p>}
+        {ncs.length ? <DataTable columns={['Code', 'Titre', 'Statut']} rows={ncs.map((n) => [n.code, n.title, <StatusChip statut={NC_STATUS_LABELS[n.status] || n.status} />])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune non-conformité liée</p>}
       </Panel>
       <Panel title={`Actions CAPA liées (${actions.length})`}>
         {actions.length ? <DataTable columns={['Code', 'Titre', 'Statut', 'Échéance']} rows={actions.map((a) => [a.code, a.title, a.status, a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—'])} /> : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune action CAPA liée</p>}
