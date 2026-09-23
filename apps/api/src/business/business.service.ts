@@ -7,7 +7,7 @@ import { stripSystemFields } from '../common/strip-system-fields';
 import { saveFile } from '../documents/file-storage.util';
 @Injectable() export class BusinessService { constructor(private db:PrismaService){}
  dashboard(){return Promise.all([this.db.nonConformity.count({where:{status:{not:'CLOSED'}}}),this.db.action.count({where:{status:{not:'CLOSED'}}}),this.db.safetyEvent.count(),this.db.risk.count({where:{status:'ACTIVE',score:{gte:9}}}),this.db.qualityControl.count()]).then(([nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls])=>({nonConformitiesOpen,actionsOpen,safetyEvents,highRisks,qualityControls}));}
- qualityList(){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'}})} qualityCreate(b:any){return this.db.qualityControl.create({data:stripSystemFields(b)})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:stripSystemFields(b)})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
+ qualityList(take?:number,skip?:number){return this.db.qualityControl.findMany({orderBy:{controlDate:'desc'},take:take??500,skip:skip??0})} qualityCreate(b:any){return this.db.qualityControl.create({data:stripSystemFields(b)})} qualityUpdate(id:string,b:any){return this.db.qualityControl.update({where:{id},data:stripSystemFields(b)})} async qualityDelete(id:string){const row=await this.db.qualityControl.delete({where:{id}});await writeAudit(this.db,'QUALITY_CONTROL','DELETE',id,row,null);return row;}
  ncList(status?:string,take?:number,skip?:number){return this.db.nonConformity.findMany({where:status?{status}:undefined,include:{actions:true,epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,containmentActions:true,causes:true},orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  ncGet(id:string){return this.db.nonConformity.findUnique({where:{id},include:{actions:{include:{responsible:true}},epi:true,epc:true,risk:true,workUnit:true,declarant:true,responsible:true,processus:true,fournisseur:true,containmentActions:{include:{responsable:true},orderBy:{date:'desc'}},causes:{orderBy:{createdAt:'asc'}},costs:{orderBy:{createdAt:'desc'}}}})}
 
@@ -1308,7 +1308,7 @@ import { saveFile } from '../documents/file-storage.util';
    genereLe:new Date(),
   };
  }
- envList(){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'}})} envCreate(b:any){return this.db.environmentRecord.create({data:stripSystemFields(b)})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:stripSystemFields(b)})} async envDelete(id:string){const row=await this.db.environmentRecord.delete({where:{id}});await writeAudit(this.db,'ENVIRONMENT_RECORD','DELETE',id,row,null);return row;}
+ envList(take?:number,skip?:number){return this.db.environmentRecord.findMany({include:{processus:true},orderBy:{recordedAt:'desc'},take:take??500,skip:skip??0})} envCreate(b:any){return this.db.environmentRecord.create({data:stripSystemFields(b)})} envUpdate(id:string,b:any){return this.db.environmentRecord.update({where:{id},data:stripSystemFields(b)})} async envDelete(id:string){const row=await this.db.environmentRecord.delete({where:{id}});await writeAudit(this.db,'ENVIRONMENT_RECORD','DELETE',id,row,null);return row;}
 
  // Aspects & impacts environnementaux — la criticité et le caractère
  // significatif se recalculent à chaque écriture depuis la méthode de
@@ -1458,7 +1458,7 @@ import { saveFile } from '../documents/file-storage.util';
  // des seuils d'alerte, statut calcule jamais fabrique) applique au cycle
  // Formation/Induction -> Habilitation -> Competence.
  trainingInclude = { category:true, processus:true, participantsList:{include:{employee:true}}, habilitationsDelivrees:true, actions:{orderBy:{code:'desc' as const}} };
- trainingList(){return this.db.training.findMany({include:this.trainingInclude,orderBy:{scheduledAt:'desc'}})}
+ trainingList(take?:number,skip?:number){return this.db.training.findMany({include:this.trainingInclude,orderBy:{scheduledAt:'desc'},take:take??500,skip:skip??0})}
  trainingGet(id:string){return this.db.training.findUnique({where:{id},include:this.trainingInclude})}
  async trainingCreate(b:any){
   const t=await this.db.training.create({data:stripSystemFields(b)});
@@ -1882,7 +1882,7 @@ import { saveFile } from '../documents/file-storage.util';
  equipmentInclude = { categoryEq:true, site:true, workUnit:true, responsable:true, fournisseur:true,
   risks:{orderBy:{code:'desc' as const}}, nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}}, safetyEvents:{orderBy:{occurredAt:'desc' as const}},
   maintenancePlans:{where:{actif:true},orderBy:{dateProchaine:'asc' as const}}, controls:{orderBy:{dateProchainControle:'asc' as const}}, calibrations:{orderBy:{dateProchaineEtalonnage:'asc' as const}}, consignations:{where:{statut:'EN_COURS'},orderBy:{dateDebut:'desc' as const}} };
- equipmentList(siteId?:string){return this.db.equipment.findMany({where:siteId?{siteId}:undefined,include:this.equipmentInclude,orderBy:{name:'asc'}})}
+ equipmentList(siteId?:string,take?:number,skip?:number){return this.db.equipment.findMany({where:siteId?{siteId}:undefined,include:this.equipmentInclude,orderBy:{name:'asc'},take:take??500,skip:skip??0})}
  equipmentGet(id:string){return this.db.equipment.findUnique({where:{id},include:this.equipmentInclude})}
  async equipmentSettingsGet(){
   let s=await this.db.equipmentSettings.findFirst();
@@ -2491,7 +2491,7 @@ import { saveFile } from '../documents/file-storage.util';
   });
   return {score:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
- fournisseurList(){return this.db.fournisseur.findMany({include:{responsableInterne:true,certifications:true,_count:{select:{nonConformities:{where:{status:'OPEN'}},actions:{where:{status:{not:'CLOSED'}}},audits:true,risks:{where:{status:'ACTIVE'}}}}},orderBy:{nom:'asc'}})}
+ fournisseurList(take?:number,skip?:number){return this.db.fournisseur.findMany({include:{responsableInterne:true,certifications:true,_count:{select:{nonConformities:{where:{status:'OPEN'}},actions:{where:{status:{not:'CLOSED'}}},audits:true,risks:{where:{status:'ACTIVE'}}}}},orderBy:{nom:'asc'},take:take??500,skip:skip??0})}
  fournisseurGet(id:string){return this.db.fournisseur.findUnique({where:{id},include:{responsableInterne:true,certifications:true,nonConformities:true,actions:{include:{responsible:true}},audits:true,risks:true,qualityControls:true,reclamations:true}})}
  fournisseurCreate(b:any){return this.db.fournisseur.create({data:stripSystemFields(b)})}
  fournisseurUpdate(id:string,b:any){return this.db.fournisseur.update({where:{id},data:stripSystemFields(b)})}
@@ -2722,7 +2722,7 @@ import { saveFile } from '../documents/file-storage.util';
   });
   return {indice:poidsTotal>0?Math.round((somme/poidsTotal)*10)/10:null,detail};
  }
- veilleList(){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'}})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:stripSystemFields(b)})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:stripSystemFields(b)})} async veilleDelete(id:string){const row=await this.db.veilleReglementaire.delete({where:{id}});await writeAudit(this.db,'VEILLE_REGLEMENTAIRE','DELETE',id,row,null);return row;}
+ veilleList(take?:number,skip?:number){return this.db.veilleReglementaire.findMany({include:{responsable:true},orderBy:{dateApplication:'asc'},take:take??500,skip:skip??0})} veilleCreate(b:any){return this.db.veilleReglementaire.create({data:stripSystemFields(b)})} veilleUpdate(id:string,b:any){return this.db.veilleReglementaire.update({where:{id},data:stripSystemFields(b)})} async veilleDelete(id:string){const row=await this.db.veilleReglementaire.delete({where:{id}});await writeAudit(this.db,'VEILLE_REGLEMENTAIRE','DELETE',id,row,null);return row;}
 
  // === MODULE VEILLE RÉGLEMENTAIRE — Phase 1 : fondations et chaîne centrale
  // (Texte → Exigence → Applicabilité → Évaluation → Preuve → NC → CAPA →
@@ -2745,7 +2745,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
 
  regulatoryTextInclude={ domain:true, verifiePar:true, requirements:{orderBy:{code:'asc' as const}} };
- regulatoryTextList(){return this.db.regulatoryText.findMany({include:this.regulatoryTextInclude,orderBy:{createdAt:'desc'}})}
+ regulatoryTextList(take?:number,skip?:number){return this.db.regulatoryText.findMany({include:this.regulatoryTextInclude,orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  regulatoryTextGet(id:string){return this.db.regulatoryText.findUnique({where:{id},include:this.regulatoryTextInclude})}
  async regulatoryTextCreate(b:any){
   const text=await this.db.regulatoryText.create({data:stripSystemFields(b)});
@@ -2779,11 +2779,11 @@ import { saveFile } from '../documents/file-storage.util';
   nonConformities:{orderBy:{code:'desc' as const}}, actions:{orderBy:{code:'desc' as const}},
   requirementRisks:{include:{risk:true}}, requirementDocuments:{include:{document:true}},
  };
- async regulatoryRequirementList(filters?:{textId?:string,domainId?:string,siteId?:string,applicabilite?:string,statutConformite?:string}){
+ async regulatoryRequirementList(filters?:{textId?:string,domainId?:string,siteId?:string,applicabilite?:string,statutConformite?:string},take?:number,skip?:number){
   const list=await this.db.regulatoryRequirement.findMany({where:{
    textId:filters?.textId||undefined, domainId:filters?.domainId||undefined, siteId:filters?.siteId||undefined,
    applicabilite:filters?.applicabilite||undefined, statutConformite:filters?.statutConformite||undefined,
-  },include:this.regulatoryRequirementInclude,orderBy:{code:'asc'}});
+  },include:this.regulatoryRequirementInclude,orderBy:{code:'asc'},take:take??500,skip:skip??0});
   return list.map(r=>({...r,evidences:this.regulatoryDecorateEvidences(r.evidences)}));
  }
  async regulatoryRequirementGet(id:string){
