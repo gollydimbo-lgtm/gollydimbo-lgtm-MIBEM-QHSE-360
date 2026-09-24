@@ -39,6 +39,7 @@ import 'pages/safety_talk_page.dart';
 import 'pages/formation_page.dart';
 import 'pages/notifications_page.dart';
 import 'theme.dart';
+import 'i18n/i18n.dart';
 
 // Clé de navigation globale : permet à Api.onUnauthorized (statique, sans
 // BuildContext) de rediriger vers l'écran de connexion en cas de session expirée.
@@ -49,6 +50,7 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final savedDark = prefs.getBool('dark_mode');
   if (savedDark != null) { isDarkMode.value = savedDark; QhseColors.apply(savedDark); }
+  await loadSavedLang();
   Api.onUnauthorized = () {
     Api().logout();
     navigatorKey.currentState?.pushAndRemoveUntil(
@@ -59,7 +61,7 @@ void main() async {
   runApp(const QhseApp());
 }
 
-class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>ValueListenableBuilder<bool>(valueListenable:isDarkMode,builder:(context,dark,_){QhseColors.apply(dark);final theme=buildQhseTheme();return MaterialApp(navigatorKey:navigatorKey,title:'Gestion QHSE 360',debugShowCheckedModeBanner:false,theme:theme,darkTheme:theme,themeMode:dark?ThemeMode.dark:ThemeMode.light,home:const AuthGate());});}
+class QhseApp extends StatelessWidget{const QhseApp({super.key});@override Widget build(BuildContext c)=>ValueListenableBuilder<bool>(valueListenable:isDarkMode,builder:(context,dark,_){QhseColors.apply(dark);final theme=buildQhseTheme();return MaterialApp(navigatorKey:navigatorKey,title:t('shell.appTitle'),debugShowCheckedModeBanner:false,theme:theme,darkTheme:theme,themeMode:dark?ThemeMode.dark:ThemeMode.light,home:const AuthGate());});}
 
 // Vérifie au démarrage si une session est déjà ouverte (jeton stocké localement)
 // et redirige vers le tableau de bord ou l'écran de connexion.
@@ -127,7 +129,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _notificationsAction() => Stack(clipBehavior: Clip.none, children: [
         IconButton(
           icon: const Icon(Icons.notifications_outlined),
-          tooltip: 'Notifications',
+          tooltip: t('shell.notifications'),
           onPressed: () async {
             await Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsPage()));
             _refreshNotifCount();
@@ -176,37 +178,39 @@ class _HomeShellState extends State<HomeShell> {
   // n'ont pas encore d'équivalent (même statut que côté web, voir
   // ROADMAP-CONSOLIDATION.md) ouvrent une page "Bientôt disponible" honnête
   // plutôt que de cacher leur absence.
+  // Finding #39 — labels résolus via t(nav.groups.<clé>/nav.items.<id>),
+  // mêmes clés que côté web (apps/web/src/App.jsx NAV_GROUPS).
   List<_NavGroup> get navGroups => [
-    _NavGroup('PILOTAGE', [_NavItem('Tableau de bord', Icons.dashboard_outlined, null)]),
-    _NavGroup('QUALITÉ (ISO 9001:2015)', [
-      _NavItem('Contrôles qualité', Icons.fact_check_outlined, const QualityHome()),
-      _NavItem('Processus', Icons.assignment_outlined, const ProcessusHome()),
-      _NavItem('Indicateurs qualité', Icons.insights_outlined, const IndicateursQualitePage()),
-      _NavItem('Réclamations clients', Icons.notifications_outlined, const ReclamationsHome()),
-      _NavItem('Fournisseurs', Icons.science_outlined, const FournisseursHome()),
+    _NavGroup(t('nav.groups.pilotage'), [_NavItem(t('nav.items.pilotage'), Icons.dashboard_outlined, null)]),
+    _NavGroup(t('nav.groups.qualite'), [
+      _NavItem(t('nav.items.qualite-controles'), Icons.fact_check_outlined, const QualityHome()),
+      _NavItem(t('nav.items.qualite-processus'), Icons.assignment_outlined, const ProcessusHome()),
+      _NavItem(t('nav.items.qualite-indicateurs'), Icons.insights_outlined, const IndicateursQualitePage()),
+      _NavItem(t('nav.items.qualite-reclamations'), Icons.notifications_outlined, const ReclamationsHome()),
+      _NavItem(t('nav.items.qualite-fournisseurs'), Icons.science_outlined, const FournisseursHome()),
     ]),
-    _NavGroup('SÉCURITÉ (ISO 45001:2018)', [
-      _NavItem('Accidents & incidents', Icons.warning_amber_outlined, const SafetyEventsPage()),
-      _NavItem('Gestion EPI/EPC', Icons.health_and_safety_outlined, const EpiPage()),
-      _NavItem('Hygiène au travail', Icons.favorite_outline, const HygieneHome()),
+    _NavGroup(t('nav.groups.securite'), [
+      _NavItem(t('nav.items.securite-accidents'), Icons.warning_amber_outlined, const SafetyEventsPage()),
+      _NavItem(t('nav.items.securite-epi'), Icons.health_and_safety_outlined, const EpiPage()),
+      _NavItem(t('nav.items.securite-hygiene'), Icons.favorite_outline, const HygieneHome()),
     ]),
-    _NavGroup('ENVIRONNEMENT (ISO 14001:2026)', [_NavItem('Environnement', Icons.eco_outlined, const EnvironnementHome())]),
-    _NavGroup('RISQUES & AUDITS', [
-      _NavItem('Registre des risques', Icons.report_problem_outlined, const RisksPage()),
-      _NavItem('Audits', Icons.assignment_turned_in_outlined, const AuditsPage()),
-      _NavItem('Non-conformités', Icons.error_outline, const NonConformitiesPage()),
-      _NavItem('Actions CAPA', Icons.build_outlined, const ActionsPage()),
+    _NavGroup(t('nav.groups.environnement'), [_NavItem(t('nav.items.environnement'), Icons.eco_outlined, const EnvironnementHome())]),
+    _NavGroup(t('nav.groups.risques'), [
+      _NavItem(t('nav.items.risques'), Icons.report_problem_outlined, const RisksPage()),
+      _NavItem(t('nav.items.audits'), Icons.assignment_turned_in_outlined, const AuditsPage()),
+      _NavItem(t('nav.items.non-conformites'), Icons.error_outline, const NonConformitiesPage()),
+      _NavItem(t('nav.items.capa'), Icons.build_outlined, const ActionsPage()),
     ]),
-    _NavGroup('SYSTÈME', [
-      _NavItem('Documentation (GED)', Icons.folder_open_outlined, const GedPage()),
-      _NavItem("Quart d'heure sécurité", Icons.shield_outlined, const SafetyTalkPage()),
-      _NavItem('Formation & Compétences', Icons.school_outlined, const FormationPage()),
-      _NavItem('HACCP', Icons.restaurant_menu_outlined, const HaccpPage()),
-      _NavItem('Équipements', Icons.precision_manufacturing_outlined, const EquipmentPage()),
-      _NavItem('Veille réglementaire', Icons.search_outlined, const RegulatoryPage()),
-      _NavItem('Objectifs QHSE', Icons.flag_outlined, const ObjectifsQhsePage()),
-      _NavItem('Rapports', Icons.description_outlined, const RapportsPage()),
-      _NavItem('Utilisateurs', Icons.people_outline, const UsersPage()),
+    _NavGroup(t('nav.groups.systeme'), [
+      _NavItem(t('nav.items.documentation'), Icons.folder_open_outlined, const GedPage()),
+      _NavItem(t('nav.items.quart-heure-securite'), Icons.shield_outlined, const SafetyTalkPage()),
+      _NavItem(t('nav.items.formation'), Icons.school_outlined, const FormationPage()),
+      _NavItem(t('nav.items.haccp'), Icons.restaurant_menu_outlined, const HaccpPage()),
+      _NavItem(t('nav.items.equipements'), Icons.precision_manufacturing_outlined, const EquipmentPage()),
+      _NavItem(t('nav.items.veille'), Icons.search_outlined, const RegulatoryPage()),
+      _NavItem(t('nav.items.objectifs'), Icons.flag_outlined, const ObjectifsQhsePage()),
+      _NavItem(t('nav.items.rapports'), Icons.description_outlined, const RapportsPage()),
+      _NavItem(t('nav.items.utilisateurs'), Icons.people_outline, const UsersPage()),
     ]),
   ];
 
@@ -220,7 +224,7 @@ class _HomeShellState extends State<HomeShell> {
           icon: syncing
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : Icon(pendingSync > 0 ? Icons.cloud_off : Icons.cloud_done_outlined),
-          tooltip: pendingSync > 0 ? '$pendingSync élément(s) en attente de synchronisation' : 'Tout est synchronisé',
+          tooltip: pendingSync > 0 ? t('shell.syncPending', {'count': '$pendingSync'}) : t('shell.syncDone'),
           onPressed: () => syncNow(),
         ),
         if (pendingSync > 0)
@@ -253,8 +257,8 @@ class _HomeShellState extends State<HomeShell> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Gestion QHSE 360', style: TextStyle(color: QhseColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text('Qualité · Sécurité · Hygiène · Environnement', style: TextStyle(color: QhseColors.textSecondary, fontSize: 10)),
+                      Text(t('shell.appTitle'), style: TextStyle(color: QhseColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text(t('shell.appSubtitle'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 10)),
                     ]),
                   ),
                 ]),
@@ -283,14 +287,28 @@ class _HomeShellState extends State<HomeShell> {
                 ),
               ),
               Divider(color: QhseColors.border, height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(children: [
+                  Icon(Icons.language, size: 18, color: QhseColors.textSecondary),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(t('shell.language'), style: TextStyle(fontSize: 13, color: QhseColors.textPrimary))),
+                  DropdownButton<String>(
+                    value: appLang.value,
+                    underline: const SizedBox(),
+                    items: const [DropdownMenuItem(value: 'fr', child: Text('FR')), DropdownMenuItem(value: 'en', child: Text('EN'))],
+                    onChanged: (v) { if (v != null) setAppLang(v); },
+                  ),
+                ]),
+              ),
               ListTile(
                 leading: Icon(Icons.settings_outlined, size: 18, color: QhseColors.textSecondary),
-                title: Text('Réglages', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
+                title: Text(t('shell.settings'), style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
                 onTap: () { if (inDrawer) Navigator.pop(c); Navigator.push(c, MaterialPageRoute(builder: (_) => const SettingsPage())); },
               ),
               ListTile(
                 leading: Icon(Icons.logout, size: 18, color: QhseColors.textSecondary),
-                title: Text('Déconnexion', style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
+                title: Text(t('shell.logout'), style: TextStyle(fontSize: 13, color: QhseColors.textPrimary)),
                 onTap: logout,
               ),
               const SizedBox(height: 8),
@@ -300,10 +318,15 @@ class _HomeShellState extends State<HomeShell> {
       );
 
   @override
-  Widget build(BuildContext c) {
+  Widget build(BuildContext c) => ValueListenableBuilder<String>(
+        valueListenable: appLang,
+        builder: (context, lang, _) => _buildShell(c),
+      );
+
+  Widget _buildShell(BuildContext c) {
     final wide = MediaQuery.of(c).size.width >= 900;
     final appBar = AppBar(
-      title: const Text('Tableau de bord'),
+      title: Text(t('nav.items.pilotage')),
       actions: [
         if (user != null)
           Padding(padding: const EdgeInsets.only(right: 8), child: Center(child: Text('${user!['firstName'] ?? ''}', style: const TextStyle(fontSize: 13)))),
@@ -311,7 +334,7 @@ class _HomeShellState extends State<HomeShell> {
           valueListenable: isDarkMode,
           builder: (context, dark, _) => IconButton(
             icon: Icon(dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-            tooltip: dark ? 'Passer en mode clair' : 'Passer en mode sombre',
+            tooltip: dark ? t('shell.lightMode') : t('shell.darkMode'),
             onPressed: () async {
               isDarkMode.value = !isDarkMode.value;
               final p = await SharedPreferences.getInstance();

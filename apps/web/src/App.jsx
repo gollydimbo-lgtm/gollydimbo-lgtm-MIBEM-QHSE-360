@@ -17,6 +17,7 @@ import QRCode from 'qrcode';
 import mammoth from 'mammoth';
 import { api, getStoredUser, logout as apiLogout, getBaseUrl } from './api';
 import LoginPage from './LoginPage';
+import { useI18n } from './i18n/I18nContext.jsx';
 
 // ============================================================================
 // Thèmes — sombre (identique à la maquette de référence) et clair, au choix.
@@ -4382,46 +4383,49 @@ function reportDefinitions(real) {
 // ============================================================================
 // Navigation — groupée par référentiel, fidèle à la maquette de référence.
 // ============================================================================
+// Finding #39 — labels adressés par clé (nav.groups.*, nav.items.<id>),
+// résolus via t() au rendu plutôt que codés en dur ici.
 const NAV_GROUPS = [
-  { label: 'PILOTAGE', items: [{ id: 'pilotage', label: 'Tableau de bord', icon: LayoutDashboard }] },
-  { label: 'QUALITÉ (ISO 9001:2015)', items: [
-    { id: 'qualite-controles', label: 'Contrôles qualité', icon: ShieldCheck },
-    { id: 'qualite-processus', label: 'Processus', icon: ClipboardList },
-    { id: 'qualite-indicateurs', label: 'Indicateurs qualité', icon: Activity },
-    { id: 'qualite-reclamations', label: 'Réclamations clients', icon: Bell },
-    { id: 'qualite-fournisseurs', label: 'Fournisseurs', icon: FlaskConical },
+  { groupKey: 'pilotage', items: [{ id: 'pilotage', icon: LayoutDashboard }] },
+  { groupKey: 'qualite', items: [
+    { id: 'qualite-controles', icon: ShieldCheck },
+    { id: 'qualite-processus', icon: ClipboardList },
+    { id: 'qualite-indicateurs', icon: Activity },
+    { id: 'qualite-reclamations', icon: Bell },
+    { id: 'qualite-fournisseurs', icon: FlaskConical },
   ] },
-  { label: 'SÉCURITÉ (ISO 45001:2018)', items: [
-    { id: 'securite-accidents', label: 'Accidents & incidents', icon: AlertTriangle },
-    { id: 'securite-epi', label: 'Gestion EPI/EPC', icon: HardHat },
-    { id: 'securite-hygiene', label: 'Hygiène au travail', icon: HeartPulse },
-    { id: 'quart-heure-securite', label: "Quart d'heure sécurité", icon: Shield },
+  { groupKey: 'securite', items: [
+    { id: 'securite-accidents', icon: AlertTriangle },
+    { id: 'securite-epi', icon: HardHat },
+    { id: 'securite-hygiene', icon: HeartPulse },
+    { id: 'quart-heure-securite', icon: Shield },
   ] },
-  { label: 'ENVIRONNEMENT (ISO 14001:2015)', items: [{ id: 'environnement', label: 'Environnement', icon: Leaf }] },
-  { label: 'RISQUES & AUDITS', items: [
-    { id: 'risques', label: 'Registre des risques', icon: AlertTriangle },
-    { id: 'audits', label: 'Audits', icon: ClipboardCheck },
-    { id: 'non-conformites', label: 'Non-conformités', icon: FileWarning },
-    { id: 'capa', label: 'Actions CAPA', icon: Wrench },
+  { groupKey: 'environnement', items: [{ id: 'environnement', icon: Leaf }] },
+  { groupKey: 'risques', items: [
+    { id: 'risques', icon: AlertTriangle },
+    { id: 'audits', icon: ClipboardCheck },
+    { id: 'non-conformites', icon: FileWarning },
+    { id: 'capa', icon: Wrench },
   ] },
-  { label: 'SYSTÈME', items: [
-    { id: 'documentation', label: 'Documentation (GED)', icon: BookOpen },
-    { id: 'formation', label: 'Formation & Compétences', icon: GraduationCap },
-    { id: 'haccp', label: 'HACCP', icon: UtensilsCrossed },
-    { id: 'equipements', label: 'Équipements', icon: Cog },
-    { id: 'veille', label: 'Veille réglementaire', icon: Search },
-    { id: 'objectifs', label: 'Objectifs QHSE', icon: Target },
-    { id: 'rapports', label: 'Rapports', icon: FileBarChart },
-    { id: 'utilisateurs', label: 'Utilisateurs', icon: Users },
+  { groupKey: 'systeme', items: [
+    { id: 'documentation', icon: BookOpen },
+    { id: 'formation', icon: GraduationCap },
+    { id: 'haccp', icon: UtensilsCrossed },
+    { id: 'equipements', icon: Cog },
+    { id: 'veille', icon: Search },
+    { id: 'objectifs', icon: Target },
+    { id: 'rapports', icon: FileBarChart },
+    { id: 'utilisateurs', icon: Users },
   ] },
 ];
-const PAGE_TITLES = Object.fromEntries(NAV_GROUPS.flatMap((g) => g.items).map((i) => [i.id, i.label]));
+const NAV_ITEM_IDS = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id));
 
 // ============================================================================
 // Pages
 // ============================================================================
 function PilotagePage() {
   const C = useTheme();
+  const { t, lang } = useI18n();
   const dash = useCollection('/dashboard');
   const audits = useCollection('/business/audits');
   const actions = useCollection('/business/actions');
@@ -4456,51 +4460,52 @@ function PilotagePage() {
   // données (même règle anti-invention que le score composite) — un score
   // manquant n'est jamais affiché comme 0%, il est simplement absent du radar.
   const radarDomaines = [
-    { domaine: 'Qualité', valeur: score.domaines.qualite?.score },
-    { domaine: 'Sécurité', valeur: score.domaines.securite?.score },
-    { domaine: 'Risques maîtrisés', valeur: score.domaines.risques?.score },
-    { domaine: 'Actions à jour', valeur: score.domaines.actions?.score },
-    { domaine: 'Audits clôturés', valeur: auditsTotal > 0 ? Math.round(((auditsTotal - auditsPlanifies) / auditsTotal) * 100) : null },
+    { domaine: t('pilotage.radarQualite'), valeur: score.domaines.qualite?.score },
+    { domaine: t('pilotage.radarSecurite'), valeur: score.domaines.securite?.score },
+    { domaine: t('pilotage.radarRisquesMaitrises'), valeur: score.domaines.risques?.score },
+    { domaine: t('pilotage.radarActionsAJour'), valeur: score.domaines.actions?.score },
+    { domaine: t('pilotage.radarAuditsClotures'), valeur: auditsTotal > 0 ? Math.round(((auditsTotal - auditsPlanifies) / auditsTotal) * 100) : null },
   ].filter((d) => d.valeur != null);
 
   const ALERT_LEVEL_COLOR = { CRITICAL: C.red, WARNING: C.amber, INFO: C.blue, SUCCESS: C.green };
-  const SCORE_DOMAINE_LABELS = { qualite: 'Qualité', securite: 'Sécurité', risques: 'Risques', actions: 'Actions correctives' };
-  const SCORE_CONFIANCE_LABELS = { ELEVEE: 'Fiabilité élevée — tous les domaines ont assez de données', MOYENNE: 'Fiabilité moyenne — certains domaines manquent de données', FAIBLE: 'Fiabilité faible — trop peu de données pour se fier à ce score' };
+  const SCORE_DOMAINE_LABELS = { qualite: t('pilotage.domaineQualite'), securite: t('pilotage.domaineSecurite'), risques: t('pilotage.domaineRisques'), actions: t('pilotage.domaineActions') };
+  const SCORE_CONFIANCE_LABELS = { ELEVEE: t('pilotage.confianceElevee'), MOYENNE: t('pilotage.confianceMoyenne'), FAIBLE: t('pilotage.confianceFaible') };
+  const dateLocale = lang === 'en' ? 'en-US' : 'fr-FR';
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <LiveBadge />
         <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
-          {[['direction', 'Vue Direction'], ['qhse', 'Vue Responsable QHSE'], ['terrain', 'Vue Contrôleur Terrain']].map(([id, label]) => (
+          {[['direction', t('pilotage.vueDirection')], ['qhse', t('pilotage.vueQhse')], ['terrain', t('pilotage.vueTerrain')]].map(([id, label]) => (
             <button key={id} onClick={() => setVue(id)} className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors" style={{ backgroundColor: vue === id ? C.blue : 'transparent', color: vue === id ? '#fff' : C.textMuted }}>{label}</button>
           ))}
         </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="NC ouvertes" value={counters.nonConformitiesOpen} objectif={`${counters.nonConformitiesCritical} critique(s)`} color={C.red} icon={AlertTriangle} />
-        <KpiCard label="Actions en retard" value={counters.actionsOverdue} objectif={`${counters.actionsOpen} ouverte(s) au total`} color={C.red} icon={Activity} />
-        <KpiCard label="Événements sécurité" value={counters.safetyEvents30d} objectif="30 derniers jours" color={C.amber} icon={AlertTriangle} />
-        <KpiCard label="Audits" value={`${auditsTotal - auditsPlanifies} / ${auditsTotal}`} objectif={`${auditsPlanifies} planifié(s)`} color={C.blue} icon={ClipboardList} />
-        <KpiCard label="Taux de conformité" value={indicators.qualite.tauxConformite != null ? `${indicators.qualite.tauxConformite}%` : '—'} objectif="30 derniers jours" color={C.green} icon={ShieldCheck} />
+        <KpiCard label={t('pilotage.kpiNcOpen')} value={counters.nonConformitiesOpen} objectif={t('pilotage.kpiNcOpenSub', { count: counters.nonConformitiesCritical })} color={C.red} icon={AlertTriangle} />
+        <KpiCard label={t('pilotage.kpiActionsOverdue')} value={counters.actionsOverdue} objectif={t('pilotage.kpiActionsOverdueSub', { count: counters.actionsOpen })} color={C.red} icon={Activity} />
+        <KpiCard label={t('pilotage.kpiSafetyEvents')} value={counters.safetyEvents30d} objectif={t('pilotage.last30days')} color={C.amber} icon={AlertTriangle} />
+        <KpiCard label={t('pilotage.kpiAudits')} value={`${auditsTotal - auditsPlanifies} / ${auditsTotal}`} objectif={t('pilotage.kpiAuditsSub', { count: auditsPlanifies })} color={C.blue} icon={ClipboardList} />
+        <KpiCard label={t('pilotage.kpiTauxConformite')} value={indicators.qualite.tauxConformite != null ? `${indicators.qualite.tauxConformite}%` : '—'} objectif={t('pilotage.last30days')} color={C.green} icon={ShieldCheck} />
       </div>
 
       {/* Deuxième rangée de KPI : indicateurs déjà calculés côté API mais jusqu'ici non affichés au pilotage. Masquée en vue Direction (vue une minute, l'essentiel seulement). */}
       {vue !== 'direction' && (
         <div className="flex flex-wrap gap-3">
-          <KpiCard label="Risques élevés" value={counters.risksHigh} objectif={`${counters.risksTotal} risque(s) suivi(s)`} color={counters.risksHigh > 0 ? C.red : C.green} icon={AlertTriangle} />
-          <KpiCard label="Documents en attente" value={counters.documentsPendingApproval} objectif="validation GED" color={C.blue} icon={BookOpen} />
-          <KpiCard label="Formations expirant" value={counters.trainingsExpiringSoon} objectif="sous 30 jours" color={counters.trainingsExpiringSoon > 0 ? C.amber : C.green} icon={Users} />
-          <KpiCard label="EPI à renouveler" value={counters.epiRenewalsDue30d} objectif="sous 30 jours" color={counters.epiRenewalsDue30d > 0 ? C.amber : C.green} icon={Shield} />
-          <KpiCard label="Équipements en retard" value={counters.equipmentOverdueInspection} objectif="inspection dépassée" color={counters.equipmentOverdueInspection > 0 ? C.red : C.green} icon={Cog} />
+          <KpiCard label={t('pilotage.kpiRisksHigh')} value={counters.risksHigh} objectif={t('pilotage.kpiRisksHighSub', { count: counters.risksTotal })} color={counters.risksHigh > 0 ? C.red : C.green} icon={AlertTriangle} />
+          <KpiCard label={t('pilotage.kpiDocumentsPending')} value={counters.documentsPendingApproval} objectif={t('pilotage.kpiDocumentsPendingSub')} color={C.blue} icon={BookOpen} />
+          <KpiCard label={t('pilotage.kpiTrainingsExpiring')} value={counters.trainingsExpiringSoon} objectif={t('pilotage.under30days')} color={counters.trainingsExpiringSoon > 0 ? C.amber : C.green} icon={Users} />
+          <KpiCard label={t('pilotage.kpiEpiRenewals')} value={counters.epiRenewalsDue30d} objectif={t('pilotage.under30days')} color={counters.epiRenewalsDue30d > 0 ? C.amber : C.green} icon={Shield} />
+          <KpiCard label={t('pilotage.kpiEquipmentOverdue')} value={counters.equipmentOverdueInspection} objectif={t('pilotage.kpiEquipmentOverdueSub')} color={counters.equipmentOverdueInspection > 0 ? C.red : C.green} icon={Cog} />
         </div>
       )}
 
       {/* Centre d'alertes unifié : ce que le Responsable QHSE devrait regarder en premier, tous domaines confondus, déjà trié par priorité côté API. */}
-      <Panel title="Alertes prioritaires" subtitle="Toutes les échéances et anomalies critiques, tous modules confondus, triées par priorité">
+      <Panel title={t('pilotage.alertesTitle')} subtitle={t('pilotage.alertesSubtitle')}>
         {alertes.length === 0 ? (
-          <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune alerte en cours.</p>
+          <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucuneAlerte')}</p>
         ) : (
           <div className="divide-y" style={{ borderColor: C.border }}>
             {alertes.slice(0, vue === 'direction' ? 5 : 10).map((a, i) => (
@@ -4512,7 +4517,7 @@ function PilotagePage() {
                     {a.code && <span className="text-xs" style={{ color: C.textMuted }}>{a.code}</span>}
                   </div>
                   <p className="text-sm font-medium truncate" style={{ color: C.text }}>{a.title}</p>
-                  <p className="text-xs" style={{ color: C.textMuted }}>{a.detail}{a.dueDate ? ` · échéance ${new Date(a.dueDate).toLocaleDateString('fr-FR')}` : ''}</p>
+                  <p className="text-xs" style={{ color: C.textMuted }}>{a.detail}{a.dueDate ? ` · ${t('pilotage.echeance', { date: new Date(a.dueDate).toLocaleDateString(dateLocale) })}` : ''}</p>
                 </div>
               </div>
             ))}
@@ -4524,16 +4529,16 @@ function PilotagePage() {
       {vue === 'qhse' && (
       <>
       <div className="grid grid-cols-2 gap-4">
-        <Panel title="Pareto des causes racines — sécurité" subtitle="Causes qui concentrent le plus d'événements de sécurité">
+        <Panel title={t('pilotage.paretoSecuriteTitle')} subtitle={t('pilotage.paretoSecuriteSubtitle')}>
           {analyses.securite.pareto.length
             ? <ParetoChart causes={analyses.securite.pareto.map((p) => ({ cause: p.name, occurrences: p.value }))} />
-            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune cause racine renseignée sur les événements sécurité</p>}
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucuneCauseRacine')}</p>}
         </Panel>
-        <Panel title="Non-conformités récurrentes" subtitle="Mêmes anomalies qui reviennent — à instruire en Ishikawa / 5 Pourquoi" right={analyses.nonConformites.recurrences.length > 0 && (
-          <button onClick={() => window.__qhseGoTo && window.__qhseGoTo('non-conformites', { tab: 'recurrence' })} className="text-xs font-medium" style={{ color: C.blue }}>Voir l'analyse complète →</button>
+        <Panel title={t('pilotage.ncRecurrentesTitle')} subtitle={t('pilotage.ncRecurrentesSubtitle')} right={analyses.nonConformites.recurrences.length > 0 && (
+          <button onClick={() => window.__qhseGoTo && window.__qhseGoTo('non-conformites', { tab: 'recurrence' })} className="text-xs font-medium" style={{ color: C.blue }}>{t('pilotage.voirAnalyseComplete')}</button>
         )}>
           {analyses.nonConformites.recurrences.length === 0 ? (
-            <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune récurrence détectée</p>
+            <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucuneRecurrence')}</p>
           ) : (
             <div className="divide-y" style={{ borderColor: C.border }}>
               {analyses.nonConformites.recurrences.map((r, i) => (
@@ -4543,9 +4548,9 @@ function PilotagePage() {
                     <span className="text-xs font-semibold shrink-0" style={{ color: C.red }}>{r.occurrences}×</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs" style={{ color: C.textMuted }}>{r.processus} · {new Date(r.premiereOccurrence).toLocaleDateString('fr-FR')} → {new Date(r.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                    <p className="text-xs" style={{ color: C.textMuted }}>{r.processus} · {new Date(r.premiereOccurrence).toLocaleDateString(dateLocale)} → {new Date(r.derniereOccurrence).toLocaleDateString(dateLocale)}</p>
                     <span className="text-[11px] font-medium shrink-0" style={{ color: r.analyseCausaleFaite ? C.green : C.amber }}>
-                      {r.analyseCausaleFaite ? '✓ cause racine identifiée' : '⚠ analyse causale manquante'}
+                      {r.analyseCausaleFaite ? t('pilotage.causeIdentifiee') : t('pilotage.causeManquante')}
                     </span>
                   </div>
                 </div>
@@ -4557,38 +4562,38 @@ function PilotagePage() {
 
       {/* Pareto des non-conformités (réutilise ParetoChart, déjà utilisé sur la page Non-conformités) + radar de conformité multi-domaines, calculé côté client depuis le score déjà renvoyé par l'API — aucune donnée fabriquée, un domaine sans assez de données est simplement absent du radar. */}
       <div className="grid grid-cols-2 gap-4">
-        <Panel title="Pareto des non-conformités" subtitle="Sources qui concentrent le plus de non-conformités">
+        <Panel title={t('pilotage.paretoNcTitle')} subtitle={t('pilotage.paretoNcSubtitle')}>
           {ncBySource.length
             ? <ParetoChart causes={ncBySource.map((s) => ({ cause: s.name, occurrences: s.value }))} />
-            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucuneNc')}</p>}
         </Panel>
-        <Panel title="Radar de conformité QHSE" subtitle="Domaines avec des données suffisantes uniquement">
+        <Panel title={t('pilotage.radarTitle')} subtitle={t('pilotage.radarSubtitle')}>
           {radarDomaines.length >= 3 ? (
             <ResponsiveContainer width="100%" height={240}>
               <RadarChart data={radarDomaines}>
                 <PolarGrid stroke={C.border} />
                 <PolarAngleAxis dataKey="domaine" tick={{ fill: C.textMuted, fontSize: 10 }} />
                 <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: C.textMuted, fontSize: 9 }} />
-                <Radar name="Score" dataKey="valeur" stroke={C.blue} fill={C.blue} fillOpacity={0.35} />
-                <Tooltip contentStyle={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text }} formatter={(v) => [`${v}%`, 'Score']} />
+                <Radar name={t('pilotage.radarScore')} dataKey="valeur" stroke={C.blue} fill={C.blue} fillOpacity={0.35} />
+                <Tooltip contentStyle={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text }} formatter={(v) => [`${v}%`, t('pilotage.radarScore')]} />
               </RadarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas assez de domaines avec des données suffisantes pour tracer un radar fiable.</p>
+            <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.radarInsuffisant')}</p>
           )}
         </Panel>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Panel title="Processus les plus problématiques" subtitle="Nombre de non-conformités par processus">
+        <Panel title={t('pilotage.processusTitle')} subtitle={t('pilotage.processusSubtitle')}>
           {analyses.nonConformites.processusLesPlusProblematiques.length
             ? <HorizontalBars data={analyses.nonConformites.processusLesPlusProblematiques.map((p) => ({ label: p.processus, count: p.nombre }))} labelKey="label" valueKey="count" color={C.red} />
-            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun processus renseigné sur les non-conformités</p>}
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucunProcessus')}</p>}
         </Panel>
-        <Panel title="Matrice de criticité 5×5" subtitle="Gravité × probabilité, tous risques actifs">
+        <Panel title={t('pilotage.matriceTitle')} subtitle={t('pilotage.matriceSubtitle')}>
           {(risks.data || []).length
             ? <RiskMatrix5x5 risques={(risks.data || []).map((r) => ({ gravite: r.severity, probabilite: r.probability }))} />
-            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucunRisque')}</p>}
         </Panel>
       </div>
       </>
@@ -4597,19 +4602,19 @@ function PilotagePage() {
       {/* Tendance & score composite : utiles à Direction (vue une minute) et au Responsable QHSE ; pas au Contrôleur Terrain, dont la vue reste actionnable. */}
       {vue !== 'terrain' && (
       <div className="grid grid-cols-2 gap-4">
-        <Panel title="Événements sécurité & non-conformités par semaine" subtitle="8 dernières semaines">
+        <Panel title={t('pilotage.trendTitle')} subtitle={t('pilotage.trendSubtitle')}>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={trends.evenementsSecuriteParSemaine.map((e, i) => ({ semaine: e.weekStart.slice(5), evenements: e.count, nc: trends.nonConformitesParSemaine[i]?.count ?? 0 }))}>
               <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
               <XAxis dataKey="semaine" stroke={C.textMuted} fontSize={11} />
               <YAxis stroke={C.textMuted} fontSize={12} />
               <Tooltip contentStyle={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text }} />
-              <Line type="monotone" dataKey="evenements" stroke={C.amber} strokeWidth={2} dot={{ r: 3 }} name="Événements sécurité" />
-              <Line type="monotone" dataKey="nc" stroke={C.red} strokeWidth={2} dot={{ r: 3 }} name="Non-conformités" />
+              <Line type="monotone" dataKey="evenements" stroke={C.amber} strokeWidth={2} dot={{ r: 3 }} name={t('pilotage.legendEvenements')} />
+              <Line type="monotone" dataKey="nc" stroke={C.red} strokeWidth={2} dot={{ r: 3 }} name={t('pilotage.legendNc')} />
             </LineChart>
           </ResponsiveContainer>
         </Panel>
-        <Panel title={score.global != null ? `Score composite QHSE : ${score.global}%` : 'Score composite QHSE'} subtitle={SCORE_CONFIANCE_LABELS[score.confiance] || ''}>
+        <Panel title={score.global != null ? t('pilotage.scoreTitleWithValue', { score: score.global }) : t('pilotage.scoreTitle')} subtitle={SCORE_CONFIANCE_LABELS[score.confiance] || ''}>
           <div className="flex flex-col justify-center gap-3 py-2" style={{ minHeight: 220 }}>
             <div className="text-5xl font-bold text-center" style={{ color: score.global == null ? C.textMuted : score.global >= 80 ? C.green : score.global >= 60 ? C.amber : C.red }}>
               {score.global != null ? `${score.global}%` : '—'}
@@ -4619,7 +4624,7 @@ function PilotagePage() {
                 <div key={key} className="flex items-center justify-between gap-2 text-xs">
                   <span className="font-medium" style={{ color: C.text }}>{SCORE_DOMAINE_LABELS[key] || key}</span>
                   <span className="text-right" style={{ color: d.score != null ? C.textMuted : C.amber }}>
-                    {d.score != null ? `${d.score}% · ${d.detail}` : `Données insuffisantes · ${d.detail}`}
+                    {d.score != null ? `${d.score}% · ${d.detail}` : t('pilotage.donneesInsuffisantes', { detail: d.detail })}
                   </span>
                 </div>
               ))}
@@ -4631,16 +4636,16 @@ function PilotagePage() {
       {/* Répartitions détaillées : réservées à la vue Responsable QHSE, pour ne pas noyer Direction et Terrain sous des graphiques d'analyse. */}
       {vue === 'qhse' && (
       <div className="grid grid-cols-3 gap-4">
-        <Panel title="Non-conformités par source">
-          {ncBySource.length ? <DonutChart data={ncBySource} colors={[C.red, C.amber, C.blue, C.green, '#8B5CF6', C.textMuted]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
+        <Panel title={t('pilotage.ncParSourceTitle')}>
+          {ncBySource.length ? <DonutChart data={ncBySource} colors={[C.red, C.amber, C.blue, C.green, '#8B5CF6', C.textMuted]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucuneNc')}</p>}
         </Panel>
-        <Panel title="Répartition des événements sécurité par sévérité">
+        <Panel title={t('pilotage.severiteTitle')}>
           {counters.safetyEventsBySeverity.length
-            ? <HorizontalBars data={counters.safetyEventsBySeverity.map((s) => ({ label: `Sévérité ${s.severity}`, count: s.count }))} labelKey="label" valueKey="count" color={C.amber} />
-            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun événement sur 30 jours</p>}
+            ? <HorizontalBars data={counters.safetyEventsBySeverity.map((s) => ({ label: t('pilotage.severite', { level: s.severity }), count: s.count }))} labelKey="label" valueKey="count" color={C.amber} />
+            : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('pilotage.aucunEvenement30j')}</p>}
         </Panel>
-        <Panel title="Statut des actions correctives">
-          <DonutChart data={[{ name: 'Terminées', value: capaStats.terminees }, { name: 'En cours', value: capaStats.enCours }, { name: 'En retard', value: capaStats.enRetard }]} colors={[C.green, C.blue, C.red]} />
+        <Panel title={t('pilotage.statutActionsTitle')}>
+          <DonutChart data={[{ name: t('pilotage.statutTerminees'), value: capaStats.terminees }, { name: t('pilotage.statutEnCours'), value: capaStats.enCours }, { name: t('pilotage.statutEnRetard'), value: capaStats.enRetard }]} colors={[C.green, C.blue, C.red]} />
         </Panel>
       </div>
       )}
@@ -15492,6 +15497,7 @@ function NotificationBell() {
 }
 
 export default function QhseDashboard() {
+  const { t, lang, setLang } = useI18n();
   const [user, setUser] = useState(getStoredUser());
   const [page, setPage] = useState('pilotage');
   // Pont de navigation minimal, utilisé par le pilotage central pour ouvrir
@@ -15547,23 +15553,23 @@ export default function QhseDashboard() {
             <div className="flex items-center gap-2">
               <img src="/logo-192.png" alt="QHSE 360" className="w-9 h-9 shrink-0" />
               <div>
-                <div className="text-sm font-semibold" style={{ color: C.text }}>Gestion QHSE 360</div>
-                <div className="text-[10px]" style={{ color: C.textMuted }}>Qualité · Sécurité · Hygiène · Environnement</div>
+                <div className="text-sm font-semibold" style={{ color: C.text }}>{t('shell.appTitle')}</div>
+                <div className="text-[10px]" style={{ color: C.textMuted }}>{t('shell.appSubtitle')}</div>
               </div>
             </div>
             <button className="md:hidden p-1" onClick={() => setSidebarOpen(false)}><X size={18} color={C.textMuted} /></button>
           </div>
           <div className="flex-1">
             {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="mb-4">
-                <div className="px-3 mb-1 text-[10px] font-semibold tracking-wide" style={{ color: C.textMuted }}>{group.label}</div>
+              <div key={group.groupKey} className="mb-4">
+                <div className="px-3 mb-1 text-[10px] font-semibold tracking-wide" style={{ color: C.textMuted }}>{t(`nav.groups.${group.groupKey}`)}</div>
                 <nav className="space-y-0.5">
                   {group.items.map((item) => {
                     const active = page === item.id, Icon = item.icon;
                     return (
                       <button key={item.id} onClick={() => { setPage(item.id); setSidebarOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left transition-colors"
                         style={{ backgroundColor: active ? `${C.blue}22` : 'transparent', color: active ? C.blue : C.textMuted }}>
-                        <Icon size={16} />{item.label}
+                        <Icon size={16} />{t(`nav.items.${item.id}`)}
                       </button>
                     );
                   })}
@@ -15574,10 +15580,10 @@ export default function QhseDashboard() {
           <div className="pt-3 mt-3" style={{ borderTop: `1px solid ${C.border}` }}>
             <div className="px-3 mb-2 text-xs" style={{ color: C.text }}>{user.firstName} {user.lastName}</div>
             <button onClick={() => setShowChangePassword(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ color: C.textMuted }}>
-              <ShieldCheck size={14} /> Changer mon mot de passe
+              <ShieldCheck size={14} /> {t('shell.changePassword')}
             </button>
             <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ color: C.textMuted }}>
-              <LogOut size={14} /> Se déconnecter
+              <LogOut size={14} /> {t('shell.logout')}
             </button>
           </div>
         </aside>
@@ -15589,17 +15595,21 @@ export default function QhseDashboard() {
                 <Menu size={18} color={C.text} />
               </button>
               <div>
-                <h1 className="text-xl font-semibold" style={{ color: C.text }}>{PAGE_TITLES[page]}</h1>
-                <p className="text-xs" style={{ color: C.textMuted }}>{new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} · Connecté en tant que {user.email} · ISO 9001 · 14001 · 45001</p>
+                <h1 className="text-xl font-semibold" style={{ color: C.text }}>{t(`nav.items.${page}`)}</h1>
+                <p className="text-xs" style={{ color: C.textMuted }}>{new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} · {t('shell.connectedAs', { email: user.email })}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')} className="p-2 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }} title="Changer de thème">
+              <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t('shell.language')} className="text-xs px-2 py-2 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, color: C.text }}>
+                <option value="fr">FR</option>
+                <option value="en">EN</option>
+              </select>
+              <button onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')} className="p-2 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }} title={t('shell.toggleTheme')}>
                 {themeMode === 'dark' ? <Sun size={16} color={C.amber} /> : <Moon size={16} color={C.blue} />}
               </button>
               <NotificationBell />
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-                <AlertTriangle size={16} color={C.amber} /><span className="text-xs" style={{ color: C.text }}>{capaStats.enRetard} action(s) CAPA en retard</span>
+                <AlertTriangle size={16} color={C.amber} /><span className="text-xs" style={{ color: C.text }}>{t('shell.capaOverdue', { count: capaStats.enRetard })}</span>
               </div>
             </div>
           </header>
