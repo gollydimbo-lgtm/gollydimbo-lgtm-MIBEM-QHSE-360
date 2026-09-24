@@ -5083,6 +5083,7 @@ function ControlScheduleForm({ record, types, templates, onClose, onCreated }) {
 
 function QualiteControlesPage() {
   const C = useTheme();
+  const { t, lang } = useI18n();
   const controls = useCollection('/quality/controls');
   const types = useCollection('/quality/types');
   const templatesQ = useCollection('/quality/templates');
@@ -5114,10 +5115,12 @@ function QualiteControlesPage() {
   const filtered = search.trim()
     ? sorted.filter((c) => norm([c.code, c.type?.name, c.domain, c.productRef?.name, c.productionLine?.name, c.lotNumber].join(' ')).includes(norm(search)))
     : sorted;
+  const dateLocale = lang === 'en' ? 'en-US' : 'fr-FR';
+  const columns = [t('controles.colCode'), t('controles.colType'), t('controles.colProduit'), t('controles.colLigne'), t('controles.colLot'), t('controles.colDate'), t('controles.colStatut'), t('controles.colDecision')];
   function controlesExportRows() {
     return [
-      ['Code', 'Type', 'Produit', 'Ligne', 'Lot', 'Date', 'Statut', 'Décision'],
-      ...filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '', c.productionLine?.name || '', c.lotNumber || '', new Date(c.controlDate).toLocaleDateString('fr-FR'), QUALITY_CONTROL_STATUS_LABELS[c.status] || c.status, decisionLabels[c.finalDecision] || c.finalDecision || '']),
+      columns,
+      ...filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '', c.productionLine?.name || '', c.lotNumber || '', new Date(c.controlDate).toLocaleDateString(dateLocale), QUALITY_CONTROL_STATUS_LABELS[c.status] || c.status, decisionLabels[c.finalDecision] || c.finalDecision || '']),
     ];
   }
   function exportControlesExcel() { downloadWorkbook([['Contrôles qualité', controlesExportRows()]], `Controles-qualite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
@@ -5125,8 +5128,8 @@ function QualiteControlesPage() {
   const byDomain = groupCount(list, (c) => c.domain);
   const byType = groupCount(list.filter((c) => c.type), (c) => c.type?.name || 'Sans type');
   const buckets = scheduleBuckets.data || { overdue: [], dueSoon: [], upcoming: [] };
-  const decisionLabels = { CONFORME: 'Conforme', CONFORME_SOUS_RESERVE: 'Conforme sous réserve', NON_CONFORME: 'Non conforme', REFUSE: 'Refusé' };
-  const freqLabels = { DAILY: 'Quotidienne', WEEKLY: 'Hebdomadaire', MONTHLY: 'Mensuelle', QUARTERLY: 'Trimestrielle', BIANNUAL: 'Semestrielle', ANNUAL: 'Annuelle', CUSTOM: 'Personnalisée' };
+  const decisionLabels = { CONFORME: t('controles.decisionConforme'), CONFORME_SOUS_RESERVE: t('controles.decisionConformeReserve'), NON_CONFORME: t('controles.decisionNonConforme'), REFUSE: t('controles.decisionRefuse') };
+  const freqLabels = { DAILY: t('controles.freqDaily'), WEEKLY: t('controles.freqWeekly'), MONTHLY: t('controles.freqMonthly'), QUARTERLY: t('controles.freqQuarterly'), BIANNUAL: t('controles.freqBiannual'), ANNUAL: t('controles.freqAnnual'), CUSTOM: t('controles.freqCustom') };
 
   async function generateNow(s) {
     setGenerating(s.id);
@@ -5142,11 +5145,11 @@ function QualiteControlesPage() {
       {(showScheduleForm || selectedSchedule) && <ControlScheduleForm record={selectedSchedule} types={types.data} templates={templatesQ.data} onClose={() => { setShowScheduleForm(false); setSelectedSchedule(null); }} onCreated={() => { schedules.reload(); scheduleBuckets.reload(); }} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau contrôle</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('controles.nouveauControle')}</button>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {[['dashboard', 'Tableau de bord'], ['registre', 'Registre'], ['planification', 'Planification']].map(([id, label]) => (
+        {[['dashboard', t('controles.tabDashboard')], ['registre', t('controles.tabRegistre')], ['planification', t('controles.tabPlanification')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -5155,24 +5158,24 @@ function QualiteControlesPage() {
         <div className="space-y-6">
           {domains.length > 1 && (
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => setDomainFilter('')} className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: !domainFilter ? C.blue : C.cardAlt, color: !domainFilter ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>Tous domaines</button>
+              <button onClick={() => setDomainFilter('')} className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: !domainFilter ? C.blue : C.cardAlt, color: !domainFilter ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{t('controles.tousDomaines')}</button>
               {domains.map((d) => <button key={d} onClick={() => setDomainFilter(d)} className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: domainFilter === d ? C.blue : C.cardAlt, color: domainFilter === d ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{d}</button>)}
             </div>
           )}
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Contrôles enregistrés" value={list.length} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="En attente" value={enAttente} color={C.amber} icon={Activity} />
-            <KpiCard label="Conformes" value={conformes} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="Non conformes" value={nonConformes} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="Taux de conformité" value={tauxConformite != null ? `${tauxConformite}%` : '—'} color={C.amber} icon={Activity} />
-            <KpiCard label="Contrôles en retard" value={buckets.overdue.length} color={buckets.overdue.length > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('controles.kpiEnregistres')} value={list.length} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('controles.kpiEnAttente')} value={enAttente} color={C.amber} icon={Activity} />
+            <KpiCard label={t('controles.kpiConformes')} value={conformes} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('controles.kpiNonConformes')} value={nonConformes} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('controles.kpiTauxConformite')} value={tauxConformite != null ? `${tauxConformite}%` : '—'} color={C.amber} icon={Activity} />
+            <KpiCard label={t('controles.kpiEnRetard')} value={buckets.overdue.length} color={buckets.overdue.length > 0 ? C.red : C.green} icon={AlertTriangle} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Contrôles par domaine">
-              {byDomain.length ? <DonutChart data={byDomain} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun contrôle enregistré</p>}
+            <Panel title={t('controles.parDomaine')}>
+              {byDomain.length ? <DonutChart data={byDomain} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('controles.aucunControle')}</p>}
             </Panel>
-            <Panel title="Contrôles par type">
-              {byType.length ? <DonutChart data={byType} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun contrôle typé enregistré</p>}
+            <Panel title={t('controles.parType')}>
+              {byType.length ? <DonutChart data={byType} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('controles.aucunControleType')}</p>}
             </Panel>
           </div>
         </div>
@@ -5180,18 +5183,18 @@ function QualiteControlesPage() {
 
       {tab === 'registre' && (
         <div className="space-y-4">
-          <p className="text-xs" style={{ color: C.textMuted }}>Cliquez une ligne pour saisir les résultats et soumettre le contrôle.</p>
+          <p className="text-xs" style={{ color: C.textMuted }}>{t('controles.aideRegistre')}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un contrôle (code, type, produit, lot...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('controles.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={exportControlesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
             <button onClick={exportControlesCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
           </div>
-          <Panel title={search.trim() ? `Résultats de recherche (${filtered.length})` : 'Registre des contrôles'}>
+          <Panel title={search.trim() ? t('controles.resultatsRecherche', { count: filtered.length }) : t('controles.registreTitre')}>
             {filtered.length
-              ? <DataTable columns={['Code', 'Type', 'Produit', 'Ligne', 'Lot', 'Date', 'Statut', 'Décision']}
-                  rows={filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '—', c.productionLine?.name || '—', c.lotNumber || '—', new Date(c.controlDate).toLocaleDateString('fr-FR'), <StatusChip statut={QUALITY_CONTROL_STATUS_LABELS[c.status] || c.status} />, decisionLabels[c.finalDecision] || c.finalDecision || '—'])}
+              ? <DataTable columns={columns}
+                  rows={filtered.map((c) => [c.code, c.type?.name || c.domain, c.productRef?.name || '—', c.productionLine?.name || '—', c.lotNumber || '—', new Date(c.controlDate).toLocaleDateString(dateLocale), <StatusChip statut={QUALITY_CONTROL_STATUS_LABELS[c.status] || c.status} />, decisionLabels[c.finalDecision] || c.finalDecision || '—'])}
                   onRowClick={(i) => setSelectedId(filtered[i].id)} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun contrôle enregistré pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('controles.aucunResultat') : t('controles.aucunControlePourInstant')}</p>}
           </Panel>
         </div>
       )}
@@ -5199,9 +5202,9 @@ function QualiteControlesPage() {
       {tab === 'planification' && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button onClick={() => setShowScheduleForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau planning</button>
+            <button onClick={() => setShowScheduleForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('controles.nouveauPlanning')}</button>
           </div>
-          {[['🔴 En retard', buckets.overdue, C.red], ['🟡 Sous 7 jours', buckets.dueSoon, C.amber], ['À venir', buckets.upcoming, C.blue]].map(([title, sl, color]) => (
+          {[[t('controles.bucketEnRetard'), buckets.overdue, C.red], [t('controles.bucketSous7j'), buckets.dueSoon, C.amber], [t('controles.bucketAVenir'), buckets.upcoming, C.blue]].map(([title, sl, color]) => (
             <Panel key={title} title={title}>
               {sl.length
                 ? <div className="space-y-2">
@@ -5209,13 +5212,13 @@ function QualiteControlesPage() {
                       <div key={s.id} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
                         <div className="cursor-pointer" onClick={() => setSelectedSchedule(s)}>
                           <p className="text-sm font-medium" style={{ color: C.text }}>{s.name}</p>
-                          <p className="text-xs" style={{ color: C.textMuted }}>{freqLabels[s.frequency] || s.frequency} • {s.assignedTo ? `${s.assignedTo.firstName} ${s.assignedTo.lastName}` : 'Non affecté'} • échéance <span style={{ color }}>{new Date(s.nextDueDate).toLocaleDateString('fr-FR')}</span></p>
+                          <p className="text-xs" style={{ color: C.textMuted }}>{freqLabels[s.frequency] || s.frequency} • {s.assignedTo ? `${s.assignedTo.firstName} ${s.assignedTo.lastName}` : t('controles.nonAffecte')} • {t('controles.echeance')} <span style={{ color }}>{new Date(s.nextDueDate).toLocaleDateString(dateLocale)}</span></p>
                         </div>
-                        <button onClick={() => generateNow(s)} disabled={generating === s.id} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: generating === s.id ? 0.6 : 1 }}>{generating === s.id ? 'Génération…' : 'Générer maintenant'}</button>
+                        <button onClick={() => generateNow(s)} disabled={generating === s.id} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: generating === s.id ? 0.6 : 1 }}>{generating === s.id ? t('controles.generationEnCours') : t('controles.genererMaintenant')}</button>
                       </div>
                     ))}
                   </div>
-                : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun planning dans ce palier</p>}
+                : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>{t('controles.aucunPlanning')}</p>}
             </Panel>
           ))}
         </div>
