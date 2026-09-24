@@ -3390,6 +3390,23 @@ model RegulatoryDomain {
   requirements RegulatoryRequirement[]
 }
 
+// Finding #38 — paramétrage du référentiel réglementaire par pays/secteur :
+// jusqu'ici les normes citées (ISO 9001/14001/45001), le pays et le secteur
+// d'activité étaient codés en dur dans le contexte ivoirien/agroalimentaire
+// de MIBEM. Cette table les fait passer en données de paramétrage,
+// modifiables par l'administrateur sans toucher au code — première brique
+// vers un outil déployable hors MIBEM. Étape 1 : capturer et afficher ces
+// données. Étape 2 (hors périmètre de cette étape) : les propager pour
+// filtrer/adapter les libellés HACCP, catégories de risques, etc. qui
+// restent encore codés en dur ailleurs dans le code.
+model OrganisationSettings {
+  id String @id @default(cuid())
+  pays String @default("Côte d'Ivoire")
+  secteurActivite String @default("Agroalimentaire")
+  normesApplicables String[] @default(["ISO 9001", "ISO 14001", "ISO 45001"])
+  updatedAt DateTime @updatedAt
+}
+
 // Paramétrage du module — seuils d'alertes et méthode de calcul du taux de
 // conformité, modifiables par l'administrateur sans toucher au code (même
 // principe que EquipmentSettings/NcSettings).

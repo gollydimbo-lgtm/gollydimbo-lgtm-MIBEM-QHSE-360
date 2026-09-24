@@ -2881,6 +2881,19 @@ import { saveFile } from '../documents/file-storage.util';
   return this.db.regulatorySettings.update({where:{id:current.id},data:stripSystemFields(b)});
  }
 
+ // Finding #38 — paramétrage du référentiel réglementaire par pays/secteur,
+ // même pattern singleton que regulatorySettings (une seule ligne,
+ // créée avec les défauts MIBEM au premier accès).
+ async organisationSettingsGet(){
+  let s=await this.db.organisationSettings.findFirst();
+  if(!s) s=await this.db.organisationSettings.create({data:{}});
+  return s;
+ }
+ async organisationSettingsUpdate(b:any){
+  const current=await this.organisationSettingsGet();
+  return this.db.organisationSettings.update({where:{id:current.id},data:stripSystemFields(b)});
+ }
+
  regulatoryTextInclude={ domain:true, verifiePar:true, requirements:{orderBy:{code:'asc' as const}} };
  regulatoryTextList(take?:number,skip?:number){return this.db.regulatoryText.findMany({include:this.regulatoryTextInclude,orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  regulatoryTextGet(id:string){return this.db.regulatoryText.findUnique({where:{id},include:this.regulatoryTextInclude})}

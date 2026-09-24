@@ -10484,6 +10484,58 @@ function RegulatorySettingsPanel() {
   );
 }
 
+// Finding #38 — référentiel réglementaire paramétrable : pays, secteur
+// d'activité et normes applicables, jusqu'ici codés en dur autour du
+// contexte MIBEM (Côte d'Ivoire, agroalimentaire, ISO 9001/14001/45001).
+// Cette étape rend ces données modifiables ; les propager pour adapter
+// les libellés HACCP/catégories de risques ailleurs reste à faire.
+function OrganisationSettingsPanel() {
+  const C = useTheme();
+  const settingsQ = useCollection('/business/organisation-settings');
+  const [normeInput, setNormeInput] = useState('');
+  const [saving, setSaving] = useState(false);
+  if (settingsQ.loading) return <LoadingPanel />;
+  const s = settingsQ.data;
+  async function save(patch) {
+    setSaving(true);
+    try { await api.patch('/business/organisation-settings', patch); settingsQ.reload(); }
+    finally { setSaving(false); }
+  }
+  function addNorme() {
+    const v = normeInput.trim();
+    if (!v || (s.normesApplicables || []).includes(v)) return;
+    save({ normesApplicables: [...(s.normesApplicables || []), v] });
+    setNormeInput('');
+  }
+  function removeNorme(v) {
+    save({ normesApplicables: (s.normesApplicables || []).filter((n) => n !== v) });
+  }
+  return (
+    <Panel title="Référentiel réglementaire" subtitle="Pays, secteur d'activité et normes applicables — paramétrable, plus codé en dur (finding #38)">
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <FormField label="Pays">
+          <input defaultValue={s.pays} onBlur={(e) => e.target.value !== s.pays && save({ pays: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        </FormField>
+        <FormField label="Secteur d'activité">
+          <input defaultValue={s.secteurActivite} onBlur={(e) => e.target.value !== s.secteurActivite && save({ secteurActivite: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        </FormField>
+      </div>
+      <p className="text-xs font-medium mb-2" style={{ color: C.textMuted }}>Normes applicables</p>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {(s.normesApplicables || []).map((n) => (
+          <span key={n} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>
+            {n} <button onClick={() => removeNorme(n)} style={{ color: C.red }}>×</button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input value={normeInput} onChange={(e) => setNormeInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addNorme())} placeholder="Ex. ISO 22000, HACCP..." className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+        <button onClick={addNorme} disabled={saving} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Ajouter</button>
+      </div>
+    </Panel>
+  );
+}
+
 function RegulatoryAlertsTab() {
   const C = useTheme();
   const alertsQ = useCollection('/business/regulatory-alerts');
@@ -10494,6 +10546,7 @@ function RegulatoryAlertsTab() {
   return (
     <div className="space-y-4">
       {detailId && <RegulatoryRequirementDetailModal requirementId={detailId} onClose={() => setDetailId(null)} onChanged={alertsQ.reload} />}
+      <OrganisationSettingsPanel />
       <RegulatorySettingsPanel />
       <Panel title={`Échéances d'évaluation (${a.echeancesEvaluation.length})`}>
         {a.echeancesEvaluation.length
