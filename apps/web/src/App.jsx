@@ -10979,6 +10979,7 @@ const DOCUMENT_A_TRAITER_LABELS = {
 };
 
 function DocumentationPage() {
+  const { t } = useI18n();
   const C = useTheme();
   const dashboardQ = useCollection('/documents/dashboard');
   const groupsQ = useCollection('/documents/groups');
@@ -11044,7 +11045,7 @@ function DocumentationPage() {
       {addingVersionTo && <DocumentVersionForm doc={addingVersionTo} onClose={() => setAddingVersionTo(null)} onCreated={reloadAll} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['bibliotheque', 'Bibliothèque'], ['atraiter', 'À traiter'], ['matrice', 'Matrice'], ['parametrage', 'Paramètres GED']].map(([id, label]) => (
+        {[['apercu', t('documentation.tabApercu')], ['bibliotheque', t('documentation.tabBibliotheque')], ['atraiter', t('documentation.tabATraiter')], ['matrice', t('documentation.tabMatrice')], ['parametrage', t('documentation.tabParametrage')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -11054,42 +11055,42 @@ function DocumentationPage() {
           <div className="space-y-6">
             <LiveBadge />
             <div className="flex flex-wrap gap-3">
-              <KpiCard label="Total documents" value={dash.total ?? '—'} color={C.blue} icon={FolderOpen} />
-              <KpiCard label="Actifs (en vigueur)" value={dash.actifs ?? '—'} color={C.green} icon={ShieldCheck} />
-              <KpiCard label="Brouillons" value={dash.brouillons ?? '—'} color={C.blue} icon={ClipboardList} />
-              <KpiCard label="En vérification" value={dash.enVerification ?? '—'} color={C.amber} icon={ClipboardCheck} />
-              <KpiCard label="En approbation" value={dash.enApprobation ?? '—'} color={C.amber} icon={ClipboardCheck} />
-              <KpiCard label="Obsolètes" value={dash.obsoletes ?? '—'} color={dash.obsoletes > 0 ? C.red : C.green} icon={AlertTriangle} />
-              <KpiCard label="Archivés" value={dash.archives ?? '—'} color={C.textMuted} icon={FolderOpen} />
+              <KpiCard label={t('documentation.kpiTotalDocuments')} value={dash.total ?? '—'} color={C.blue} icon={FolderOpen} />
+              <KpiCard label={t('documentation.kpiActifs')} value={dash.actifs ?? '—'} color={C.green} icon={ShieldCheck} />
+              <KpiCard label={t('documentation.kpiBrouillons')} value={dash.brouillons ?? '—'} color={C.blue} icon={ClipboardList} />
+              <KpiCard label={t('documentation.kpiEnVerification')} value={dash.enVerification ?? '—'} color={C.amber} icon={ClipboardCheck} />
+              <KpiCard label={t('documentation.kpiEnApprobation')} value={dash.enApprobation ?? '—'} color={C.amber} icon={ClipboardCheck} />
+              <KpiCard label={t('documentation.kpiObsoletes')} value={dash.obsoletes ?? '—'} color={dash.obsoletes > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label={t('documentation.kpiArchives')} value={dash.archives ?? '—'} color={C.textMuted} icon={FolderOpen} />
             </div>
             <div className="flex flex-wrap gap-3">
-              <KpiCard label="À réviser (≤90j)" value={dash.aReviserProchainement ?? '—'} color={C.amber} icon={Bell} />
-              <KpiCard label="En retard de révision" value={dash.enRetardRevision ?? '—'} color={dash.enRetardRevision > 0 ? C.red : C.green} icon={AlertTriangle} />
-              <KpiCard label="Sans responsable" value={dash.sansResponsable ?? '—'} color={dash.sansResponsable > 0 ? C.amber : C.green} icon={Users} />
-              <KpiCard label="Sans approbateur" value={dash.sansApprobateur ?? '—'} color={dash.sansApprobateur > 0 ? C.amber : C.green} icon={Users} />
-              <KpiCard label="Récemment modifiés" value={dash.recemmentModifies ?? '—'} color={C.blue} icon={RefreshCw} />
-              <KpiCard label="Critiques" value={dash.critiques ?? '—'} color={C.red} icon={AlertTriangle} />
-              <KpiCard label="Réglementaires" value={dash.reglementaires ?? '—'} color={C.blue} icon={BookOpen} />
+              <KpiCard label={t('documentation.kpiAReviser')} value={dash.aReviserProchainement ?? '—'} color={C.amber} icon={Bell} />
+              <KpiCard label={t('documentation.kpiEnRetardRevision')} value={dash.enRetardRevision ?? '—'} color={dash.enRetardRevision > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label={t('documentation.kpiSansResponsable')} value={dash.sansResponsable ?? '—'} color={dash.sansResponsable > 0 ? C.amber : C.green} icon={Users} />
+              <KpiCard label={t('documentation.kpiSansApprobateur')} value={dash.sansApprobateur ?? '—'} color={dash.sansApprobateur > 0 ? C.amber : C.green} icon={Users} />
+              <KpiCard label={t('documentation.kpiRecemmentModifies')} value={dash.recemmentModifies ?? '—'} color={C.blue} icon={RefreshCw} />
+              <KpiCard label={t('documentation.kpiCritiques')} value={dash.critiques ?? '—'} color={C.red} icon={AlertTriangle} />
+              <KpiCard label={t('documentation.kpiReglementaires')} value={dash.reglementaires ?? '—'} color={C.blue} icon={BookOpen} />
             </div>
             <div className="flex flex-wrap gap-3">
-              <KpiCard label="Diffusion en attente" value={dash.diffusionEnAttente ?? '—'} color={dash.diffusionEnAttente > 0 ? C.amber : C.green} icon={Send} />
-              <KpiCard label="Accusé manquant" value={dash.accuseManquant ?? '—'} color={dash.accuseManquant > 0 ? C.amber : C.green} icon={CheckCircle2} />
-              <KpiCard label="Taux à jour" value={dash.tauxAJour != null ? `${dash.tauxAJour}%` : '—'} color={C.green} icon={ShieldCheck} />
-              <KpiCard label="Taux obsolètes" value={dash.tauxObsoletes != null ? `${dash.tauxObsoletes}%` : '—'} color={dash.tauxObsoletes > 10 ? C.red : C.blue} icon={AlertTriangle} />
-              <KpiCard label="Taux approuvés correctement" value={dash.tauxApprouvesCorrectement != null ? `${dash.tauxApprouvesCorrectement}%` : '—'} color={C.green} icon={ClipboardCheck} />
+              <KpiCard label={t('documentation.kpiDiffusionEnAttente')} value={dash.diffusionEnAttente ?? '—'} color={dash.diffusionEnAttente > 0 ? C.amber : C.green} icon={Send} />
+              <KpiCard label={t('documentation.kpiAccuseManquant')} value={dash.accuseManquant ?? '—'} color={dash.accuseManquant > 0 ? C.amber : C.green} icon={CheckCircle2} />
+              <KpiCard label={t('documentation.kpiTauxAJour')} value={dash.tauxAJour != null ? `${dash.tauxAJour}%` : '—'} color={C.green} icon={ShieldCheck} />
+              <KpiCard label={t('documentation.kpiTauxObsoletes')} value={dash.tauxObsoletes != null ? `${dash.tauxObsoletes}%` : '—'} color={dash.tauxObsoletes > 10 ? C.red : C.blue} icon={AlertTriangle} />
+              <KpiCard label={t('documentation.kpiTauxApprouvesCorrectement')} value={dash.tauxApprouvesCorrectement != null ? `${dash.tauxApprouvesCorrectement}%` : '—'} color={C.green} icon={ClipboardCheck} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Panel title="Répartition par statut">
-                {(dash.repartitionParStatut || []).length ? <HorizontalBars data={dash.repartitionParStatut} labelKey="label" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              <Panel title={t('documentation.parStatutTitle')}>
+                {(dash.repartitionParStatut || []).length ? <HorizontalBars data={dash.repartitionParStatut} labelKey="label" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('documentation.aucuneDonnee')}</p>}
               </Panel>
-              <Panel title="Répartition par catégorie">
-                {(dash.repartitionParCategorie || []).length ? <HorizontalBars data={dash.repartitionParCategorie} labelKey="label" valueKey="value" color={C.amber} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              <Panel title={t('documentation.parCategorieTitle')}>
+                {(dash.repartitionParCategorie || []).length ? <HorizontalBars data={dash.repartitionParCategorie} labelKey="label" valueKey="value" color={C.amber} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('documentation.aucuneDonnee')}</p>}
               </Panel>
-              <Panel title="Répartition par processus">
-                {(dash.repartitionParProcessus || []).length ? <HorizontalBars data={dash.repartitionParProcessus} labelKey="label" valueKey="value" color={C.green} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              <Panel title={t('documentation.parProcessusTitle')}>
+                {(dash.repartitionParProcessus || []).length ? <HorizontalBars data={dash.repartitionParProcessus} labelKey="label" valueKey="value" color={C.green} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('documentation.aucuneDonnee')}</p>}
               </Panel>
-              <Panel title="Répartition par type">
-                {(dash.repartitionParType || []).length ? <HorizontalBars data={dash.repartitionParType} labelKey="label" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée</p>}
+              <Panel title={t('documentation.parTypeTitle')}>
+                {(dash.repartitionParType || []).length ? <HorizontalBars data={dash.repartitionParType} labelKey="label" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('documentation.aucuneDonnee')}</p>}
               </Panel>
             </div>
           </div>
@@ -11100,52 +11101,52 @@ function DocumentationPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter un document</button>
+            <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('documentation.ajouterDocument')}</button>
           </div>
-          <Panel title="Recherche et filtres avancés">
+          <Panel title={t('documentation.rechercheFiltresTitle')}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <input placeholder="Titre, code, mots-clés..." value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <input placeholder={t('documentation.placeholderRecherche')} value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
               <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
-                <option value="">Statut — tous</option>{Object.entries(DOCUMENT_STATUS_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
+                <option value="">{t('documentation.statutTous')}</option>{Object.entries(DOCUMENT_STATUS_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
               </select>
-              <input placeholder="Type de document" value={filters.documentType} onChange={(e) => setFilters({ ...filters, documentType: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
-              <input placeholder="Domaine" value={filters.domaine} onChange={(e) => setFilters({ ...filters, domaine: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <input placeholder={t('documentation.placeholderType')} value={filters.documentType} onChange={(e) => setFilters({ ...filters, documentType: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <input placeholder={t('documentation.placeholderDomaine')} value={filters.domaine} onChange={(e) => setFilters({ ...filters, domaine: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
               <select value={filters.processusId} onChange={(e) => setFilters({ ...filters, processusId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
-                <option value="">Processus — tous</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+                <option value="">{t('documentation.processusTous')}</option>{(processusQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
               </select>
-              <input placeholder="Service" value={filters.service} onChange={(e) => setFilters({ ...filters, service: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
-              <input placeholder="Site" value={filters.siteId} onChange={(e) => setFilters({ ...filters, siteId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <input placeholder={t('documentation.placeholderService')} value={filters.service} onChange={(e) => setFilters({ ...filters, service: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <input placeholder={t('documentation.placeholderSite')} value={filters.siteId} onChange={(e) => setFilters({ ...filters, siteId: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
               <select value={filters.criticite} onChange={(e) => setFilters({ ...filters, criticite: e.target.value })} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)}>
-                <option value="">Criticité — toutes</option><option value="NON_CRITIQUE">Non critique</option><option value="CRITIQUE">Critique</option>
+                <option value="">{t('documentation.criticiteToutes')}</option><option value="NON_CRITIQUE">{t('documentation.nonCritique')}</option><option value="CRITIQUE">{t('documentation.critique')}</option>
               </select>
             </div>
-            {hasFilters && <button onClick={() => setFilters({ q: '', status: '', documentType: '', domaine: '', processusId: '', service: '', siteId: '', criticite: '' })} className="mt-3 text-xs" style={{ color: C.blue }}>Réinitialiser les filtres</button>}
+            {hasFilters && <button onClick={() => setFilters({ q: '', status: '', documentType: '', domaine: '', processusId: '', service: '', siteId: '', criticite: '' })} className="mt-3 text-xs" style={{ color: C.blue }}>{t('documentation.reinitialiserFiltres')}</button>}
           </Panel>
 
           {hasFilters ? (
-            <Panel title="Résultats de la recherche">
+            <Panel title={t('documentation.resultatsRechercheTitle')}>
               {filterResults.loading ? <LoadingPanel /> : filterResults.error ? <ErrorPanel message={filterResults.error} /> : (
                 (filterResults.data || []).length
-                  ? <DataTable columns={['Titre', 'Code', 'Version', 'Statut']}
+                  ? <DataTable columns={[t('documentation.colTitre'), t('documentation.colCode'), t('documentation.colVersion'), t('documentation.colStatut')]}
                       rows={(filterResults.data || []).map((d) => [d.title, d.code, `v${d.currentVersion}`, <DocumentStatusChip status={d.status} />])}
                       onRowClick={(i) => openDoc(filterResults.data[i])} />
-                  : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun document ne correspond à ces critères</p>
+                  : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('documentation.aucunDocumentCritere')}</p>
               )}
             </Panel>
           ) : libraryQ.loading ? <LoadingPanel /> : libraryQ.error ? <ErrorPanel message={libraryQ.error} onRetry={libraryQ.reload} /> : (
             <>
               <div className="flex flex-wrap gap-3">
-                <KpiCard label="Documents" value={list.length} color={C.blue} icon={FolderOpen} />
-                <KpiCard label="Procédures" value={procedures.length} color={C.amber} icon={ClipboardList} />
-                <KpiCard label="Groupes classés" value={new Set(list.map((d) => d.documentGroup).filter(Boolean)).size} color={C.green} icon={ShieldCheck} />
+                <KpiCard label={t('documentation.kpiDocuments')} value={list.length} color={C.blue} icon={FolderOpen} />
+                <KpiCard label={t('documentation.kpiProcedures')} value={procedures.length} color={C.amber} icon={ClipboardList} />
+                <KpiCard label={t('documentation.kpiGroupesClasses')} value={new Set(list.map((d) => d.documentGroup).filter(Boolean)).size} color={C.green} icon={ShieldCheck} />
               </div>
-              <p className="text-xs" style={{ color: C.textMuted }}>Cliquez un document pour le lire directement ici (PDF affiché tel quel, Word et Excel convertis en aperçu). Chaque dossier se déplie/replie au clic.</p>
+              <p className="text-xs" style={{ color: C.textMuted }}>{t('documentation.clicDocumentNote')}</p>
               <div className="space-y-3">
-                <DocumentFolder label="Procédures" icon={Wrench} docs={procedures} defaultOpen onOpenDoc={openDoc} />
+                <DocumentFolder label={t('documentation.dossierProcedures')} icon={Wrench} docs={procedures} defaultOpen onOpenDoc={openDoc} />
                 {Object.entries(DOCUMENT_GROUP_LABELS).map(([key, label]) => (
                   <DocumentFolder key={key} label={label} icon={FolderOpen} docs={list.filter((d) => d.documentGroup === key)} onOpenDoc={openDoc} />
                 ))}
-                <DocumentFolder label="Non classés" icon={FolderOpen} docs={nonClasses} onOpenDoc={openDoc} />
+                <DocumentFolder label={t('documentation.dossierNonClasses')} icon={FolderOpen} docs={nonClasses} onOpenDoc={openDoc} />
               </div>
             </>
           )}
@@ -11157,7 +11158,7 @@ function DocumentationPage() {
           <div className="space-y-4">
             <LiveBadge />
             {Object.entries(DOCUMENT_A_TRAITER_LABELS).map(([key, label]) => (
-              <Panel key={key} title={label} subtitle={`${(at[key] || []).length} document(s)`}>
+              <Panel key={key} title={label} subtitle={t('documentation.documentCount', { count: String((at[key] || []).length) })}>
                 {(at[key] || []).length
                   ? <div className="space-y-1.5">{(at[key] || []).map((d) => (
                       <div key={d.id} onClick={() => openDoc(d)} className="flex items-center justify-between p-2 rounded-lg cursor-pointer" style={{ backgroundColor: C.cardAlt }}>
@@ -11168,7 +11169,7 @@ function DocumentationPage() {
                         </div>
                       </div>
                     ))}</div>
-                  : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Rien à traiter ici</p>}
+                  : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>{t('documentation.rienATraiter')}</p>}
               </Panel>
             ))}
           </div>
@@ -11180,13 +11181,13 @@ function DocumentationPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <LiveBadge />
-              <button onClick={exportMatriceExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Exporter Excel</button>
+              <button onClick={exportMatriceExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{t('documentation.exporterExcel')}</button>
             </div>
-            <Panel title="Matrice documentaire" subtitle={`${matriceList.length} document(s)`}>
+            <Panel title={t('documentation.matriceTitle')} subtitle={t('documentation.documentCount', { count: String(matriceList.length) })}>
               {matriceList.length
-                ? <DataTable columns={['Code', 'Titre', 'Version', 'Type', 'Processus', 'Responsable', 'Statut', 'Approbation', "Date d'effet", 'Prochaine révision', 'Criticité', 'Diffusion', 'Accusé', 'État']}
+                ? <DataTable columns={[t('documentation.colCode'), t('documentation.colTitre'), t('documentation.colVersion'), t('documentation.colType'), t('documentation.colProcessus'), t('documentation.colResponsable'), t('documentation.colStatut'), t('documentation.colApprobation'), t('documentation.colDateEffet'), t('documentation.colProchaineRevision'), t('documentation.colCriticite'), t('documentation.colDiffusion'), t('documentation.colAccuse'), t('documentation.colEtat')]}
                     rows={matriceList.map((m) => [m.code, m.title, m.version, m.documentType || '—', m.processus || '—', m.responsable || '—', m.statut || '—', m.approbation || '—', m.dateEntreeVigueur ? new Date(m.dateEntreeVigueur).toLocaleDateString('fr-FR') : '—', m.nextReviewAt ? new Date(m.nextReviewAt).toLocaleDateString('fr-FR') : '—', m.criticite || '—', m.diffusion || '—', m.accuseLecture || '—', m.etat || '—'])} />
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun document</p>}
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('documentation.aucunDocument')}</p>}
             </Panel>
           </div>
         )
