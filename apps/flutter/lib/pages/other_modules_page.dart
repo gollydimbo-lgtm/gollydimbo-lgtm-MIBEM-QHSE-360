@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'attachment_helpers.dart';
 import 'environnement_pages.dart';
 import 'equipment_page.dart';
@@ -12,14 +13,14 @@ class OtherModulesPage extends StatelessWidget {
   const OtherModulesPage({super.key});
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Modules QHSE')),
+    appBar: AppBar(title: Text(t('otherModules.titre'))),
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _tile(c, Icons.restaurant_menu, 'HACCP', 'Points critiques (CCP), surveillance, actions correctives', const HaccpPage()),
-        _tile(c, Icons.eco, 'Environnement', 'Relevés (eau, déchets, énergie, rejets...)', const EnvironnementHome()),
-        _tile(c, Icons.school, 'Formations', 'Planification, échéances, participants', const TrainingsPage()),
-        _tile(c, Icons.precision_manufacturing, 'Équipements', 'Registre, scan QR, contrôles terrain hors-ligne', const EquipmentPage()),
+        _tile(c, Icons.restaurant_menu, t('otherModules.haccpTitre'), t('otherModules.haccpSousTitre'), const HaccpPage()),
+        _tile(c, Icons.eco, t('otherModules.environnementTitre'), t('otherModules.environnementSousTitre'), const EnvironnementHome()),
+        _tile(c, Icons.school, t('otherModules.formationsTitre'), t('otherModules.formationsSousTitre'), const TrainingsPage()),
+        _tile(c, Icons.precision_manufacturing, t('otherModules.equipementsTitre'), t('otherModules.equipementsSousTitre'), const EquipmentPage()),
       ],
     ),
   );
@@ -60,10 +61,10 @@ class _TrainingsPageState extends State<TrainingsPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: const Text('Nouvelle formation'),
+        title: Text(t('otherModules.nouvelleFormation')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: title, decoration: const InputDecoration(labelText: 'Intitulé')),
-          TextField(controller: trainer, decoration: const InputDecoration(labelText: 'Formateur')),
+          TextField(controller: title, decoration: InputDecoration(labelText: t('otherModules.intitule'))),
+          TextField(controller: trainer, decoration: InputDecoration(labelText: t('otherModules.formateur'))),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () async { final d = await showDatePicker(context: dc, initialDate: date, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 730))); if (d != null) setD(() => date = d); },
@@ -71,7 +72,7 @@ class _TrainingsPageState extends State<TrainingsPage> {
             label: Text(date.toIso8601String().substring(0, 10)),
           ),
         ])),
-        actions: [TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Créer'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('otherModules.annuler'))), FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('otherModules.creer')))],
       )),
     );
     if (ok != true || title.text.trim().isEmpty) return;
@@ -83,18 +84,18 @@ class _TrainingsPageState extends State<TrainingsPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Formations')),
-    floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: const Text('Planifier')),
+    appBar: AppBar(title: Text(t('otherModules.formationsTitre'))),
+    floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: Text(t('otherModules.planifier'))),
     body: loading ? const Center(child: CircularProgressIndicator()) : error != null ? LoadErrorView(error: error, onRetry: load) : RefreshIndicator(
       onRefresh: load,
       child: items.isEmpty
-          ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune formation planifiée')))])
+          ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('otherModules.aucuneFormation'))))])
           : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
-              final t = items[i];
+              final tr = items[i];
               return Card(child: ListTile(
                 leading: const Icon(Icons.school, color: Colors.indigo),
-                title: Text('${t['title']}'),
-                subtitle: Text('${t['trainer'] ?? ''} • ${_date(t['scheduledAt'])} • ${t['status']}'),
+                title: Text('${tr['title']}'),
+                subtitle: Text('${tr['trainer'] ?? ''} • ${_date(tr['scheduledAt'])} • ${tr['status']}'),
               ));
             }),
     ),
