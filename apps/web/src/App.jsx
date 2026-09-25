@@ -5724,6 +5724,7 @@ function IndicateurMesureDialog({ indicateur, onClose, onCreated }) {
 
 function IndicateursQualitePage() {
   const C = useTheme();
+  const { t } = useI18n();
   const indicateurs = useCollection('/business/indicateurs-qualite');
   const auto = useCollection('/business/indicateurs-auto-compare');
   const indice = useCollection('/business/indice-global-qualite');
@@ -5755,8 +5756,8 @@ function IndicateursQualitePage() {
   }
   // Export harmonisé (audit priorité 7, finding #17).
   function exportIndicateursExcel() {
-    downloadWorkbook([['Indicateurs qualité', [
-      ['Indicateur', 'Catégorie', 'Actuel', 'Cible', 'Unité', 'Statut'],
+    downloadWorkbook([[t('indicateurs.bibliothequeTitle'), [
+      [t('indicateurs.colIndicateur'), t('indicateurs.colCategorie'), t('indicateurs.colActuel'), t('indicateurs.colCible'), t('indicateurs.colUnite'), t('indicateurs.colStatut')],
       ...indList.map((i) => [i.indicateur, i.categorie || '', i.actuel, i.cible, i.unite || '', indicateurStatus(i.actuel, i.cible, i.sensInverse, i.seuilVert, i.seuilOrange).label]),
     ]]], `Indicateurs-qualite-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
@@ -5768,13 +5769,13 @@ function IndicateursQualitePage() {
       {detailFor && <IndicateurDetailModal indicateur={detailFor} onClose={() => setDetailFor(null)} onChanged={indicateurs.reload} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel indicateur</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('indicateurs.nouvelIndicateur')}</button>
       </div>
 
-      <Panel title="Indice global de performance qualité" subtitle="Moyenne pondérée de la bibliothèque automatique — pondérations configurables ci-dessous.">
+      <Panel title={t('indicateurs.indiceTitle')} subtitle={t('indicateurs.indiceSubtitle')}>
         <div className="flex items-center gap-6">
           <p className="text-5xl font-bold" style={{ color: statusColorMap[indiceStatus.color] || C.text }}>{indiceData.indice != null ? `${indiceData.indice}` : '—'}<span className="text-lg" style={{ color: C.textMuted }}>/100</span></p>
-          <button onClick={() => setShowPonderation((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{showPonderation ? 'Masquer les pondérations' : 'Régler les pondérations'}</button>
+          <button onClick={() => setShowPonderation((s) => !s)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{showPonderation ? t('indicateurs.masquerPonderations') : t('indicateurs.reglerPonderations')}</button>
         </div>
         {showPonderation && (
           <div className="mt-4 space-y-2">
@@ -5789,12 +5790,12 @@ function IndicateursQualitePage() {
       </Panel>
 
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="Indicateurs suivis" value={indList.length} color={C.blue} icon={Activity} />
-        <KpiCard label="Dans la cible" value={cibles} color={C.green} icon={ShieldCheck} />
-        <KpiCard label="Hors cible" value={indList.length - cibles} color={C.red} icon={AlertTriangle} />
+        <KpiCard label={t('indicateurs.kpiSuivis')} value={indList.length} color={C.blue} icon={Activity} />
+        <KpiCard label={t('indicateurs.kpiDansCible')} value={cibles} color={C.green} icon={ShieldCheck} />
+        <KpiCard label={t('indicateurs.kpiHorsCible')} value={indList.length - cibles} color={C.red} icon={AlertTriangle} />
       </div>
 
-      <Panel title="Bibliothèque automatique" subtitle="Mois en cours vs mois précédent — calculée depuis les contrôles, non-conformités, actions, réclamations, fournisseurs et audits déjà enregistrés.">
+      <Panel title={t('indicateurs.bibliothequeTitle')} subtitle={t('indicateurs.bibliothequeSubtitle')}>
         <div className="grid grid-cols-3 gap-3">
           {autoList.map((a) => {
             const st = indicateurStatus(a.valeur, null, a.sensInverse, null, null);
@@ -5815,18 +5816,18 @@ function IndicateursQualitePage() {
         </div>
       </Panel>
 
-      <Panel title="Indicateurs qualité vs cibles" right={
+      <Panel title={t('indicateurs.vsCiblesTitle')} right={
         <div className="flex items-center gap-2">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un indicateur..." className="text-xs px-3 py-1.5 rounded-lg outline-none" style={inputStyle(C)} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('indicateurs.rechercherPlaceholder')} className="text-xs px-3 py-1.5 rounded-lg outline-none" style={inputStyle(C)} />
           {categories.length > 0 && (
             <select value={categorieFilter} onChange={(e) => setCategorieFilter(e.target.value)} className="px-2 py-1 rounded-lg text-xs outline-none" style={inputStyle(C)}>
-              <option value="">Toutes catégories</option>{categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+              <option value="">{t('indicateurs.toutesCategories')}</option>{categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           )}
           <button onClick={exportIndicateursExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
         </div>
       }>
-        {indList.length === 0 ? <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun indicateur enregistré</p> : (
+        {indList.length === 0 ? <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('indicateurs.aucunIndicateur')}</p> : (
           <div className="space-y-4">
             {indList.map((i) => {
               const atteint = i.sensInverse ? i.actuel <= i.cible : i.actuel >= i.cible;
@@ -5838,12 +5839,12 @@ function IndicateursQualitePage() {
                     <span className="cursor-pointer" style={{ color: C.text }} onClick={() => setDetailFor(i)}>{i.indicateur} {i.categorie && <span style={{ color: C.textMuted }}>· {i.categorie}</span>}</span>
                     <div className="flex items-center gap-2">
                       <span style={{ color: C.textMuted }}>{i.actuel}{i.unite} / {i.cible}{i.unite}</span>
-                      <button onClick={() => setMesureFor(i)} className="text-[11px]" style={{ color: C.blue }}>+ Mesure</button>
-                      <button onClick={() => setSelected(i)} className="text-[11px]" style={{ color: C.textMuted }}>Modifier</button>
+                      <button onClick={() => setMesureFor(i)} className="text-[11px]" style={{ color: C.blue }}>{t('indicateurs.mesure')}</button>
+                      <button onClick={() => setSelected(i)} className="text-[11px]" style={{ color: C.textMuted }}>{t('indicateurs.modifier')}</button>
                     </div>
                   </div>
                   <div className="h-2 rounded-full" style={{ backgroundColor: C.border }}><div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: atteint ? C.green : C.amber }} /></div>
-                  {i.mesures?.length > 1 && <p className="text-[10px] mt-1" style={{ color: C.textMuted }}>Historique : {i.mesures.slice(0, 5).reverse().map((m) => m.valeur).join(' → ')}</p>}
+                  {i.mesures?.length > 1 && <p className="text-[10px] mt-1" style={{ color: C.textMuted }}>{t('indicateurs.historique', { values: i.mesures.slice(0, 5).reverse().map((m) => m.valeur).join(' → ') })}</p>}
                 </div>
               );
             })}

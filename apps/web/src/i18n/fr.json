@@ -213,5 +213,30 @@
     "colCompletude": "Complétude",
     "colMaitrisePct": "Maîtrise (%)",
     "colCompletudePct": "Complétude (%)"
+  },
+  "indicateurs": {
+    "nouvelIndicateur": "+ Nouvel indicateur",
+    "indiceTitle": "Indice global de performance qualité",
+    "indiceSubtitle": "Moyenne pondérée de la bibliothèque automatique — pondérations configurables ci-dessous.",
+    "masquerPonderations": "Masquer les pondérations",
+    "reglerPonderations": "Régler les pondérations",
+    "kpiSuivis": "Indicateurs suivis",
+    "kpiDansCible": "Dans la cible",
+    "kpiHorsCible": "Hors cible",
+    "bibliothequeTitle": "Bibliothèque automatique",
+    "bibliothequeSubtitle": "Mois en cours vs mois précédent — calculée depuis les contrôles, non-conformités, actions, réclamations, fournisseurs et audits déjà enregistrés.",
+    "vsCiblesTitle": "Indicateurs qualité vs cibles",
+    "rechercherPlaceholder": "Rechercher un indicateur...",
+    "toutesCategories": "Toutes catégories",
+    "aucunIndicateur": "Aucun indicateur enregistré",
+    "mesure": "+ Mesure",
+    "modifier": "Modifier",
+    "historique": "Historique : {{values}}",
+    "colIndicateur": "Indicateur",
+    "colCategorie": "Catégorie",
+    "colActuel": "Actuel",
+    "colCible": "Cible",
+    "colUnite": "Unité",
+    "colStatut": "Statut"
   }
 }

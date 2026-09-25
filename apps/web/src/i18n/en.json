@@ -213,5 +213,30 @@
     "colCompletude": "Completeness",
     "colMaitrisePct": "Control (%)",
     "colCompletudePct": "Completeness (%)"
+  },
+  "indicateurs": {
+    "nouvelIndicateur": "+ New indicator",
+    "indiceTitle": "Global quality performance index",
+    "indiceSubtitle": "Weighted average of the automatic library — weights configurable below.",
+    "masquerPonderations": "Hide weights",
+    "reglerPonderations": "Set weights",
+    "kpiSuivis": "Tracked indicators",
+    "kpiDansCible": "On target",
+    "kpiHorsCible": "Off target",
+    "bibliothequeTitle": "Automatic library",
+    "bibliothequeSubtitle": "Current month vs previous month — computed from already recorded controls, non-conformities, actions, complaints, suppliers and audits.",
+    "vsCiblesTitle": "Quality indicators vs targets",
+    "rechercherPlaceholder": "Search an indicator...",
+    "toutesCategories": "All categories",
+    "aucunIndicateur": "No indicator recorded",
+    "mesure": "+ Measurement",
+    "modifier": "Edit",
+    "historique": "History: {{values}}",
+    "colIndicateur": "Indicator",
+    "colCategorie": "Category",
+    "colActuel": "Current",
+    "colCible": "Target",
+    "colUnite": "Unit",
+    "colStatut": "Status"
   }
 }
