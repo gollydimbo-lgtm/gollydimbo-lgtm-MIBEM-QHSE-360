@@ -1,30 +1,29 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'capa_link_widget.dart';
 import 'safety_talk_form_page.dart';
 import 'safety_talk_page.dart';
 
-const _feedbackTypeLabels = {
-  'DANGER': 'Danger',
-  'SITUATION_DANGEREUSE': 'Situation dangereuse',
-  'COMPORTEMENT_RISQUE': 'Comportement à risque',
-  'EQUIPEMENT_DEFECTUEUX': 'Équipement défectueux',
-  'EPI_MANQUANT': 'EPI manquant',
-  'EPC_DEFAILLANT': 'EPC défaillant',
-  'ORGANISATION': 'Organisation',
-  'ANOMALIE': 'Anomalie',
-  'PRESQUE_ACCIDENT': 'Presqu\'accident',
-  'NC': 'Non-conformité',
-  'AMELIORATION': 'Suggestion d\'amélioration',
+Map<String, String> get _feedbackTypeLabels => {
+  'DANGER': t('safetyTalkDetail.typeDanger'),
+  'SITUATION_DANGEREUSE': t('safetyTalkDetail.typeSituationDangereuse'),
+  'COMPORTEMENT_RISQUE': t('safetyTalkDetail.typeComportementRisque'),
+  'EQUIPEMENT_DEFECTUEUX': t('safetyTalkDetail.typeEquipementDefectueux'),
+  'EPI_MANQUANT': t('safetyTalkDetail.typeEpiManquant'),
+  'EPC_DEFAILLANT': t('safetyTalkDetail.typeEpcDefaillant'),
+  'ORGANISATION': t('safetyTalkDetail.typeOrganisation'),
+  'ANOMALIE': t('safetyTalkDetail.typeAnomalie'),
+  'PRESQUE_ACCIDENT': t('safetyTalkDetail.typePresqueAccident'),
+  'NC': t('safetyTalkDetail.typeNc'),
+  'AMELIORATION': t('safetyTalkDetail.typeAmelioration'),
 };
 
-const _feedbackCriticiteLabels = {'FAIBLE': 'Faible', 'MOYENNE': 'Moyenne', 'ELEVEE': 'Élevée', 'CRITIQUE': 'Critique'};
-
-const _transformTargetLabels = {
-  'ACTION': 'Créer une action CAPA',
-  'NON_CONFORMITY': 'Créer une non-conformité',
-  'SAFETY_EVENT': 'Créer une situation dangereuse',
+Map<String, String> get _transformTargetLabels => {
+  'ACTION': t('safetyTalkDetail.cibleAction'),
+  'NON_CONFORMITY': t('safetyTalkDetail.cibleNonConformite'),
+  'SAFETY_EVENT': t('safetyTalkDetail.cibleSituationDangereuse'),
 };
 
 /// Page détail d'une fiche de quart d'heure sécurité : bandeau de statut,
@@ -56,7 +55,7 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     setState(() => loading = true);
     try {
       final list = List.from(await api.get('/safety-talks'));
-      final found = list.firstWhere((t) => t['id'] == widget.safetyTalkId, orElse: () => null);
+      final found = list.firstWhere((x) => x['id'] == widget.safetyTalkId, orElse: () => null);
       talk = found != null ? Map.from(found) : {};
     } catch (e) { error = '$e'; }
     await Future.wait([loadParticipants(), loadFeedbacks(), loadQuizStats(), loadLists()]);
@@ -114,8 +113,8 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     final d = await showDatePicker(context: context, initialDate: initial ?? DateTime.now(), firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 730)));
     if (d == null) return null;
     if (!mounted) return null;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial ?? DateTime.now()));
-    return DateTime(d.year, d.month, d.day, t?.hour ?? 8, t?.minute ?? 0);
+    final tod = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial ?? DateTime.now()));
+    return DateTime(d.year, d.month, d.day, tod?.hour ?? 8, tod?.minute ?? 0);
   }
 
   Future<void> schedule() async {
@@ -144,18 +143,18 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Ajouter un participant'),
+        title: Text(t('safetyTalkDetail.dialogAjouterParticipant')),
         content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Employé'), value: employeeId,
+            isExpanded: true, decoration: InputDecoration(labelText: t('safetyTalkDetail.champEmploye')), value: employeeId,
             items: employees.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text('${e['firstName']} ${e['lastName']}'))).toList(),
             onChanged: (v) => setD(() => employeeId = v),
           ),
-          CheckboxListTile(value: present, title: const Text('Présent'), onChanged: (v) => setD(() => present = v ?? true)),
+          CheckboxListTile(value: present, title: Text(t('safetyTalkDetail.present')), onChanged: (v) => setD(() => present = v ?? true)),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: employeeId == null ? null : () => Navigator.pop(c, true), child: const Text('Ajouter')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('safetyTalkDetail.annuler'))),
+          FilledButton(onPressed: employeeId == null ? null : () => Navigator.pop(c, true), child: Text(t('safetyTalkDetail.ajouter'))),
         ],
       )),
     );
@@ -172,9 +171,9 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Ajouter plusieurs participants'),
+        title: Text(t('safetyTalkDetail.dialogAjouterPlusieurs')),
         content: SizedBox(width: 420, height: 360, child: employees.isEmpty
-            ? const Center(child: Text('Aucun employé'))
+            ? Center(child: Text(t('safetyTalkDetail.aucunEmploye')))
             : ListView(children: employees.map<Widget>((e) => CheckboxListTile(
                 dense: true,
                 value: selected.contains(e['id']),
@@ -182,8 +181,8 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
                 onChanged: (v) => setD(() { if (v == true) selected.add(e['id']); else selected.remove(e['id']); }),
               )).toList())),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(c, true), child: const Text('Ajouter')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('safetyTalkDetail.annuler'))),
+          FilledButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(c, true), child: Text(t('safetyTalkDetail.ajouter'))),
         ],
       )),
     );
@@ -214,31 +213,31 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Nouvelle remontée terrain'),
+        title: Text(t('safetyTalkDetail.dialogNouvelleRemontee')),
         content: SizedBox(width: 420, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description *')),
+          TextField(controller: description, maxLines: 3, decoration: InputDecoration(labelText: t('safetyTalkDetail.champDescriptionObligatoire'))),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Type'), value: type,
+            isExpanded: true, decoration: InputDecoration(labelText: t('safetyTalkDetail.champType')), value: type,
             items: _feedbackTypeLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
             onChanged: (v) => setD(() => type = v ?? type),
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Criticité'), value: criticite,
-            items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ..._feedbackCriticiteLabels.entries.map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))],
+            isExpanded: true, decoration: InputDecoration(labelText: t('safetyTalkDetail.champCriticite')), value: criticite,
+            items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...prioriteLabels.entries.map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))],
             onChanged: (v) => setD(() => criticite = v),
           ),
           const SizedBox(height: 10),
-          TextField(controller: localisation, decoration: const InputDecoration(labelText: 'Localisation')),
+          TextField(controller: localisation, decoration: InputDecoration(labelText: t('safetyTalkDetail.champLocalisation'))),
           const SizedBox(height: 10),
-          TextField(controller: mesureImmediate, maxLines: 2, decoration: const InputDecoration(labelText: 'Mesure immédiate prise')),
+          TextField(controller: mesureImmediate, maxLines: 2, decoration: InputDecoration(labelText: t('safetyTalkDetail.champMesureImmediate'))),
           const SizedBox(height: 10),
-          TextField(controller: commentaire, maxLines: 2, decoration: const InputDecoration(labelText: 'Commentaire')),
+          TextField(controller: commentaire, maxLines: 2, decoration: InputDecoration(labelText: t('safetyTalkDetail.champCommentaire'))),
         ]))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: description.text.trim().isEmpty ? null : () => Navigator.pop(c, true), child: const Text('Enregistrer')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('safetyTalkDetail.annuler'))),
+          FilledButton(onPressed: description.text.trim().isEmpty ? null : () => Navigator.pop(c, true), child: Text(t('safetyTalkDetail.enregistrer'))),
         ],
       )),
     );
@@ -266,19 +265,19 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     final target = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Transformer cette remontée'),
+        title: Text(t('safetyTalkDetail.dialogTransformerRemontee')),
         content: Column(mainAxisSize: MainAxisSize.min, children: _transformTargetLabels.entries.map((e) => ListTile(
               leading: Icon(e.key == 'ACTION' ? Icons.playlist_add_check : e.key == 'NON_CONFORMITY' ? Icons.report_gmailerrorred : Icons.warning_amber_outlined),
               title: Text(e.value),
               onTap: () => Navigator.pop(c, e.key),
             )).toList()),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(t('safetyTalkDetail.annuler')))],
       ),
     );
     if (target == null) return;
     try {
       await api.post('/safety-talks/feedbacks/${feedback['id']}/transform', {'targetModule': target});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Remontée transformée : ${_transformTargetLabels[target]}')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyTalkDetail.remonteeTransformee', {'target': _transformTargetLabels[target] ?? ''}))));
       await loadFeedbacks();
       setState(() => capaRefreshKey++); // force le rechargement des CAPA liées si une action a été créée
     } catch (e) {
@@ -294,28 +293,28 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Résultat de quiz'),
+        title: Text(t('safetyTalkDetail.dialogResultatQuiz')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Participant (optionnel)'), value: participantId,
-            items: [const DropdownMenuItem<String>(value: null, child: Text('Anonyme')), ...participants.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(value: p['id'] as String, child: Text(employeeName(p['employeeId']))))],
+            isExpanded: true, decoration: InputDecoration(labelText: t('safetyTalkDetail.champParticipantOptionnel')), value: participantId,
+            items: [DropdownMenuItem<String>(value: null, child: Text(t('safetyTalkDetail.anonyme'))), ...participants.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(value: p['id'] as String, child: Text(employeeName(p['employeeId']))))],
             onChanged: (v) => setD(() => participantId = v),
           ),
-          TextField(controller: score, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Score obtenu')),
-          TextField(controller: total, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Total des points')),
+          TextField(controller: score, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('safetyTalkDetail.champScoreObtenu'))),
+          TextField(controller: total, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('safetyTalkDetail.champTotalPoints'))),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Enregistrer')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('safetyTalkDetail.annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('safetyTalkDetail.enregistrer'))),
         ],
       )),
     );
     if (ok != true) return;
     final s = int.tryParse(score.text.trim()) ?? 0;
-    final t = int.tryParse(total.text.trim()) ?? 0;
-    if (t <= 0) return;
+    final totalVal = int.tryParse(total.text.trim()) ?? 0;
+    if (totalVal <= 0) return;
     try {
-      await api.post('/safety-talks/${widget.safetyTalkId}/quiz', {if (participantId != null) 'participantId': participantId, 'score': s, 'total': t});
+      await api.post('/safety-talks/${widget.safetyTalkId}/quiz', {if (participantId != null) 'participantId': participantId, 'score': s, 'total': totalVal});
       await loadQuizStats();
       if (mounted) setState(() {});
     } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
@@ -346,34 +345,34 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
     // Api.canManage (RBAC, finding #1) : le backend exige ADMINISTRATEUR/
     // RESPONSABLE_QHSE sur /safety-talks/:id/approve.
     if ((status == 'DRAFT' || status == 'REPORTE') && Api.canManage) {
-      buttons.add(FilledButton.icon(onPressed: busy ? null : approve, icon: const Icon(Icons.check, size: 16), label: const Text('Valider')));
+      buttons.add(FilledButton.icon(onPressed: busy ? null : approve, icon: const Icon(Icons.check, size: 16), label: Text(t('safetyTalkDetail.btnValider'))));
     }
     if (status == 'APPROVED') {
-      buttons.add(FilledButton.icon(onPressed: busy ? null : deliver, icon: const Icon(Icons.campaign, size: 16), label: const Text('Marquer comme animée')));
+      buttons.add(FilledButton.icon(onPressed: busy ? null : deliver, icon: const Icon(Icons.campaign, size: 16), label: Text(t('safetyTalkDetail.btnMarquerAnimee'))));
     }
     if (status != 'DELIVERED' && status != 'ANNULE') {
-      buttons.add(OutlinedButton.icon(onPressed: busy ? null : schedule, icon: const Icon(Icons.event, size: 16), label: const Text('Planifier')));
-      buttons.add(OutlinedButton.icon(onPressed: busy ? null : postpone, icon: const Icon(Icons.schedule, size: 16), label: Text(status == 'REPORTE' ? 'Reprogrammer' : 'Reporter')));
-      buttons.add(OutlinedButton.icon(onPressed: busy ? null : cancel, icon: const Icon(Icons.cancel_outlined, size: 16), label: const Text('Annuler')));
+      buttons.add(OutlinedButton.icon(onPressed: busy ? null : schedule, icon: const Icon(Icons.event, size: 16), label: Text(t('safetyTalkDetail.btnPlanifier'))));
+      buttons.add(OutlinedButton.icon(onPressed: busy ? null : postpone, icon: const Icon(Icons.schedule, size: 16), label: Text(status == 'REPORTE' ? t('safetyTalkDetail.btnReprogrammer') : t('safetyTalkDetail.btnReporter'))));
+      buttons.add(OutlinedButton.icon(onPressed: busy ? null : cancel, icon: const Icon(Icons.cancel_outlined, size: 16), label: Text(t('safetyTalkDetail.annuler'))));
     }
     if (status != 'DELIVERED') {
-      buttons.add(OutlinedButton.icon(onPressed: busy ? null : editForm, icon: const Icon(Icons.edit, size: 16), label: const Text('Modifier')));
+      buttons.add(OutlinedButton.icon(onPressed: busy ? null : editForm, icon: const Icon(Icons.edit, size: 16), label: Text(t('safetyTalkDetail.btnModifier'))));
     }
     return buttons;
   }
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Quart d\'heure sécurité')), body: const Center(child: CircularProgressIndicator()));
-    if (talk == null || talk!.isEmpty) return Scaffold(appBar: AppBar(title: const Text('Quart d\'heure sécurité')), body: Center(child: Text(error ?? 'Introuvable')));
-    final t = talk!;
-    final status = t['status'] as String?;
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('safetyTalkDetail.titre'))), body: const Center(child: CircularProgressIndicator()));
+    if (talk == null || talk!.isEmpty) return Scaffold(appBar: AppBar(title: Text(t('safetyTalkDetail.titre'))), body: Center(child: Text(error ?? t('safetyTalkDetail.introuvable'))));
+    final tk = talk!;
+    final status = tk['status'] as String?;
     final sColor = statusColor(status);
-    final quiz = t['quiz'];
+    final quiz = tk['quiz'];
     final quizQuestionsList = (quiz is Map && quiz['questions'] is List) ? List.from(quiz['questions']) : [];
 
     return Scaffold(
-      appBar: AppBar(title: Text('${t['title'] ?? ''}')),
+      appBar: AppBar(title: Text('${tk['title'] ?? ''}')),
       body: RefreshIndicator(
         onRefresh: loadAll,
         child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -384,44 +383,44 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
               Icon(Icons.info_outline, color: sColor),
               const SizedBox(width: 8),
               Expanded(child: Text(statusLabels[status] ?? status ?? '—', style: TextStyle(color: sColor, fontWeight: FontWeight.bold))),
-              prioriteChip(t['priorite']),
+              prioriteChip(tk['priorite']),
             ]),
           ),
           const SizedBox(height: 12),
-          _metaRow('Semaine', 'Du ${fmtDate(t['weekStart'])} au ${fmtDate(t['weekEnd'])}'),
-          _metaRow('Origine', t['origineType'] == 'AUTO_RECOMMANDE' ? 'Auto-recommandée${t['origineModules'] != null ? ' (${t['origineModules']})' : ''}' : 'Manuelle'),
-          if (t['origineRaison'] != null) _metaRow('Motif', t['origineRaison']),
-          _metaRow('Site / Service / Zone / Équipe', [t['siteId'], t['service'], t['zone'], t['equipe']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
-          _metaRow('Unité de travail', workUnitName(t['workUnitId'])),
-          _metaRow('Responsable animation', userName(t['responsableAnimationId'])),
-          _metaRow('Planifiée le', t['scheduledAt'] != null ? '${t['scheduledAt']}'.replaceFirst('T', ' ').substring(0, 16) : '—'),
-          _metaRow('Durée', t['duree'] != null ? '${t['duree']} min' : '—'),
-          _metaRow('Fréquence', t['frequence']),
-          _metaRow('Réalisée le', t['realisedAt'] != null ? fmtDate(t['realisedAt']) : '—'),
+          _metaRow(t('safetyTalkDetail.metaSemaine'), t('safetyTalkDetail.metaSemaineValeur', {'debut': fmtDate(tk['weekStart']), 'fin': fmtDate(tk['weekEnd'])})),
+          _metaRow(t('safetyTalkDetail.metaOrigine'), tk['origineType'] == 'AUTO_RECOMMANDE' ? '${t('safetyTalkDetail.origineAuto')}${tk['origineModules'] != null ? ' (${tk['origineModules']})' : ''}' : t('safetyTalkDetail.origineManuelle')),
+          if (tk['origineRaison'] != null) _metaRow(t('safetyTalkDetail.metaMotif'), tk['origineRaison']),
+          _metaRow(t('safetyTalkDetail.metaSiteServiceZoneEquipe'), [tk['siteId'], tk['service'], tk['zone'], tk['equipe']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
+          _metaRow(t('safetyTalkDetail.metaUniteTravail'), workUnitName(tk['workUnitId'])),
+          _metaRow(t('safetyTalkDetail.metaResponsableAnimation'), userName(tk['responsableAnimationId'])),
+          _metaRow(t('safetyTalkDetail.metaPlanifieeLe'), tk['scheduledAt'] != null ? '${tk['scheduledAt']}'.replaceFirst('T', ' ').substring(0, 16) : '—'),
+          _metaRow(t('safetyTalkDetail.metaDuree'), tk['duree'] != null ? '${tk['duree']} min' : '—'),
+          _metaRow(t('safetyTalkDetail.metaFrequence'), tk['frequence']),
+          _metaRow(t('safetyTalkDetail.metaRealiseeLe'), tk['realisedAt'] != null ? fmtDate(tk['realisedAt']) : '—'),
 
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, children: _workflowButtons(status)),
 
           const SizedBox(height: 20),
-          const Text('Fiche de contenu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(t('safetyTalkDetail.ficheContenu'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
-          _textBlock('Résumé', t['summary']),
-          _textBlock('Objectif', t['objectif']),
-          _textBlock('Contexte', t['contexte']),
-          _textBlock('Risques concernés', t['risquesConcernes']),
-          _textBlock('Personnes exposées', t['personnesExposees']),
-          _textBlock('Message principal', t['messagePrincipal']),
-          _textBlock('Points essentiels', t['pointsEssentiels']),
-          _textBlock('Bonnes pratiques', t['bonnesPratiques']),
-          _textBlock('Mauvaises pratiques', t['mauvaisesPratiques']),
-          _textBlock('Questions à poser', t['questions']),
-          _textBlock('Exemples terrain', t['exemplesTerrain']),
-          _textBlock('Mesures de prévention', t['mesuresPrevention']),
-          _textBlock('Conduite à tenir', t['conduiteATenir']),
-          _textBlock('Conclusion', t['conclusion']),
-          _textBlock('Engagement attendu', t['engagementAttendu']),
+          _textBlock(t('safetyTalkDetail.champResume'), tk['summary']),
+          _textBlock(t('safetyTalkDetail.champObjectif'), tk['objectif']),
+          _textBlock(t('safetyTalkDetail.champContexte'), tk['contexte']),
+          _textBlock(t('safetyTalkDetail.champRisquesConcernes'), tk['risquesConcernes']),
+          _textBlock(t('safetyTalkDetail.champPersonnesExposees'), tk['personnesExposees']),
+          _textBlock(t('safetyTalkDetail.champMessagePrincipal'), tk['messagePrincipal']),
+          _textBlock(t('safetyTalkDetail.champPointsEssentiels'), tk['pointsEssentiels']),
+          _textBlock(t('safetyTalkDetail.champBonnesPratiques'), tk['bonnesPratiques']),
+          _textBlock(t('safetyTalkDetail.champMauvaisesPratiques'), tk['mauvaisesPratiques']),
+          _textBlock(t('safetyTalkDetail.champQuestionsAPoser'), tk['questions']),
+          _textBlock(t('safetyTalkDetail.champExemplesTerrain'), tk['exemplesTerrain']),
+          _textBlock(t('safetyTalkDetail.champMesuresPrevention'), tk['mesuresPrevention']),
+          _textBlock(t('safetyTalkDetail.champConduiteATenir'), tk['conduiteATenir']),
+          _textBlock(t('safetyTalkDetail.champConclusion'), tk['conclusion']),
+          _textBlock(t('safetyTalkDetail.champEngagementAttendu'), tk['engagementAttendu']),
           if (quizQuestionsList.isNotEmpty) ...[
-            Text('Quiz', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(t('safetyTalkDetail.quizLabel'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(height: 2),
             ...quizQuestionsList.map((q) => Padding(padding: const EdgeInsets.only(bottom: 2), child: Text('• $q', style: const TextStyle(fontSize: 13)))),
             const SizedBox(height: 12),
@@ -429,14 +428,14 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
 
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Émargement (${participants.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(t('safetyTalkDetail.emargement', {'count': '${participants.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             Wrap(spacing: 6, children: [
-              TextButton.icon(onPressed: addParticipant, icon: const Icon(Icons.person_add_alt, size: 16), label: const Text('Ajouter')),
-              TextButton.icon(onPressed: bulkAddParticipants, icon: const Icon(Icons.group_add, size: 16), label: const Text('Ajout groupé')),
+              TextButton.icon(onPressed: addParticipant, icon: const Icon(Icons.person_add_alt, size: 16), label: Text(t('safetyTalkDetail.ajouter'))),
+              TextButton.icon(onPressed: bulkAddParticipants, icon: const Icon(Icons.group_add, size: 16), label: Text(t('safetyTalkDetail.ajoutGroupe'))),
             ]),
           ]),
           if (participants.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucun participant', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('safetyTalkDetail.aucunParticipant'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...participants.map((p) => Card(child: ListTile(
                   dense: true,
@@ -448,11 +447,11 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Remontées terrain (${feedbacks.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            TextButton.icon(onPressed: addFeedback, icon: const Icon(Icons.add_comment_outlined, size: 16), label: const Text('Ajouter')),
+            Text(t('safetyTalkDetail.remonteesTerrain', {'count': '${feedbacks.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            TextButton.icon(onPressed: addFeedback, icon: const Icon(Icons.add_comment_outlined, size: 16), label: Text(t('safetyTalkDetail.ajouter'))),
           ]),
           if (feedbacks.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune remontée terrain', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('safetyTalkDetail.aucuneRemontee'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...feedbacks.map((f) {
               final transformed = f['status'] == 'TRANSFORME';
@@ -463,31 +462,31 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
                 ]),
                 const SizedBox(height: 4),
                 Text('${f['description']}', style: const TextStyle(fontSize: 12)),
-                if (f['localisation'] != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('Localisation : ${f['localisation']}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11))),
-                if (f['mesureImmediate'] != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('Mesure immédiate : ${f['mesureImmediate']}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11))),
+                if (f['localisation'] != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(t('safetyTalkDetail.localisationPrefixe', {'value': '${f['localisation']}'}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11))),
+                if (f['mesureImmediate'] != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(t('safetyTalkDetail.mesureImmediatePrefixe', {'value': '${f['mesureImmediate']}'}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11))),
                 const SizedBox(height: 8),
                 if (transformed)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(color: QhseColors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
-                    child: Text('Transformée en ${_transformTargetLabels[f['transformedIntoModule']] ?? f['transformedIntoModule']}', style: TextStyle(color: QhseColors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                    child: Text(t('safetyTalkDetail.transformeeEn', {'target': _transformTargetLabels[f['transformedIntoModule']] ?? '${f['transformedIntoModule']}'}), style: TextStyle(color: QhseColors.green, fontSize: 11, fontWeight: FontWeight.bold)),
                   )
                 else
-                  FilledButton.icon(onPressed: () => transformFeedback(f), icon: const Icon(Icons.transform, size: 15), label: const Text('Transformer')),
+                  FilledButton.icon(onPressed: () => transformFeedback(f), icon: const Icon(Icons.transform, size: 15), label: Text(t('safetyTalkDetail.btnTransformer'))),
               ])));
             }),
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('Quiz de fin de séance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            TextButton.icon(onPressed: submitQuiz, icon: const Icon(Icons.quiz_outlined, size: 16), label: const Text('Saisir un résultat')),
+            Text(t('safetyTalkDetail.quizFinSeance'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            TextButton.icon(onPressed: submitQuiz, icon: const Icon(Icons.quiz_outlined, size: 16), label: Text(t('safetyTalkDetail.saisirResultat'))),
           ]),
           Row(children: [
-            _quizStat('Participants', '${quizStats['participants'] ?? 0}'),
+            _quizStat(t('safetyTalkDetail.quizParticipants'), '${quizStats['participants'] ?? 0}'),
             const SizedBox(width: 16),
-            _quizStat('Score moyen', '${quizStats['scoreMoyen'] ?? 0}%'),
+            _quizStat(t('safetyTalkDetail.quizScoreMoyen'), '${quizStats['scoreMoyen'] ?? 0}%'),
             const SizedBox(width: 16),
-            _quizStat('Taux de réussite', '${quizStats['tauxReussite'] ?? 0}%'),
+            _quizStat(t('safetyTalkDetail.quizTauxReussite'), '${quizStats['tauxReussite'] ?? 0}%'),
           ]),
 
           const SizedBox(height: 20),
@@ -495,7 +494,7 @@ class _SafetyTalkDetailPageState extends State<SafetyTalkDetailPage> {
             key: ValueKey('capa-${widget.safetyTalkId}-$capaRefreshKey'),
             sourceModule: 'SAFETY_TALK',
             sourceEntityId: widget.safetyTalkId,
-            prefill: {'title': 'Suivi — ${t['title'] ?? ''}', 'source': 'Quart d\'heure sécurité'},
+            prefill: {'title': t('safetyTalkDetail.suiviPrefixe', {'title': '${tk['title'] ?? ''}'}), 'source': t('safetyTalkDetail.titre')},
           ),
         ]),
       ),
