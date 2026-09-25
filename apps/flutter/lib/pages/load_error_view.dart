@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 /// Panneau d'erreur de chargement réutilisable (audit finding #29) — à
 /// afficher à la place d'un écran vide silencieux quand un load() échoue
@@ -16,10 +17,10 @@ class LoadErrorView extends StatelessWidget {
     final e = error;
     if (e is ApiException) {
       return e.networkError
-          ? 'Données non chargées — vérifiez la connexion'
+          ? t('loadErrorView.erreurReseau')
           : e.message;
     }
-    return 'Données non chargées — une erreur est survenue.';
+    return t('loadErrorView.erreurGenerique');
   }
 
   @override
@@ -34,7 +35,7 @@ class LoadErrorView extends StatelessWidget {
             const SizedBox(height: 12),
             Text(_message, textAlign: TextAlign.center, style: TextStyle(color: QhseColors.textPrimary, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
-            OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Réessayer')),
+            OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: Text(t('loadErrorView.reessayer'))),
           ],
         ),
       ),
