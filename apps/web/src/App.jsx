@@ -5437,6 +5437,7 @@ function downloadProcessusReport(p) {
 
 function QualiteProcessusPage() {
   const C = useTheme();
+  const { t } = useI18n();
   const processus = useCollection('/business/processus');
   const linksQ = useCollection('/business/processus-links');
   const [showForm, setShowForm] = useState(false);
@@ -5477,8 +5478,8 @@ function QualiteProcessusPage() {
     ? procList.filter((p) => norm([p.nom, p.code, kProcessTypeLabels[p.type], p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : ''].join(' ')).includes(norm(search)))
     : procList;
   function exportProcessusRegistreExcel() {
-    downloadWorkbook([['Registre des processus', [
-      ['Processus', 'Type', 'Criticité', 'Pilote', 'NC ouvertes', 'Actions ouvertes', 'Maîtrise (%)', 'Complétude (%)'],
+    downloadWorkbook([[t('processus.registreTitre'), [
+      [t('processus.colProcessus'), t('processus.colType'), t('processus.colCriticite'), t('processus.colPilote'), t('processus.colNcOuvertes'), t('processus.colActionsOuvertes'), t('processus.colMaitrisePct'), t('processus.colCompletudePct')],
       ...filteredProcList.map((p) => [p.nom, kProcessTypeLabels[p.type] || p.type, p.criticite ? kCriticiteLabel[p.criticite] : '', p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : '', p._count?.nonConformities || 0, p._count?.actions || 0, computeMaturityScore(p), computeCompleteness(p)]),
     ]]], `Registre-processus-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
@@ -5488,11 +5489,11 @@ function QualiteProcessusPage() {
       {(showForm || selected) && <ProcessusForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={processus.reload} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau processus</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('processus.nouveauProcessus')}</button>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {[['dashboard', 'Tableau de bord'], ['cartographie', 'Cartographie'], ['registre', 'Registre']].map(([id, label]) => (
+        {[['dashboard', t('processus.tabDashboard')], ['cartographie', t('processus.tabCartographie')], ['registre', t('processus.tabRegistre')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -5500,18 +5501,18 @@ function QualiteProcessusPage() {
       {tab === 'dashboard' && (
         <div className="space-y-6">
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Processus cartographiés" value={procList.length} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="Stratégiques" value={procList.filter((p) => p.type === 'STRATEGIQUE').length} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Opérationnels" value={procList.filter((p) => p.type === 'OPERATIONNEL').length} color={C.green} icon={Activity} />
-            <KpiCard label="Supports" value={procList.filter((p) => p.type === 'SUPPORT').length} color={C.amber} icon={ClipboardList} />
-            <KpiCard label="Critiques" value={critiques.length} color={critiques.length > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Sans pilote" value={sansPilote.length} color={sansPilote.length > 0 ? C.red : C.green} icon={Users} />
-            <KpiCard label="Avec actions ouvertes" value={avecActionsOuvertes.length} color={C.amber} icon={ClipboardList} />
-            <KpiCard label="Avec NC ouvertes" value={avecNcOuvertes.length} color={avecNcOuvertes.length > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Ayant fait l'objet d'un audit" value={avecAudit.length} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('processus.kpiCartographies')} value={procList.length} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('processus.kpiStrategiques')} value={procList.filter((p) => p.type === 'STRATEGIQUE').length} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('processus.kpiOperationnels')} value={procList.filter((p) => p.type === 'OPERATIONNEL').length} color={C.green} icon={Activity} />
+            <KpiCard label={t('processus.kpiSupports')} value={procList.filter((p) => p.type === 'SUPPORT').length} color={C.amber} icon={ClipboardList} />
+            <KpiCard label={t('processus.kpiCritiques')} value={critiques.length} color={critiques.length > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('processus.kpiSansPilote')} value={sansPilote.length} color={sansPilote.length > 0 ? C.red : C.green} icon={Users} />
+            <KpiCard label={t('processus.kpiAvecActions')} value={avecActionsOuvertes.length} color={C.amber} icon={ClipboardList} />
+            <KpiCard label={t('processus.kpiAvecNc')} value={avecNcOuvertes.length} color={avecNcOuvertes.length > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('processus.kpiAvecAudit')} value={avecAudit.length} color={C.blue} icon={ShieldCheck} />
           </div>
 
-          <Panel title="Priorités QHSE" subtitle="Les processus qui appellent le plus l'attention en ce moment">
+          <Panel title={t('processus.prioritesTitle')} subtitle={t('processus.prioritesSubtitle')}>
             {priorites.length
               ? <div className="space-y-2">
                   {priorites.map(({ p, score }) => (
@@ -5519,20 +5520,20 @@ function QualiteProcessusPage() {
                       <div>
                         <p className="text-sm font-medium" style={{ color: C.text }}>{p.nom}</p>
                         <p className="text-xs" style={{ color: C.textMuted }}>
-                          {!p.piloteId && 'Sans pilote · '}
-                          {p.criticite === 'CRITIQUE' && 'Criticité critique · '}
-                          {(p._count?.nonConformities || 0) > 0 && `${p._count.nonConformities} NC ouverte(s) · `}
-                          {(p._count?.actions || 0) > 0 && `${p._count.actions} action(s) ouverte(s)`}
+                          {!p.piloteId && t('processus.sansPiloteInline')}
+                          {p.criticite === 'CRITIQUE' && t('processus.criticiteCritique')}
+                          {(p._count?.nonConformities || 0) > 0 && t('processus.ncOuvertes', { count: p._count.nonConformities })}
+                          {(p._count?.actions || 0) > 0 && t('processus.actionsOuvertes', { count: p._count.actions })}
                         </p>
                       </div>
-                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>Priorité {score}</span>
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{t('processus.priorite', { score })}</span>
                     </div>
                   ))}
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun processus n'appelle une attention particulière pour le moment</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('processus.aucunePriorite')}</p>}
           </Panel>
 
-          <Panel title="Alertes automatiques">
+          <Panel title={t('processus.alertesTitle')}>
             {procList.some((p) => processusAlerts(p).length > 0)
               ? <div className="space-y-2">
                   {procList.filter((p) => processusAlerts(p).length > 0).map((p) => (
@@ -5542,37 +5543,37 @@ function QualiteProcessusPage() {
                     </div>
                   ))}
                 </div>
-              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune alerte — tous les processus ont un pilote, un indicateur, une analyse de risques et un objectif</p>}
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>{t('processus.aucuneAlerte')}</p>}
           </Panel>
 
-          <Panel title="Processus par type">
-            {parType.length ? <DonutChart data={parType} colors={[C.blue, C.green, C.amber, C.red]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun processus enregistré</p>}
+          <Panel title={t('processus.parTypeTitle')}>
+            {parType.length ? <DonutChart data={parType} colors={[C.blue, C.green, C.amber, C.red]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('processus.aucunProcessus')}</p>}
           </Panel>
         </div>
       )}
 
       {tab === 'cartographie' && (
         procList.length === 0
-          ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun processus enregistré pour le moment</p>
+          ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('processus.aucunProcessusPourInstant')}</p>
           : <ProcessusCartography procList={procList} links={linkList} onLinkCreate={createLink} onLinkDelete={deleteLink} onPositionCommit={commitPosition} onSelect={setSelected} />
       )}
 
       {tab === 'registre' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un processus (nom, type, pilote...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('processus.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={exportProcessusRegistreExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
           </div>
-          <Panel title={search.trim() ? `Résultats de recherche (${filteredProcList.length})` : 'Registre des processus'}>
+          <Panel title={search.trim() ? t('processus.resultatsRecherche', { count: filteredProcList.length }) : t('processus.registreTitre')}>
             {filteredProcList.length
-              ? <DataTable columns={['Processus', 'Type', 'Criticité', 'Pilote', 'NC ouvertes', 'Actions ouvertes', 'Maîtrise', 'Complétude', '']}
+              ? <DataTable columns={[t('processus.colProcessus'), t('processus.colType'), t('processus.colCriticite'), t('processus.colPilote'), t('processus.colNcOuvertes'), t('processus.colActionsOuvertes'), t('processus.colMaitrise'), t('processus.colCompletude'), '']}
                   rows={filteredProcList.map((p) => {
                     const score = computeMaturityScore(p); const lvl = maturityLevel(score);
                     return [p.nom, kProcessTypeLabels[p.type] || p.type, p.criticite ? kCriticiteLabel[p.criticite] : '—', p.pilote ? `${p.pilote.firstName} ${p.pilote.lastName}` : '—', p._count?.nonConformities || 0, p._count?.actions || 0, `${lvl.emoji} ${lvl.label}`, `${computeCompleteness(p)}%`,
-                      <button onClick={(e) => { e.stopPropagation(); downloadProcessusReport(p); }} className="text-xs" style={{ color: C.blue }}>Rapport</button>];
+                      <button onClick={(e) => { e.stopPropagation(); downloadProcessusReport(p); }} className="text-xs" style={{ color: C.blue }}>{t('processus.rapport')}</button>];
                   })}
                   onRowClick={(i) => setSelected(filteredProcList[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun processus enregistré pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('processus.aucunResultat') : t('processus.aucunProcessusPourInstant')}</p>}
           </Panel>
         </div>
       )}
