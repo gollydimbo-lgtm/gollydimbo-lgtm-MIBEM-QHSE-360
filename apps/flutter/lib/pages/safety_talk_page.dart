@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'safety_talk_detail_page.dart';
 import 'safety_talk_form_page.dart';
 import 'load_error_view.dart';
 
-const statusLabels = {
-  'DRAFT': 'Brouillon',
-  'APPROVED': 'Validé',
-  'DELIVERED': 'Animé',
-  'ANNULE': 'Annulé',
-  'REPORTE': 'Reporté',
+Map<String, String> get statusLabels => {
+  'DRAFT': t('safetyTalkPageFlt.statutBrouillon'),
+  'APPROVED': t('safetyTalkPageFlt.statutValide'),
+  'DELIVERED': t('safetyTalkPageFlt.statutAnime'),
+  'ANNULE': t('safetyTalkPageFlt.statutAnnule'),
+  'REPORTE': t('safetyTalkPageFlt.statutReporte'),
 };
 
 Color statusColor(String? s) => {
@@ -22,7 +23,12 @@ Color statusColor(String? s) => {
     }[s] ??
     QhseColors.textSecondary;
 
-const prioriteLabels = {'FAIBLE': 'Faible', 'MOYENNE': 'Moyenne', 'ELEVEE': 'Élevée', 'CRITIQUE': 'Critique'};
+Map<String, String> get prioriteLabels => {
+  'FAIBLE': t('safetyTalkPageFlt.prioriteFaible'),
+  'MOYENNE': t('safetyTalkPageFlt.prioriteMoyenne'),
+  'ELEVEE': t('safetyTalkPageFlt.prioriteElevee'),
+  'CRITIQUE': t('safetyTalkPageFlt.prioriteCritique'),
+};
 
 Color prioriteColor(String? p) => {
       'FAIBLE': QhseColors.textSecondary,
@@ -61,9 +67,9 @@ class _SafetyTalkPageState extends State<SafetyTalkPage> {
     length: 3,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Quart d\'heure sécurité'),
-        bottom: const TabBar(tabs: [
-          Tab(text: "Vue d'ensemble"), Tab(text: 'Séances'), Tab(text: 'Matrice'),
+        title: Text(t('safetyTalkPageFlt.titre')),
+        bottom: TabBar(tabs: [
+          Tab(text: t('safetyTalkPageFlt.ongletApercu')), Tab(text: t('safetyTalkPageFlt.ongletSeances')), Tab(text: t('safetyTalkPageFlt.ongletMatrice')),
         ]),
       ),
       body: const TabBarView(children: [_OverviewTab(), _SeancesTab(), _MatrixTab()]),
@@ -102,7 +108,7 @@ class _OverviewTabState extends State<_OverviewTab> {
     setState(() => refreshingReco = true);
     try {
       recommendations = List.from(await api.post('/safety-talks/recommendations/refresh', {}));
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Analyse actualisée')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyTalkPageFlt.analyseActualisee'))));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -139,45 +145,45 @@ class _OverviewTabState extends State<_OverviewTab> {
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.symmetric(vertical: 12), children: [
         KpiBar([
-          KpiStat('Planifiés', '${n('planifies')}', color: QhseColors.blue, icon: Icons.event_available),
-          KpiStat('Réalisés', '${n('realises')}', color: QhseColors.green, icon: Icons.check_circle_outline),
-          KpiStat('En retard', '${n('enRetard')}', color: n('enRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
-          KpiStat('Annulés', '${n('annules')}', color: QhseColors.textSecondary, icon: Icons.cancel_outlined),
-          KpiStat('Taux de réalisation', '${dash['tauxRealisation'] ?? 0}%', color: QhseColors.green, icon: Icons.trending_up),
-          KpiStat('Participants', '${n('participants')}', color: QhseColors.blue, icon: Icons.groups_outlined),
-          KpiStat('Taux de participation', '${dash['tauxParticipation'] ?? 0}%', color: QhseColors.blue, icon: Icons.how_to_reg_outlined),
-          KpiStat('Thèmes traités', '${n('themesTraites')}', color: QhseColors.blue, icon: Icons.topic_outlined),
-          KpiStat('Remontées terrain', '${n('remonteesTerrain')}', color: QhseColors.amber, icon: Icons.campaign_outlined),
-          KpiStat('Dangers détectés', '${n('dangersDetectes')}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
-          KpiStat('Actions créées', '${n('actionsCreees')}', color: QhseColors.blue, icon: Icons.playlist_add_check),
-          KpiStat('Actions clôturées', '${n('actionsClotures')}', color: QhseColors.green, icon: Icons.task_alt),
-          KpiStat('Actions en retard', '${n('actionsEnRetard')}', color: n('actionsEnRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.hourglass_bottom),
-          KpiStat('Sujets auto-générés', '${n('sujetsAutoGeneres')}', color: QhseColors.blue, icon: Icons.auto_awesome),
+          KpiStat(t('safetyTalkPageFlt.kpiPlanifies'), '${n('planifies')}', color: QhseColors.blue, icon: Icons.event_available),
+          KpiStat(t('safetyTalkPageFlt.kpiRealises'), '${n('realises')}', color: QhseColors.green, icon: Icons.check_circle_outline),
+          KpiStat(t('safetyTalkPageFlt.kpiEnRetard'), '${n('enRetard')}', color: n('enRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
+          KpiStat(t('safetyTalkPageFlt.kpiAnnules'), '${n('annules')}', color: QhseColors.textSecondary, icon: Icons.cancel_outlined),
+          KpiStat(t('safetyTalkPageFlt.kpiTauxRealisation'), '${dash['tauxRealisation'] ?? 0}%', color: QhseColors.green, icon: Icons.trending_up),
+          KpiStat(t('safetyTalkPageFlt.kpiParticipants'), '${n('participants')}', color: QhseColors.blue, icon: Icons.groups_outlined),
+          KpiStat(t('safetyTalkPageFlt.kpiTauxParticipation'), '${dash['tauxParticipation'] ?? 0}%', color: QhseColors.blue, icon: Icons.how_to_reg_outlined),
+          KpiStat(t('safetyTalkPageFlt.kpiThemesTraites'), '${n('themesTraites')}', color: QhseColors.blue, icon: Icons.topic_outlined),
+          KpiStat(t('safetyTalkPageFlt.kpiRemonteesTerrain'), '${n('remonteesTerrain')}', color: QhseColors.amber, icon: Icons.campaign_outlined),
+          KpiStat(t('safetyTalkPageFlt.kpiDangersDetectes'), '${n('dangersDetectes')}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+          KpiStat(t('safetyTalkPageFlt.kpiActionsCreees'), '${n('actionsCreees')}', color: QhseColors.blue, icon: Icons.playlist_add_check),
+          KpiStat(t('safetyTalkPageFlt.kpiActionsCloturees'), '${n('actionsClotures')}', color: QhseColors.green, icon: Icons.task_alt),
+          KpiStat(t('safetyTalkPageFlt.kpiActionsEnRetard'), '${n('actionsEnRetard')}', color: n('actionsEnRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.hourglass_bottom),
+          KpiStat(t('safetyTalkPageFlt.kpiSujetsAutoGeneres'), '${n('sujetsAutoGeneres')}', color: QhseColors.blue, icon: Icons.auto_awesome),
         ]),
         const SizedBox(height: 18),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Expanded(child: Text('Thèmes recommandés (${recommendations.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            Expanded(child: Text(t('safetyTalkPageFlt.themesRecommandes', {'count': '${recommendations.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
             OutlinedButton.icon(
               onPressed: refreshingReco ? null : refreshAnalyse,
               icon: refreshingReco
                   ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.refresh, size: 16),
-              label: const Text('Actualiser l\'analyse'),
+              label: Text(t('safetyTalkPageFlt.actualiserAnalyse')),
             ),
           ]),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
           child: Text(
-            'Thèmes proposés automatiquement par l\'analyse des accidents, non-conformités, risques et actions en retard des autres modules. Aucune séance n\'est créée sans votre décision.',
+            t('safetyTalkPageFlt.descriptionRecommandations'),
             style: TextStyle(color: QhseColors.textSecondary, fontSize: 11),
           ),
         ),
         const SizedBox(height: 8),
         if (recommendations.isEmpty)
-          Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('Aucune recommandation en attente', style: TextStyle(color: QhseColors.textSecondary))))
+          Padding(padding: const EdgeInsets.all(16), child: Center(child: Text(t('safetyTalkPageFlt.aucuneRecommandation'), style: TextStyle(color: QhseColors.textSecondary))))
         else
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -202,28 +208,28 @@ class _OverviewTabState extends State<_OverviewTab> {
         Row(children: [
           Icon(Icons.hub_outlined, size: 13, color: QhseColors.textSecondary),
           const SizedBox(width: 4),
-          Text('Sources : ${r['sourceModules'] ?? '—'}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+          Text(t('safetyTalkPageFlt.sources', {'value': '${r['sourceModules'] ?? '—'}'}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
           const SizedBox(width: 12),
           Icon(Icons.bolt, size: 13, color: QhseColors.textSecondary),
           const SizedBox(width: 4),
-          Text('Score : ${r['score'] ?? 0}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+          Text(t('safetyTalkPageFlt.score', {'value': '${r['score'] ?? 0}'}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
         ]),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 4, children: [
           FilledButton.icon(
             onPressed: () => acceptAndGenerate(r['id']),
             icon: const Icon(Icons.check, size: 15),
-            label: const Text('Accepter et générer la fiche'),
+            label: Text(t('safetyTalkPageFlt.accepterEtGenerer')),
           ),
           OutlinedButton.icon(
             onPressed: () => decision(r['id'], 'REPORTER'),
             icon: const Icon(Icons.schedule, size: 15),
-            label: const Text('Reporter'),
+            label: Text(t('safetyTalkPageFlt.reporter')),
           ),
           TextButton.icon(
             onPressed: () => decision(r['id'], 'IGNORER'),
             icon: const Icon(Icons.close, size: 15),
-            label: const Text('Ignorer'),
+            label: Text(t('safetyTalkPageFlt.ignorer')),
           ),
         ]),
       ]),
@@ -254,7 +260,7 @@ class _SeancesTabState extends State<_SeancesTab> {
     setState(() => loading = false);
   }
 
-  List get _filtered => statusFilter == null ? talks : talks.where((t) => t['status'] == statusFilter).toList();
+  List get _filtered => statusFilter == null ? talks : talks.where((tk) => tk['status'] == statusFilter).toList();
 
   @override
   Widget build(BuildContext c) => Scaffold(
@@ -262,7 +268,7 @@ class _SeancesTabState extends State<_SeancesTab> {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Wrap(spacing: 8, children: [
-          ChoiceChip(label: const Text('Toutes'), selected: statusFilter == null, onSelected: (_) => setState(() => statusFilter = null)),
+          ChoiceChip(label: Text(t('safetyTalkPageFlt.toutes')), selected: statusFilter == null, onSelected: (_) => setState(() => statusFilter = null)),
           for (final s in statusLabels.keys)
             ChoiceChip(label: Text(statusLabels[s]!), selected: statusFilter == s, onSelected: (_) => setState(() => statusFilter = s)),
         ]),
@@ -275,22 +281,22 @@ class _SeancesTabState extends State<_SeancesTab> {
             : RefreshIndicator(
                 onRefresh: load,
                 child: _filtered.isEmpty
-                    ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune séance')))])
+                    ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('safetyTalkPageFlt.aucuneSeance'))))])
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 90),
                         itemCount: _filtered.length,
                         itemBuilder: (_, i) {
-                          final t = _filtered[i];
+                          final tk = _filtered[i];
                           return Card(
                             child: ListTile(
-                              title: Text('${t['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Semaine du ${fmtDate(t['weekStart'])}${t['origineType'] == 'AUTO_RECOMMANDE' ? ' · Auto-généré' : ''}'),
+                              title: Text('${tk['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('${t('safetyTalkPageFlt.semaineDu', {'date': fmtDate(tk['weekStart'])})}${tk['origineType'] == 'AUTO_RECOMMANDE' ? t('safetyTalkPageFlt.autoGenere') : ''}'),
                               trailing: Chip(
-                                label: Text(statusLabels[t['status']] ?? '${t['status']}'),
-                                backgroundColor: statusColor(t['status']).withOpacity(0.15),
-                                labelStyle: TextStyle(color: statusColor(t['status']), fontSize: 11),
+                                label: Text(statusLabels[tk['status']] ?? '${tk['status']}'),
+                                backgroundColor: statusColor(tk['status']).withOpacity(0.15),
+                                labelStyle: TextStyle(color: statusColor(tk['status']), fontSize: 11),
                               ),
-                              onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SafetyTalkDetailPage(safetyTalkId: t['id']))).then((_) => load()),
+                              onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SafetyTalkDetailPage(safetyTalkId: tk['id']))).then((_) => load()),
                             ),
                           );
                         },
@@ -301,7 +307,7 @@ class _SeancesTabState extends State<_SeancesTab> {
     floatingActionButton: FloatingActionButton.extended(
       onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const SafetyTalkFormPage())).then((v) { if (v != null) load(); }),
       icon: const Icon(Icons.add),
-      label: const Text('Nouvelle fiche'),
+      label: Text(t('safetyTalkPageFlt.nouvelleFiche')),
     ),
   );
 }
@@ -333,7 +339,7 @@ class _MatrixTabState extends State<_MatrixTab> {
     if (loading) return const Center(child: CircularProgressIndicator());
     if (error != null) return LoadErrorView(error: error, onRetry: load);
     if (rows.isEmpty) {
-      return RefreshIndicator(onRefresh: load, child: ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune donnée')))]));
+      return RefreshIndicator(onRefresh: load, child: ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('safetyTalkPageFlt.aucuneDonnee'))))]));
     }
     return RefreshIndicator(
       onRefresh: load,
@@ -341,9 +347,9 @@ class _MatrixTabState extends State<_MatrixTab> {
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
-            columns: const [
-              DataColumn(label: Text('Source')), DataColumn(label: Text('Événement(s)')), DataColumn(label: Text('Risque(s)')),
-              DataColumn(label: Text('Thème')), DataColumn(label: Text('Priorité')), DataColumn(label: Text('Statut')),
+            columns: [
+              DataColumn(label: Text(t('safetyTalkPageFlt.colSource'))), DataColumn(label: Text(t('safetyTalkPageFlt.colEvenement'))), DataColumn(label: Text(t('safetyTalkPageFlt.colRisque'))),
+              DataColumn(label: Text(t('safetyTalkPageFlt.colTheme'))), DataColumn(label: Text(t('safetyTalkPageFlt.colPriorite'))), DataColumn(label: Text(t('safetyTalkPageFlt.colStatut'))),
             ],
             rows: rows.map((r) => DataRow(cells: [
               DataCell(Text('${r['source'] ?? ''}')), DataCell(Text('${r['evenement'] ?? '—'}')), DataCell(Text('${r['risque'] ?? '—'}')),
