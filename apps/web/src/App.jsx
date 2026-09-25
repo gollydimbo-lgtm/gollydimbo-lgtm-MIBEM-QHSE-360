@@ -15219,6 +15219,7 @@ function SafetyTalkRulesPanel({ rulesQ }) {
 
 function SafetyTalkPage() {
   const C = useTheme();
+  const { t } = useI18n();
   const [tab, setTab] = useState('apercu');
   const dashboardQ = useCollection('/safety-talks/dashboard');
   const recommendationsQ = useCollection('/safety-talks/recommendations');
@@ -15250,20 +15251,20 @@ function SafetyTalkPage() {
   }
 
   const talks = talksQ.data || [];
-  const filteredTalks0 = statusFilter ? talks.filter((t) => t.status === statusFilter) : talks;
-  const upcoming = talks.filter((t) => t.scheduledAt && new Date(t.scheduledAt) >= new Date() && !['DELIVERED', 'ANNULE'].includes(t.status))
+  const filteredTalks0 = statusFilter ? talks.filter((tk) => tk.status === statusFilter) : talks;
+  const upcoming = talks.filter((tk) => tk.scheduledAt && new Date(tk.scheduledAt) >= new Date() && !['DELIVERED', 'ANNULE'].includes(tk.status))
     .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 6);
   const recos = recommendationsQ.data || [];
   const dash = dashboardQ.data || {};
-  const selectedTalk = detailId ? talks.find((t) => t.id === detailId) : null;
+  const selectedTalk = detailId ? talks.find((tk) => tk.id === detailId) : null;
   // Recherche + export harmonisés (audit priorité 7, finding #17/#18).
   const [search, setSearch] = useState('');
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const filteredTalks = search.trim() ? filteredTalks0.filter((t) => norm(t.title).includes(norm(search))) : filteredTalks0;
+  const filteredTalks = search.trim() ? filteredTalks0.filter((tk) => norm(tk.title).includes(norm(search))) : filteredTalks0;
   function safetyTalksExportRows() {
     return [
-      ['Titre', 'Semaine du', 'Planifié le', 'Priorité', 'Statut'],
-      ...filteredTalks.map((t) => [t.title, new Date(t.weekStart).toLocaleDateString('fr-FR'), t.scheduledAt ? new Date(t.scheduledAt).toLocaleString('fr-FR') : '', ST_PRIORITE_LABEL[t.priorite] || t.priorite || '', ST_STATUS_LABEL[t.status] || t.status]),
+      [t('safetyTalk.exportColTitre'), t('safetyTalk.exportColSemaineDu'), t('safetyTalk.exportColPlanifieLe'), t('safetyTalk.colPriorite'), t('safetyTalk.colStatut')],
+      ...filteredTalks.map((tk) => [tk.title, new Date(tk.weekStart).toLocaleDateString('fr-FR'), tk.scheduledAt ? new Date(tk.scheduledAt).toLocaleString('fr-FR') : '', ST_PRIORITE_LABEL[tk.priorite] || tk.priorite || '', ST_STATUS_LABEL[tk.status] || tk.status]),
     ];
   }
   function exportSafetyTalksExcel() { downloadWorkbook([['Quarts d\'heure sécurité', safetyTalksExportRows()]], `Quarts-heure-securite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
@@ -15275,7 +15276,7 @@ function SafetyTalkPage() {
       {selectedTalk && <SafetyTalkDetailModal talk={selectedTalk} onClose={() => setDetailId(null)} onChanged={reloadAll} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['seances', 'Séances'], ['bibliotheque', 'Bibliothèque de thèmes'], ['matrice', 'Matrice'], ['parametres', 'Paramètres']].map(([id, label]) => (
+        {[['apercu', t('safetyTalk.tabApercu')], ['seances', t('safetyTalk.tabSeances')], ['bibliotheque', t('safetyTalk.tabBibliotheque')], ['matrice', t('safetyTalk.tabMatrice')], ['parametres', t('safetyTalk.tabParametres')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -15285,44 +15286,44 @@ function SafetyTalkPage() {
           <div className="space-y-6">
             <LiveBadge />
             <div className="flex flex-wrap gap-3">
-              <KpiCard label="Planifiés" value={dash.planifies ?? '—'} color={C.blue} icon={ClipboardList} />
-              <KpiCard label="Réalisés" value={dash.realises ?? '—'} color={C.green} icon={CheckCircle2} />
-              <KpiCard label="En retard" value={dash.enRetard ?? '—'} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-              <KpiCard label="Annulés" value={dash.annules ?? '—'} color={C.textMuted} icon={X} />
-              <KpiCard label="Taux de réalisation" value={dash.tauxRealisation != null ? `${dash.tauxRealisation}%` : '—'} color={C.green} icon={Activity} />
-              <KpiCard label="Participants" value={dash.participants ?? '—'} color={C.blue} icon={Users} />
-              <KpiCard label="Taux de participation" value={dash.tauxParticipation != null ? `${dash.tauxParticipation}%` : '—'} color={C.blue} icon={Users} />
+              <KpiCard label={t('safetyTalk.kpiPlanifies')} value={dash.planifies ?? '—'} color={C.blue} icon={ClipboardList} />
+              <KpiCard label={t('safetyTalk.kpiRealises')} value={dash.realises ?? '—'} color={C.green} icon={CheckCircle2} />
+              <KpiCard label={t('safetyTalk.kpiEnRetard')} value={dash.enRetard ?? '—'} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label={t('safetyTalk.kpiAnnules')} value={dash.annules ?? '—'} color={C.textMuted} icon={X} />
+              <KpiCard label={t('safetyTalk.kpiTauxRealisation')} value={dash.tauxRealisation != null ? `${dash.tauxRealisation}%` : '—'} color={C.green} icon={Activity} />
+              <KpiCard label={t('safetyTalk.kpiParticipants')} value={dash.participants ?? '—'} color={C.blue} icon={Users} />
+              <KpiCard label={t('safetyTalk.kpiTauxParticipation')} value={dash.tauxParticipation != null ? `${dash.tauxParticipation}%` : '—'} color={C.blue} icon={Users} />
             </div>
             <div className="flex flex-wrap gap-3">
-              <KpiCard label="Thèmes traités" value={dash.themesTraites ?? '—'} color={C.blue} icon={BookOpen} />
-              <KpiCard label="Remontées terrain" value={dash.remonteesTerrain ?? '—'} color={C.amber} icon={FileWarning} />
-              <KpiCard label="Dangers détectés" value={dash.dangersDetectes ?? '—'} color={C.red} icon={AlertTriangle} />
-              <KpiCard label="Actions créées" value={dash.actionsCreees ?? '—'} color={C.blue} icon={ClipboardCheck} />
-              <KpiCard label="Actions clôturées" value={dash.actionsClotures ?? '—'} color={C.green} icon={CheckCircle2} />
-              <KpiCard label="Actions en retard" value={dash.actionsEnRetard ?? '—'} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label={t('safetyTalk.kpiThemesTraites')} value={dash.themesTraites ?? '—'} color={C.blue} icon={BookOpen} />
+              <KpiCard label={t('safetyTalk.kpiRemonteesTerrain')} value={dash.remonteesTerrain ?? '—'} color={C.amber} icon={FileWarning} />
+              <KpiCard label={t('safetyTalk.kpiDangersDetectes')} value={dash.dangersDetectes ?? '—'} color={C.red} icon={AlertTriangle} />
+              <KpiCard label={t('safetyTalk.kpiActionsCreees')} value={dash.actionsCreees ?? '—'} color={C.blue} icon={ClipboardCheck} />
+              <KpiCard label={t('safetyTalk.kpiActionsCloturees')} value={dash.actionsClotures ?? '—'} color={C.green} icon={CheckCircle2} />
+              <KpiCard label={t('safetyTalk.kpiActionsEnRetard')} value={dash.actionsEnRetard ?? '—'} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
             </div>
             <div className="flex flex-wrap gap-3">
-              <KpiCard label="Sujets auto-générés" value={dash.sujetsAutoGeneres ?? '—'} color={C.blue} icon={RefreshCw} />
-              <KpiCard label="Sensibilisations accidents" value={dash.sensibilisationsAccidents ?? '—'} color={C.red} icon={HardHat} />
-              <KpiCard label="Sensibilisations NC" value={dash.sensibilisationsNc ?? '—'} color={C.amber} icon={FileWarning} />
-              <KpiCard label="Sensibilisations risques" value={dash.sensibilisationsRisques ?? '—'} color={C.blue} icon={Shield} />
+              <KpiCard label={t('safetyTalk.kpiSujetsAutoGeneres')} value={dash.sujetsAutoGeneres ?? '—'} color={C.blue} icon={RefreshCw} />
+              <KpiCard label={t('safetyTalk.kpiSensibilisationsAccidents')} value={dash.sensibilisationsAccidents ?? '—'} color={C.red} icon={HardHat} />
+              <KpiCard label={t('safetyTalk.kpiSensibilisationsNc')} value={dash.sensibilisationsNc ?? '—'} color={C.amber} icon={FileWarning} />
+              <KpiCard label={t('safetyTalk.kpiSensibilisationsRisques')} value={dash.sensibilisationsRisques ?? '—'} color={C.blue} icon={Shield} />
             </div>
 
-            <Panel title="Thèmes recommandés" subtitle="Proposés par le moteur d'analyse à partir des accidents, non-conformités, risques et actions en retard des autres modules QHSE"
-              right={<button onClick={refreshRecommendations} disabled={refreshing} className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text, opacity: refreshing ? 0.7 : 1 }}><RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />{refreshing ? 'Analyse…' : "Actualiser l'analyse"}</button>}>
+            <Panel title={t('safetyTalk.themesRecommandesTitle')} subtitle={t('safetyTalk.themesRecommandesSubtitle')}
+              right={<button onClick={refreshRecommendations} disabled={refreshing} className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text, opacity: refreshing ? 0.7 : 1 }}><RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />{refreshing ? t('safetyTalk.analyseEnCours') : t('safetyTalk.actualiserAnalyse')}</button>}>
               {recoError && <p className="text-xs mb-2" style={{ color: C.red }}>{recoError}</p>}
               {recos.length === 0
-                ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune recommandation en attente — cliquez sur « Actualiser l'analyse » pour lancer le moteur.</p>
+                ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('safetyTalk.aucuneRecommandation')}</p>
                 : <div className="space-y-2">{recos.map((r) => <RecommendationRow key={r.id} reco={r} onAccept={() => acceptAndGenerate(r)} onDecide={(d) => decide(r.id, d)} />)}</div>}
             </Panel>
 
-            <Panel title="Prochaines séances planifiées">
+            <Panel title={t('safetyTalk.prochainesSeancesTitle')}>
               {upcoming.length === 0
-                ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune séance planifiée à venir</p>
-                : <div className="space-y-1.5">{upcoming.map((t) => (
-                    <div key={t.id} onClick={() => setDetailId(t.id)} className="flex items-center justify-between p-2 rounded-lg cursor-pointer" style={{ backgroundColor: C.cardAlt }}>
-                      <div><span className="text-sm" style={{ color: C.text }}>{t.title}</span><span className="text-xs ml-2" style={{ color: C.textMuted }}>{new Date(t.scheduledAt).toLocaleString('fr-FR')}</span></div>
-                      <StatusChip statut={ST_STATUS_LABEL[t.status] || t.status} />
+                ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('safetyTalk.aucuneSeancePlanifiee')}</p>
+                : <div className="space-y-1.5">{upcoming.map((tk) => (
+                    <div key={tk.id} onClick={() => setDetailId(tk.id)} className="flex items-center justify-between p-2 rounded-lg cursor-pointer" style={{ backgroundColor: C.cardAlt }}>
+                      <div><span className="text-sm" style={{ color: C.text }}>{tk.title}</span><span className="text-xs ml-2" style={{ color: C.textMuted }}>{new Date(tk.scheduledAt).toLocaleString('fr-FR')}</span></div>
+                      <StatusChip statut={ST_STATUS_LABEL[tk.status] || tk.status} />
                     </div>
                   ))}</div>}
             </Panel>
@@ -15336,29 +15337,29 @@ function SafetyTalkPage() {
             <LiveBadge />
             <div className="flex items-center gap-2">
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
-                <option value="">Statut — tous</option>{Object.entries(ST_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                <option value="">{t('safetyTalk.statutTous')}</option>{Object.entries(ST_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
-              <button onClick={() => { setFormPrefill(null); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle séance</button>
+              <button onClick={() => { setFormPrefill(null); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('safetyTalk.nouvelleSeance')}</button>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une séance (titre...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={exportSafetyTalksExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
-            <button onClick={exportSafetyTalksCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('safetyTalk.rechercherSeancePlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportSafetyTalksExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('safetyTalk.excel')}</button>
+            <button onClick={exportSafetyTalksCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('safetyTalk.csv')}</button>
           </div>
           {talksQ.loading ? <LoadingPanel /> : talksQ.error ? <ErrorPanel message={talksQ.error} onRetry={talksQ.reload} /> : (
             filteredTalks.length === 0
-              ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun quart d'heure sécurité pour ce filtre</p>
-              : <div className="space-y-2">{filteredTalks.map((t) => (
-                  <Panel key={t.id} className="cursor-pointer" onClick={() => setDetailId(t.id)}>
+              ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('safetyTalk.aucunQuartHeureFiltre')}</p>
+              : <div className="space-y-2">{filteredTalks.map((tk) => (
+                  <Panel key={tk.id} className="cursor-pointer" onClick={() => setDetailId(tk.id)}>
                     <div className="flex items-start justify-between flex-wrap gap-2">
                       <div>
-                        <p className="text-sm font-semibold" style={{ color: C.text }}>{t.title}</p>
-                        <p className="text-xs" style={{ color: C.textMuted }}>Semaine du {new Date(t.weekStart).toLocaleDateString('fr-FR')}{t.scheduledAt ? ` · Planifié le ${new Date(t.scheduledAt).toLocaleString('fr-FR')}` : ''}{t.origineType === 'AUTO_RECOMMANDE' ? ' · Auto-recommandé' : ''}</p>
+                        <p className="text-sm font-semibold" style={{ color: C.text }}>{tk.title}</p>
+                        <p className="text-xs" style={{ color: C.textMuted }}>{t('safetyTalk.semaineDu', { date: new Date(tk.weekStart).toLocaleDateString('fr-FR') })}{tk.scheduledAt ? t('safetyTalk.planifieLe', { date: new Date(tk.scheduledAt).toLocaleString('fr-FR') }) : ''}{tk.origineType === 'AUTO_RECOMMANDE' ? t('safetyTalk.autoRecommande') : ''}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {t.priorite && <span className="text-xs font-medium" style={{ color: stPrioriteColor(C, t.priorite) }}>{ST_PRIORITE_LABEL[t.priorite] || t.priorite}</span>}
-                        <StatusChip statut={ST_STATUS_LABEL[t.status] || t.status} />
+                        {tk.priorite && <span className="text-xs font-medium" style={{ color: stPrioriteColor(C, tk.priorite) }}>{ST_PRIORITE_LABEL[tk.priorite] || tk.priorite}</span>}
+                        <StatusChip statut={ST_STATUS_LABEL[tk.status] || tk.status} />
                       </div>
                     </div>
                   </Panel>
@@ -15381,7 +15382,7 @@ function SafetyTalkPage() {
                           <p className="text-sm font-semibold" style={{ color: C.text }}>{th.titre}</p>
                           <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>{th.objectif}</p>
                         </div>
-                        <button onClick={() => { setFormPrefill(th); setShowForm(true); }} className="text-xs px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: C.blue, color: '#fff' }}>Utiliser ce thème</button>
+                        <button onClick={() => { setFormPrefill(th); setShowForm(true); }} className="text-xs px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: C.blue, color: '#fff' }}>{t('safetyTalk.utiliserCeTheme')}</button>
                       </div>
                     </div>
                   ))}
@@ -15394,11 +15395,11 @@ function SafetyTalkPage() {
 
       {tab === 'matrice' && (
         matriceQ.loading ? <LoadingPanel /> : matriceQ.error ? <ErrorPanel message={matriceQ.error} onRetry={matriceQ.reload} /> : (
-          <Panel title="Matrice de traçabilité" subtitle={`${(matriceQ.data || []).length} recommandation(s) transformée(s) en séance`}>
+          <Panel title={t('safetyTalk.matriceTracabiliteTitle')} subtitle={t('safetyTalk.recommandationTransformeeCount', { count: (matriceQ.data || []).length })}>
             {(matriceQ.data || []).length
-              ? <DataTable columns={['Source', 'Événement(s)', 'Risque(s)', 'Thème', 'Priorité', 'Statut']}
+              ? <DataTable columns={[t('safetyTalk.colSource'), t('safetyTalk.colEvenements'), t('safetyTalk.colRisques'), t('safetyTalk.colTheme'), t('safetyTalk.colPriorite'), t('safetyTalk.colStatut')]}
                   rows={(matriceQ.data || []).map((m) => [m.source, m.evenement || '—', m.risque || '—', m.theme, ST_PRIORITE_LABEL[m.priorite] || m.priorite || '—', ST_STATUS_LABEL[m.statut] || m.statut])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne dans la matrice</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('safetyTalk.aucuneLigneMatrice')}</p>}
           </Panel>
         )
       )}
