@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'load_error_view.dart';
 
 // ============================================================================
@@ -18,26 +19,26 @@ import 'load_error_view.dart';
 // dans apps/web/src/App.jsx).
 // ============================================================================
 
-const equipmentEtatLabels = {
-  'ACTIF': 'Actif', 'EN_MAINTENANCE': 'En maintenance', 'EN_ATTENTE_REPARATION': 'En attente de réparation',
-  'HORS_SERVICE': 'Hors service', 'CONSIGNE': 'Consigné', 'REFORME': 'Réformé', 'MIS_AU_REBUT': 'Mis au rebut', 'REMPLACE': 'Remplacé',
-};
-const equipmentCriticiteLabels = {'FAIBLE': 'Faible', 'MODERE': 'Modéré', 'ELEVE': 'Élevé', 'CRITIQUE': 'Critique'};
-const equipmentControlStatutLabels = {
-  'CONFORME': 'Conforme', 'CONFORME_AVEC_OBSERVATIONS': 'Conforme avec observations', 'NON_CONFORME': 'Non conforme',
-  'EN_ATTENTE': 'En attente', 'EXPIRE': 'Expiré',
-};
-const equipmentCalibrationResultatLabels = {
-  'CONFORME': 'Conforme', 'CONFORME_AVEC_AJUSTEMENT': 'Conforme avec ajustement', 'NON_CONFORME': 'Non conforme',
-};
-const equipmentConsignationStatutLabels = {'EN_COURS': 'En cours', 'LEVEE': 'Levée'};
-const equipmentMaintenanceFrequenceLabels = {
-  'CALENDAIRE': 'Calendaire (jours)', 'HEURES': 'Heures de fonctionnement', 'KM': 'Kilométrage',
-  'CYCLES': 'Cycles', 'RECOMMANDATION_FABRICANT': 'Recommandation fabricant', 'RISQUE': 'Basée sur le risque',
-};
-const equipmentMaintenanceRecordStatutLabels = {
-  'PLANIFIEE': 'Planifiée', 'EN_COURS': 'En cours', 'TERMINEE': 'Terminée', 'REPORTEE': 'Reportée',
-};
+const equipmentEtatValues = ['ACTIF', 'EN_MAINTENANCE', 'EN_ATTENTE_REPARATION', 'HORS_SERVICE', 'CONSIGNE', 'REFORME', 'MIS_AU_REBUT', 'REMPLACE'];
+String equipmentEtatLabel(String? k) => k == null ? '—' : (equipmentEtatValues.contains(k) ? t('equipment.etat.$k') : k);
+
+const equipmentCriticiteValues = ['FAIBLE', 'MODERE', 'ELEVE', 'CRITIQUE'];
+String equipmentCriticiteLabel(String? k) => k == null ? '—' : (equipmentCriticiteValues.contains(k) ? t('equipment.criticite.$k') : k);
+
+const equipmentControlStatutValues = ['CONFORME', 'CONFORME_AVEC_OBSERVATIONS', 'NON_CONFORME', 'EN_ATTENTE', 'EXPIRE'];
+String equipmentControlStatutLabel(String? k) => k == null ? '—' : (equipmentControlStatutValues.contains(k) ? t('equipment.controlStatut.$k') : k);
+
+const equipmentCalibrationResultatValues = ['CONFORME', 'CONFORME_AVEC_AJUSTEMENT', 'NON_CONFORME'];
+String equipmentCalibrationResultatLabel(String? k) => k == null ? '—' : (equipmentCalibrationResultatValues.contains(k) ? t('equipment.calibrationResultat.$k') : k);
+
+const equipmentConsignationStatutValues = ['EN_COURS', 'LEVEE'];
+String equipmentConsignationStatutLabel(String? k) => k == null ? '—' : (equipmentConsignationStatutValues.contains(k) ? t('equipment.consignationStatut.$k') : k);
+
+const equipmentMaintenanceFrequenceValues = ['CALENDAIRE', 'HEURES', 'KM', 'CYCLES', 'RECOMMANDATION_FABRICANT', 'RISQUE'];
+String equipmentMaintenanceFrequenceLabel(String? k) => k == null ? '—' : (equipmentMaintenanceFrequenceValues.contains(k) ? t('equipment.maintenanceFrequence.$k') : k);
+
+const equipmentMaintenanceRecordStatutValues = ['PLANIFIEE', 'EN_COURS', 'TERMINEE', 'REPORTEE'];
+String equipmentMaintenanceRecordStatutLabel(String? k) => k == null ? '—' : (equipmentMaintenanceRecordStatutValues.contains(k) ? t('equipment.maintenanceRecordStatut.$k') : k);
 
 Color equipmentEtatColor(String? etat) => {
       'ACTIF': QhseColors.green, 'EN_MAINTENANCE': QhseColors.blue, 'EN_ATTENTE_REPARATION': QhseColors.amber,
@@ -138,7 +139,7 @@ class _EquipmentPageState extends State<EquipmentPage> {
       if (found.isEmpty) found = null;
     }
     if (found == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Équipement introuvable pour ce code QR (et absent du cache local hors-ligne).')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.notFoundQr'))));
       return;
     }
     if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => EquipmentDetailPage(equipment: found!, onChanged: load)));
@@ -177,33 +178,33 @@ class _EquipmentPageState extends State<EquipmentPage> {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Tableau de bord', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('equipment.dashboard.title'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _kpiChip('Disponibilité', dash['tauxDisponibilite'] != null ? '${dash['tauxDisponibilite']}%' : '—', QhseColors.green),
-            _kpiChip('Indice conformité', dash['indiceConformite'] != null ? '${dash['indiceConformite']}%' : '—', QhseColors.blue),
-            _kpiChip('Échéances en retard', '${dash['enRetard'] ?? 0}', QhseColors.red),
-            _kpiChip('Critiques non traités', '${dash['critiquesNonTraites'] ?? 0}', QhseColors.red),
-            _kpiChip('Coût maintenance', fmtMoney(dash['coutTotalMaintenance']), QhseColors.amber),
-            _kpiChip('Coût étalon. + contrôles', fmtMoney((dash['coutTotalEtalonnage'] ?? 0) + (dash['coutTotalControles'] ?? 0)), QhseColors.amber),
+            _kpiChip(t('equipment.dashboard.disponibilite'), dash['tauxDisponibilite'] != null ? '${dash['tauxDisponibilite']}%' : '—', QhseColors.green),
+            _kpiChip(t('equipment.dashboard.indiceConformite'), dash['indiceConformite'] != null ? '${dash['indiceConformite']}%' : '—', QhseColors.blue),
+            _kpiChip(t('equipment.dashboard.enRetard'), '${dash['enRetard'] ?? 0}', QhseColors.red),
+            _kpiChip(t('equipment.dashboard.critiquesNonTraites'), '${dash['critiquesNonTraites'] ?? 0}', QhseColors.red),
+            _kpiChip(t('equipment.dashboard.coutMaintenance'), fmtMoney(dash['coutTotalMaintenance']), QhseColors.amber),
+            _kpiChip(t('equipment.dashboard.coutEtalonControles'), fmtMoney((dash['coutTotalEtalonnage'] ?? 0) + (dash['coutTotalControles'] ?? 0)), QhseColors.amber),
           ]),
           const SizedBox(height: 14),
-          const Text('Répartition par état', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          Text(t('equipment.dashboard.repartitionEtat'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: parEtat.entries.map((e) => Chip(
-                label: Text('${equipmentEtatLabels[e.key] ?? e.key} : ${e.value}', style: const TextStyle(fontSize: 11)),
+                label: Text(t('equipment.countSuffix', {'label': equipmentEtatLabel(e.key), 'value': '${e.value}'}), style: const TextStyle(fontSize: 11)),
                 backgroundColor: equipmentEtatColor(e.key).withOpacity(0.15),
               )).toList()),
           const SizedBox(height: 10),
-          const Text('Répartition par criticité', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          Text(t('equipment.dashboard.repartitionCriticite'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: parCriticite.entries.map((e) => Chip(
-                label: Text('${equipmentCriticiteLabels[e.key] ?? e.key} : ${e.value}', style: const TextStyle(fontSize: 11)),
+                label: Text(t('equipment.countSuffix', {'label': equipmentCriticiteLabel(e.key), 'value': '${e.value}'}), style: const TextStyle(fontSize: 11)),
                 backgroundColor: equipmentCriticiteColor(e.key).withOpacity(0.15),
               )).toList()),
           if (topCouts.isNotEmpty) ...[
             const SizedBox(height: 10),
-            const Text('Top 5 des coûts de maintenance', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            Text(t('equipment.dashboard.topCouts'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 6),
             ...topCouts.map((t) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
@@ -233,11 +234,11 @@ class _EquipmentPageState extends State<EquipmentPage> {
   Widget build(BuildContext c) {
     final list = filtered;
     return Scaffold(
-      appBar: AppBar(title: const Text('Équipements'), actions: [
-        if (offline) const Padding(padding: EdgeInsets.only(right: 8), child: Center(child: Chip(label: Text('Hors-ligne'), backgroundColor: Color(0xFFFFE0B2)))),
+      appBar: AppBar(title: Text(t('equipment.appBarTitle')), actions: [
+        if (offline) Padding(padding: const EdgeInsets.only(right: 8), child: Center(child: Chip(label: Text(t('equipment.offline')), backgroundColor: const Color(0xFFFFE0B2)))),
         if (!offline && dashboard != null)
           IconButton(
-            tooltip: 'Tableau de bord',
+            tooltip: t('equipment.dashboardTooltip'),
             icon: Icon(Icons.insights, color: showDashboard ? QhseColors.blue : null),
             onPressed: () => setState(() => showDashboard = !showDashboard),
           ),
@@ -246,7 +247,7 @@ class _EquipmentPageState extends State<EquipmentPage> {
       // plugins) : sur ces plateformes, l'identification se fait par la
       // recherche texte ci-dessus plutôt que par un bouton qui échouerait.
       floatingActionButton: (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)
-          ? FloatingActionButton.extended(onPressed: scan, icon: const Icon(Icons.qr_code_scanner), label: const Text('Scanner un QR'))
+          ? FloatingActionButton.extended(onPressed: scan, icon: const Icon(Icons.qr_code_scanner), label: Text(t('equipment.scanQr')))
           : null,
       body: loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
         onRefresh: load,
@@ -254,7 +255,7 @@ class _EquipmentPageState extends State<EquipmentPage> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Rechercher un équipement...', border: OutlineInputBorder()),
+              decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: t('equipment.searchHint'), border: const OutlineInputBorder()),
               onChanged: (v) => setState(() => search = v),
             ),
           ),
@@ -262,13 +263,13 @@ class _EquipmentPageState extends State<EquipmentPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
-              for (final f in const [['TOUS', 'Tous'], ['EN_RETARD', 'En retard'], ['CRITIQUES', 'Critiques'], ['NON_CONFORMES', 'Non conformes'], ['MAINTENANCE', 'Maintenance'], ['HORS_SERVICE', 'Hors service']])
-                Padding(padding: const EdgeInsets.only(right: 8), child: ChoiceChip(label: Text(f[1]), selected: filter == f[0], onSelected: (_) => setState(() => filter = f[0]))),
+              for (final f in const ['TOUS', 'EN_RETARD', 'CRITIQUES', 'NON_CONFORMES', 'MAINTENANCE', 'HORS_SERVICE'])
+                Padding(padding: const EdgeInsets.only(right: 8), child: ChoiceChip(label: Text(t('equipment.filter.$f')), selected: filter == f, onSelected: (_) => setState(() => filter = f))),
             ])),
           ),
           const SizedBox(height: 8),
           if (list.isEmpty)
-            const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun équipement pour ce filtre')))
+            Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('equipment.emptyFiltered'))))
           else
             ...list.map((e) {
               final overdue = equipmentIsOverdue(e);
@@ -278,8 +279,8 @@ class _EquipmentPageState extends State<EquipmentPage> {
                 child: Card(child: ListTile(
                   leading: Icon(Icons.precision_manufacturing, color: overdue ? QhseColors.red : equipmentEtatColor(e['etat'])),
                   title: Text('${e['code']} — ${e['name']}'),
-                  subtitle: Text('${cat != null ? '$cat • ' : ''}${e['site']?['name'] ?? 'Site non renseigné'} • ${equipmentEtatLabels[e['etat']] ?? e['etat']}'),
-                  trailing: overdue ? const Chip(label: Text('En retard'), backgroundColor: Color(0xFFFFCDD2)) : (e['criticiteNiveau'] == 'CRITIQUE' ? Chip(label: const Text('Critique'), backgroundColor: equipmentCriticiteColor('CRITIQUE').withOpacity(0.2)) : null),
+                  subtitle: Text('${cat != null ? '$cat • ' : ''}${e['site']?['name'] ?? t('equipment.siteNonRenseigne')} • ${equipmentEtatLabel(e['etat']?.toString())}'),
+                  trailing: overdue ? Chip(label: Text(t('equipment.filter.EN_RETARD')), backgroundColor: const Color(0xFFFFCDD2)) : (e['criticiteNiveau'] == 'CRITIQUE' ? Chip(label: Text(t('equipment.criticite.CRITIQUE')), backgroundColor: equipmentCriticiteColor('CRITIQUE').withOpacity(0.2)) : null),
                   onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => EquipmentDetailPage(equipment: Map.from(e), onChanged: load))),
                 )),
               );
@@ -333,12 +334,12 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> with SingleTi
         bottom: TabBar(
           controller: tabController,
           isScrollable: true,
-          tabs: const [
-            Tab(text: 'Identification'),
-            Tab(text: 'Maintenance'),
-            Tab(text: 'Contrôles'),
-            Tab(text: 'Étalonnage'),
-            Tab(text: 'Consignation'),
+          tabs: [
+            Tab(text: t('equipment.tab.identification')),
+            Tab(text: t('equipment.tab.maintenance')),
+            Tab(text: t('equipment.tab.controles')),
+            Tab(text: t('equipment.tab.etalonnage')),
+            Tab(text: t('equipment.tab.consignation')),
           ],
         ),
       ),
@@ -381,48 +382,48 @@ class _EquipmentIdentificationTab extends StatelessWidget {
       Text(e['name'] ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        Chip(label: Text(equipmentEtatLabels[e['etat']] ?? '${e['etat']}'), backgroundColor: equipmentEtatColor(e['etat']).withOpacity(0.15), labelStyle: TextStyle(color: equipmentEtatColor(e['etat']))),
-        if (e['criticiteNiveau'] != null) Chip(label: Text('Criticité ${equipmentCriticiteLabels[e['criticiteNiveau']] ?? e['criticiteNiveau']}'), backgroundColor: equipmentCriticiteColor(e['criticiteNiveau']).withOpacity(0.15), labelStyle: TextStyle(color: equipmentCriticiteColor(e['criticiteNiveau']))),
-        if (next != null) Chip(label: Text('Prochaine échéance ${fmtDate(next.toIso8601String())}'), backgroundColor: (next.isBefore(DateTime.now()) ? QhseColors.red : QhseColors.blue).withOpacity(0.15)),
+        Chip(label: Text(equipmentEtatLabel(e['etat']?.toString())), backgroundColor: equipmentEtatColor(e['etat']).withOpacity(0.15), labelStyle: TextStyle(color: equipmentEtatColor(e['etat']))),
+        if (e['criticiteNiveau'] != null) Chip(label: Text(t('equipment.criticiteAxisLabel', {'value': equipmentCriticiteLabel(e['criticiteNiveau']?.toString())})), backgroundColor: equipmentCriticiteColor(e['criticiteNiveau']).withOpacity(0.15), labelStyle: TextStyle(color: equipmentCriticiteColor(e['criticiteNiveau']))),
+        if (next != null) Chip(label: Text(t('equipment.prochaineEcheance', {'date': fmtDate(next.toIso8601String())})), backgroundColor: (next.isBefore(DateTime.now()) ? QhseColors.red : QhseColors.blue).withOpacity(0.15)),
       ]),
       const SizedBox(height: 16),
       Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Identification', style: TextStyle(fontWeight: FontWeight.bold)),
+        Text(t('equipment.identificationTitle'), style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _row('Catégorie', e['categoryEq']?['label'] ?? e['category']),
-        _row('Type', [e['type'], e['sousType']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
-        _row('Site', e['site']?['name']),
-        _row('Service / unité', e['workUnit']?['name']),
-        _row('Marque / modèle', [e['marque'], e['modele']].where((x) => x != null && '$x'.isNotEmpty).join(' ')),
-        _row('N° de série', e['numeroSerie']),
-        _row('Année de fabrication', e['anneeFabrication']),
-        _row('Responsable', e['responsable'] != null ? '${e['responsable']['firstName']} ${e['responsable']['lastName']}' : null),
-        _row('Bâtiment / zone', [e['batiment'], e['zone']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
+        _row(t('equipment.field.categorie'), e['categoryEq']?['label'] ?? e['category']),
+        _row(t('equipment.field.type'), [e['type'], e['sousType']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
+        _row(t('equipment.field.site'), e['site']?['name']),
+        _row(t('equipment.field.serviceUnite'), e['workUnit']?['name']),
+        _row(t('equipment.field.marqueModele'), [e['marque'], e['modele']].where((x) => x != null && '$x'.isNotEmpty).join(' ')),
+        _row(t('equipment.field.numeroSerie'), e['numeroSerie']),
+        _row(t('equipment.field.anneeFabrication'), e['anneeFabrication']),
+        _row(t('equipment.field.responsable'), e['responsable'] != null ? '${e['responsable']['firstName']} ${e['responsable']['lastName']}' : null),
+        _row(t('equipment.field.batimentZone'), [e['batiment'], e['zone']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
       ]))),
       if (e['criticiteSecurite'] != null || e['criticiteQualite'] != null || e['criticiteEnvironnement'] != null || e['criticiteProduction'] != null) ...[
         const SizedBox(height: 12),
         Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Criticité par axe', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(t('equipment.criticiteParAxe'), style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Wrap(spacing: 16, children: [
-            Text('Sécurité : ${e['criticiteSecurite'] ?? '—'}'),
-            Text('Qualité : ${e['criticiteQualite'] ?? '—'}'),
-            Text('Environnement : ${e['criticiteEnvironnement'] ?? '—'}'),
-            Text('Production : ${e['criticiteProduction'] ?? '—'}'),
+            Text(t('equipment.axis.securite', {'value': '${e['criticiteSecurite'] ?? '—'}'})),
+            Text(t('equipment.axis.qualite', {'value': '${e['criticiteQualite'] ?? '—'}'})),
+            Text(t('equipment.axis.environnement', {'value': '${e['criticiteEnvironnement'] ?? '—'}'})),
+            Text(t('equipment.axis.production', {'value': '${e['criticiteProduction'] ?? '—'}'})),
           ]),
         ]))),
       ],
       if (e['notes'] != null && '${e['notes']}'.trim().isNotEmpty) ...[
         const SizedBox(height: 12),
         Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Notes', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(t('equipment.notes'), style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text('${e['notes']}'),
         ]))),
       ],
       const SizedBox(height: 12),
-      _sectionTitle('Non-conformités liées (${nonConformities.length})'),
-      if (nonConformities.isEmpty) _emptyHint('Aucune non-conformité liée')
+      _sectionTitle(t('equipment.ncLieesTitle', {'count': '${nonConformities.length}'})),
+      if (nonConformities.isEmpty) _emptyHint(t('equipment.ncLieesEmpty'))
       else ...nonConformities.map((n) => Card(child: ListTile(leading: const Icon(Icons.report, color: Colors.red), title: Text(n['title'] ?? ''), subtitle: Text('${n['code']} • ${n['status']}')))),
     ]);
   }
@@ -479,29 +480,29 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dctx) => StatefulBuilder(builder: (dctx, setD) => AlertDialog(
-        title: const Text('Nouveau plan de maintenance'),
+        title: Text(t('equipment.dialog.newPlan')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: designationCtrl, decoration: const InputDecoration(labelText: 'Désignation')),
+          TextField(controller: designationCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.designation'))),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: frequenceType,
-            decoration: const InputDecoration(labelText: 'Type de fréquence'),
-            items: equipmentMaintenanceFrequenceLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            decoration: InputDecoration(labelText: t('equipment.dialog.typeFrequence')),
+            items: equipmentMaintenanceFrequenceValues.map((k) => DropdownMenuItem(value: k, child: Text(equipmentMaintenanceFrequenceLabel(k)))).toList(),
             onChanged: (v) => setD(() => frequenceType = v ?? frequenceType),
           ),
           const SizedBox(height: 12),
-          TextField(controller: valeurCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Valeur')),
+          TextField(controller: valeurCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('equipment.dialog.valeur'))),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: responsableId,
-            decoration: const InputDecoration(labelText: 'Responsable (optionnel)'),
+            decoration: InputDecoration(labelText: t('equipment.dialog.responsableOptional')),
             items: [const DropdownMenuItem(value: null, child: Text('—')), ...users.map((u) => DropdownMenuItem(value: u['id'].toString(), child: Text('${u['firstName']} ${u['lastName']}')))],
             onChanged: (v) => setD(() => responsableId = v),
           ),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.of(dctx).pop(false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.of(dctx).pop(true), child: const Text('Créer')),
+          FilledButton(onPressed: () => Navigator.of(dctx).pop(true), child: Text(t('equipment.dialog.create'))),
         ],
       )),
     );
@@ -516,7 +517,7 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
       });
       reload();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.error', {'error': '$e'}))));
     }
   }
 
@@ -535,48 +536,48 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dctx) => StatefulBuilder(builder: (dctx, setD) => AlertDialog(
-        title: const Text('Nouvelle intervention'),
+        title: Text(t('equipment.dialog.newRecord')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
             value: type,
-            decoration: const InputDecoration(labelText: 'Type'),
-            items: const [DropdownMenuItem(value: 'CORRECTIVE', child: Text('Corrective (panne)')), DropdownMenuItem(value: 'PREVENTIVE', child: Text('Préventive'))],
+            decoration: InputDecoration(labelText: t('equipment.dialog.type')),
+            items: [DropdownMenuItem(value: 'CORRECTIVE', child: Text(t('equipment.dialog.typeCorrective'))), DropdownMenuItem(value: 'PREVENTIVE', child: Text(t('equipment.dialog.typePreventive')))],
             onChanged: (v) => setD(() => type = v ?? type),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: statut,
-            decoration: const InputDecoration(labelText: 'Statut'),
-            items: equipmentMaintenanceRecordStatutLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            decoration: InputDecoration(labelText: t('equipment.dialog.statut')),
+            items: equipmentMaintenanceRecordStatutValues.map((k) => DropdownMenuItem(value: k, child: Text(equipmentMaintenanceRecordStatutLabel(k)))).toList(),
             onChanged: (v) => setD(() => statut = v ?? statut),
           ),
           if (type == 'PREVENTIVE') ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: planId,
-              decoration: const InputDecoration(labelText: 'Plan lié (optionnel)'),
+              decoration: InputDecoration(labelText: t('equipment.dialog.planLieOptional')),
               items: [const DropdownMenuItem(value: null, child: Text('—')), ...plans.map((p) => DropdownMenuItem(value: p['id'].toString(), child: Text(p['designation'] ?? '')))],
               onChanged: (v) => setD(() => planId = v),
             ),
           ],
           if (type == 'CORRECTIVE') ...[
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: () async { final d = await pick(dctx); if (d != null) setD(() => datePanne = d); }, child: Text(datePanne == null ? 'Date de panne' : fmtDate(datePanne!.toIso8601String()))),
+            OutlinedButton(onPressed: () async { final d = await pick(dctx); if (d != null) setD(() => datePanne = d); }, child: Text(datePanne == null ? t('equipment.dialog.datePanne') : fmtDate(datePanne!.toIso8601String()))),
           ],
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: () async { final d = await pick(dctx); if (d != null) setD(() => dateDebut = d); }, child: Text(dateDebut == null ? "Début d'intervention" : fmtDate(dateDebut!.toIso8601String()))),
+          OutlinedButton(onPressed: () async { final d = await pick(dctx); if (d != null) setD(() => dateDebut = d); }, child: Text(dateDebut == null ? t('equipment.dialog.debutIntervention') : fmtDate(dateDebut!.toIso8601String()))),
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: () async { final d = await pick(dctx); if (d != null) setD(() => dateFin = d); }, child: Text(dateFin == null ? "Fin d'intervention" : fmtDate(dateFin!.toIso8601String()))),
+          OutlinedButton(onPressed: () async { final d = await pick(dctx); if (d != null) setD(() => dateFin = d); }, child: Text(dateFin == null ? t('equipment.dialog.finIntervention') : fmtDate(dateFin!.toIso8601String()))),
           const SizedBox(height: 12),
-          TextField(controller: dureeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Durée (heures, optionnel)')),
+          TextField(controller: dureeCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('equipment.dialog.dureeOptional'))),
           const SizedBox(height: 12),
-          TextField(controller: coutCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Coût (optionnel)')),
+          TextField(controller: coutCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('equipment.dialog.coutOptional'))),
           if (type == 'CORRECTIVE') ...[
             const SizedBox(height: 12),
-            TextField(controller: causeCtrl, decoration: const InputDecoration(labelText: 'Cause de la panne (optionnel)')),
+            TextField(controller: causeCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.causePanneOptional'))),
           ],
           const SizedBox(height: 12),
-          TextField(controller: descriptionCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Description (optionnel)')),
+          TextField(controller: descriptionCtrl, maxLines: 2, decoration: InputDecoration(labelText: t('equipment.dialog.descriptionOptional'))),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.of(dctx).pop(false), child: const Text('Annuler')),
@@ -601,7 +602,7 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
       });
       reload();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.error', {'error': '$e'}))));
     }
   }
 
@@ -614,30 +615,30 @@ class _EquipmentMaintenanceTabState extends State<_EquipmentMaintenanceTab> {
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
         if (s != null) Wrap(spacing: 8, runSpacing: 8, children: [
-          Chip(label: Text('Pannes : ${s['nombrePannes'] ?? 0}')),
-          Chip(label: Text('MTBF (h) : ${s['mtbfHeures'] != null ? (s['mtbfHeures'] as num).round() : '—'}')),
-          Chip(label: Text('MTTR (h) : ${s['mttrHeures'] != null ? (s['mttrHeures'] as num).round() : '—'}')),
-          Chip(label: Text('Disponibilité : ${s['disponibilite'] != null ? '${((s['disponibilite'] as num) * 100).round()}%' : '—'}')),
+          Chip(label: Text(t('equipment.maintenance.pannes', {'value': '${s['nombrePannes'] ?? 0}'}))),
+          Chip(label: Text(t('equipment.maintenance.mtbf', {'value': '${s['mtbfHeures'] != null ? (s['mtbfHeures'] as num).round() : '—'}'}))),
+          Chip(label: Text(t('equipment.maintenance.mttr', {'value': '${s['mttrHeures'] != null ? (s['mttrHeures'] as num).round() : '—'}'}))),
+          Chip(label: Text(t('equipment.maintenance.disponibiliteChip', {'value': s['disponibilite'] != null ? '${((s['disponibilite'] as num) * 100).round()}%' : '—'}))),
         ]),
         const SizedBox(height: 12),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Plans de maintenance préventive', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextButton.icon(onPressed: newPlan, icon: const Icon(Icons.add, size: 18), label: const Text('Nouveau plan')),
+          Text(t('equipment.maintenance.plansTitle'), style: const TextStyle(fontWeight: FontWeight.bold)),
+          TextButton.icon(onPressed: newPlan, icon: const Icon(Icons.add, size: 18), label: Text(t('equipment.maintenance.newPlanBtn'))),
         ]),
-        if (plans.isEmpty) _emptyHint('Aucun plan de maintenance préventive')
+        if (plans.isEmpty) _emptyHint(t('equipment.maintenance.plansEmpty'))
         else ...plans.map((p) => Card(child: ListTile(
               title: Text(p['designation'] ?? ''),
-              subtitle: Text('${p['frequenceValeur']} (${equipmentMaintenanceFrequenceLabels[p['frequenceType']] ?? p['frequenceType']}) • Prochaine : ${fmtDate(p['dateProchaine'])}'),
+              subtitle: Text(t('equipment.maintenance.planSubtitle', {'valeur': '${p['frequenceValeur']}', 'freq': equipmentMaintenanceFrequenceLabel(p['frequenceType']?.toString()), 'date': fmtDate(p['dateProchaine'])})),
             ))),
         const SizedBox(height: 16),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Interventions', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextButton.icon(onPressed: newRecord, icon: const Icon(Icons.add, size: 18), label: const Text('Nouvelle intervention')),
+          Text(t('equipment.maintenance.interventionsTitle'), style: const TextStyle(fontWeight: FontWeight.bold)),
+          TextButton.icon(onPressed: newRecord, icon: const Icon(Icons.add, size: 18), label: Text(t('equipment.dialog.newRecord'))),
         ]),
-        if (records.isEmpty) _emptyHint('Aucune intervention enregistrée')
+        if (records.isEmpty) _emptyHint(t('equipment.maintenance.recordsEmpty'))
         else ...records.map((r) => Card(child: ListTile(
-              title: Text(r['type'] == 'PREVENTIVE' ? 'Préventive' : 'Corrective'),
-              subtitle: Text('${equipmentMaintenanceRecordStatutLabels[r['statut']] ?? r['statut']} • ${fmtDate(r['datePanne'] ?? r['dateDebut'])}${r['dureeHeures'] != null ? ' • ${r['dureeHeures']} h' : ''}${r['cout'] != null ? ' • ${fmtMoney(r['cout'])}' : ''}'),
+              title: Text(r['type'] == 'PREVENTIVE' ? t('equipment.maintenance.recordTypePreventive') : t('equipment.maintenance.recordTypeCorrective')),
+              subtitle: Text('${equipmentMaintenanceRecordStatutLabel(r['statut']?.toString())} • ${fmtDate(r['datePanne'] ?? r['dateDebut'])}${r['dureeHeures'] != null ? ' • ${r['dureeHeures']} h' : ''}${r['cout'] != null ? ' • ${fmtMoney(r['cout'])}' : ''}'),
             ))),
       ]),
     );
@@ -682,7 +683,7 @@ class _EquipmentControlsTabState extends State<_EquipmentControlsTab> {
   Future<void> generateNc(String id) async {
     setState(() => genId = id);
     try { await api.post('/business/equipment-controls/$id/generate-nc', {}); await reload(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.error', {'error': '$e'})))); }
     setState(() => genId = null);
   }
 
@@ -694,17 +695,17 @@ class _EquipmentControlsTabState extends State<_EquipmentControlsTab> {
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Contrôles réglementaires', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextButton.icon(onPressed: newControl, icon: const Icon(Icons.add, size: 18), label: const Text('Nouveau')),
+          Text(t('equipment.controls.title'), style: const TextStyle(fontWeight: FontWeight.bold)),
+          TextButton.icon(onPressed: newControl, icon: const Icon(Icons.add, size: 18), label: Text(t('equipment.controls.newBtn'))),
         ]),
-        if (controls.isEmpty) _emptyHint('Aucun contrôle réglementaire enregistré')
+        if (controls.isEmpty) _emptyHint(t('equipment.controls.empty'))
         else ...controls.map((ctl) => Card(child: ListTile(
               leading: Icon(Icons.fact_check, color: ctl['statut'] == 'NON_CONFORME' ? QhseColors.red : QhseColors.green),
               title: Text(ctl['designation'] ?? ''),
-              subtitle: Text('${equipmentControlStatutLabels[ctl['statut']] ?? ctl['statut']} • ${fmtDate(ctl['dateControle'])}${ctl['dateProchainControle'] != null ? ' • prochain : ${fmtDate(ctl['dateProchainControle'])}' : ''}'),
+              subtitle: Text('${equipmentControlStatutLabel(ctl['statut']?.toString())} • ${fmtDate(ctl['dateControle'])}${ctl['dateProchainControle'] != null ? ' • ' + t('equipment.controls.prochain', {'date': fmtDate(ctl['dateProchainControle'])}) : ''}'),
               trailing: (ctl['statut'] == 'NON_CONFORME' && ctl['nonConformityId'] == null)
-                  ? TextButton(onPressed: genId == ctl['id'] ? null : () => generateNc(ctl['id'].toString()), child: Text(genId == ctl['id'] ? '…' : 'Générer une NC'))
-                  : (ctl['nonConformityId'] != null ? const Text('NC créée', style: TextStyle(fontSize: 11)) : null),
+                  ? TextButton(onPressed: genId == ctl['id'] ? null : () => generateNc(ctl['id'].toString()), child: Text(genId == ctl['id'] ? '…' : t('equipment.controls.generateNc')))
+                  : (ctl['nonConformityId'] != null ? Text(t('equipment.controls.ncCreee'), style: const TextStyle(fontSize: 11)) : null),
             ))),
       ]),
     );
@@ -751,14 +752,14 @@ class _EquipmentCalibrationsTabState extends State<_EquipmentCalibrationsTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dctx) => StatefulBuilder(builder: (dctx, setD) => AlertDialog(
-        title: const Text('Nouvel étalonnage'),
+        title: Text(t('equipment.calibrations.newBtn')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           OutlinedButton(
             onPressed: () async {
               final d = await showDatePicker(context: dctx, initialDate: dateEtalonnage, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 3650)));
               if (d != null) setD(() => dateEtalonnage = d);
             },
-            child: Text('Date d\'étalonnage : ${fmtDate(dateEtalonnage.toIso8601String())}'),
+            child: Text(t('equipment.dialog.dateEtalonnage', {'date': fmtDate(dateEtalonnage.toIso8601String())})),
           ),
           const SizedBox(height: 12),
           OutlinedButton(
@@ -766,21 +767,21 @@ class _EquipmentCalibrationsTabState extends State<_EquipmentCalibrationsTab> {
               final d = await showDatePicker(context: dctx, initialDate: dateProchaineEtalonnage ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 3650)));
               if (d != null) setD(() => dateProchaineEtalonnage = d);
             },
-            child: Text(dateProchaineEtalonnage == null ? 'Prochain étalonnage (optionnel)' : fmtDate(dateProchaineEtalonnage!.toIso8601String())),
+            child: Text(dateProchaineEtalonnage == null ? t('equipment.dialog.prochainEtalonnageOptional') : fmtDate(dateProchaineEtalonnage!.toIso8601String())),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: resultat,
-            decoration: const InputDecoration(labelText: 'Résultat'),
-            items: equipmentCalibrationResultatLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            decoration: InputDecoration(labelText: t('equipment.dialog.resultat')),
+            items: equipmentCalibrationResultatValues.map((k) => DropdownMenuItem(value: k, child: Text(equipmentCalibrationResultatLabel(k)))).toList(),
             onChanged: (v) => setD(() => resultat = v ?? resultat),
           ),
           const SizedBox(height: 12),
-          TextField(controller: organismeCtrl, decoration: const InputDecoration(labelText: 'Organisme étalonneur (optionnel)')),
+          TextField(controller: organismeCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.organismeOptional'))),
           const SizedBox(height: 12),
-          TextField(controller: certificatCtrl, decoration: const InputDecoration(labelText: 'N° certificat (optionnel)')),
+          TextField(controller: certificatCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.certificatOptional'))),
           const SizedBox(height: 12),
-          TextField(controller: incertitudeCtrl, decoration: const InputDecoration(labelText: 'Incertitude (optionnel)')),
+          TextField(controller: incertitudeCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.incertitudeOptional'))),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.of(dctx).pop(false), child: const Text('Annuler')),
@@ -801,14 +802,14 @@ class _EquipmentCalibrationsTabState extends State<_EquipmentCalibrationsTab> {
       });
       reload();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.error', {'error': '$e'}))));
     }
   }
 
   Future<void> generateNc(String id) async {
     setState(() => genId = id);
     try { await api.post('/business/equipment-calibrations/$id/generate-nc', {}); await reload(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.error', {'error': '$e'})))); }
     setState(() => genId = null);
   }
 
@@ -820,17 +821,17 @@ class _EquipmentCalibrationsTabState extends State<_EquipmentCalibrationsTab> {
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Étalonnage des instruments de mesure', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextButton.icon(onPressed: newCalibration, icon: const Icon(Icons.add, size: 18), label: const Text('Nouvel étalonnage')),
+          Text(t('equipment.calibrations.title'), style: const TextStyle(fontWeight: FontWeight.bold)),
+          TextButton.icon(onPressed: newCalibration, icon: const Icon(Icons.add, size: 18), label: Text(t('equipment.calibrations.newBtn'))),
         ]),
-        if (calibrations.isEmpty) _emptyHint('Aucun étalonnage enregistré')
+        if (calibrations.isEmpty) _emptyHint(t('equipment.calibrations.empty'))
         else ...calibrations.map((cal) => Card(child: ListTile(
               leading: Icon(Icons.rule, color: equipmentCalibrationResultatColor(cal['resultat'])),
-              title: Text('${equipmentCalibrationResultatLabels[cal['resultat']] ?? cal['resultat']}'),
-              subtitle: Text('${fmtDate(cal['dateEtalonnage'])} → prochain : ${fmtDate(cal['dateProchaineEtalonnage'])}${cal['nePasUtiliser'] == true ? ' • NE PAS UTILISER' : ''}'),
+              title: Text(equipmentCalibrationResultatLabel(cal['resultat']?.toString())),
+              subtitle: Text('${fmtDate(cal['dateEtalonnage'])} → ' + t('equipment.controls.prochain', {'date': fmtDate(cal['dateProchaineEtalonnage'])}) + (cal['nePasUtiliser'] == true ? ' • ' + t('equipment.calibrations.nePasUtiliser') : '')),
               trailing: (cal['resultat'] != 'CONFORME' && cal['nonConformityId'] == null)
-                  ? TextButton(onPressed: genId == cal['id'] ? null : () => generateNc(cal['id'].toString()), child: Text(genId == cal['id'] ? '…' : 'Générer une NC'))
-                  : (cal['nonConformityId'] != null ? const Text('NC créée', style: TextStyle(fontSize: 11)) : null),
+                  ? TextButton(onPressed: genId == cal['id'] ? null : () => generateNc(cal['id'].toString()), child: Text(genId == cal['id'] ? '…' : t('equipment.controls.generateNc')))
+                  : (cal['nonConformityId'] != null ? Text(t('equipment.controls.ncCreee'), style: const TextStyle(fontSize: 11)) : null),
             ))),
       ]),
     );
@@ -884,28 +885,28 @@ class _EquipmentConsignationsTabState extends State<_EquipmentConsignationsTab> 
     final ok = await showDialog<bool>(
       context: context,
       builder: (dctx) => StatefulBuilder(builder: (dctx, setD) => AlertDialog(
-        title: const Text('Nouvelle consignation'),
+        title: Text(t('equipment.dialog.newConsignation')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: motifCtrl, decoration: const InputDecoration(labelText: 'Motif')),
+          TextField(controller: motifCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.motif'))),
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: () async {
               final d = await showDatePicker(context: dctx, initialDate: dateFinPrevue ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 3650)));
               if (d != null) setD(() => dateFinPrevue = d);
             },
-            child: Text(dateFinPrevue == null ? 'Fin prévue (optionnel)' : fmtDate(dateFinPrevue!.toIso8601String())),
+            child: Text(dateFinPrevue == null ? t('equipment.dialog.finPrevueOptional') : fmtDate(dateFinPrevue!.toIso8601String())),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: responsableId,
-            decoration: const InputDecoration(labelText: 'Responsable (optionnel)'),
+            decoration: InputDecoration(labelText: t('equipment.dialog.responsableOptional')),
             items: [const DropdownMenuItem(value: null, child: Text('—')), ...users.map((u) => DropdownMenuItem(value: u['id'].toString(), child: Text('${u['firstName']} ${u['lastName']}')))],
             onChanged: (v) => setD(() => responsableId = v),
           ),
           const SizedBox(height: 12),
-          TextField(controller: risqueCtrl, decoration: const InputDecoration(labelText: 'Risque associé (optionnel)')),
+          TextField(controller: risqueCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.risqueAssocieOptional'))),
           const SizedBox(height: 12),
-          TextField(controller: mesureCtrl, decoration: const InputDecoration(labelText: 'Mesure de maîtrise (optionnel)')),
+          TextField(controller: mesureCtrl, decoration: InputDecoration(labelText: t('equipment.dialog.mesureMaitriseOptional'))),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.of(dctx).pop(false), child: const Text('Annuler')),
@@ -925,14 +926,14 @@ class _EquipmentConsignationsTabState extends State<_EquipmentConsignationsTab> 
       });
       reload();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.error', {'error': '$e'}))));
     }
   }
 
   Future<void> lever(String id) async {
     setState(() => busyId = id);
     try { await api.post('/business/equipment-consignations/$id/lever', {}); await reload(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.error', {'error': '$e'})))); }
     setState(() => busyId = null);
   }
 
@@ -943,19 +944,19 @@ class _EquipmentConsignationsTabState extends State<_EquipmentConsignationsTab> 
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('Tant qu\'une consignation est en cours, l\'équipement passe à l\'état Consigné', style: TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(t('equipment.consignations.hint'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 8),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Consignation / cadenassage (LOTO)', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextButton.icon(onPressed: newConsignation, icon: const Icon(Icons.add, size: 18), label: const Text('Nouvelle')),
+          Text(t('equipment.consignations.title'), style: const TextStyle(fontWeight: FontWeight.bold)),
+          TextButton.icon(onPressed: newConsignation, icon: const Icon(Icons.add, size: 18), label: Text(t('equipment.consignations.newBtn'))),
         ]),
-        if (consignations.isEmpty) _emptyHint('Aucune consignation enregistrée')
+        if (consignations.isEmpty) _emptyHint(t('equipment.consignations.empty'))
         else ...consignations.map((c) => Card(child: ListTile(
               leading: Icon(Icons.lock, color: equipmentConsignationStatutColor(c['statut'])),
               title: Text(c['motif'] ?? ''),
-              subtitle: Text('${fmtDate(c['dateDebut'])} → ${fmtDate(c['dateFinPrevue'])} • ${equipmentConsignationStatutLabels[c['statut']] ?? c['statut']}'),
+              subtitle: Text('${fmtDate(c['dateDebut'])} → ${fmtDate(c['dateFinPrevue'])} • ${equipmentConsignationStatutLabel(c['statut']?.toString())}'),
               trailing: c['statut'] == 'EN_COURS'
-                  ? TextButton(onPressed: busyId == c['id'] ? null : () => lever(c['id'].toString()), child: Text(busyId == c['id'] ? '…' : 'Lever'))
+                  ? TextButton(onPressed: busyId == c['id'] ? null : () => lever(c['id'].toString()), child: Text(busyId == c['id'] ? '…' : t('equipment.consignations.lever')))
                   : null,
             ))),
       ]),
@@ -990,7 +991,7 @@ class _EquipmentControlFormPageState extends State<EquipmentControlFormPage> {
 
   Future<void> submit() async {
     if (designation.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La désignation du contrôle est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.controlForm.designationRequired'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -1011,7 +1012,7 @@ class _EquipmentControlFormPageState extends State<EquipmentControlFormPage> {
       if (e.networkError) {
         await SyncQueue.enqueue('equipmentControl', 'CREATE', payload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : contrôle enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('equipment.controlForm.offlineQueued')), duration: const Duration(seconds: 4)));
           Navigator.pop(context, true);
         }
       } else {
@@ -1024,31 +1025,31 @@ class _EquipmentControlFormPageState extends State<EquipmentControlFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Nouveau contrôle terrain')),
+    appBar: AppBar(title: Text(t('equipment.controlForm.title'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      TextField(controller: designation, decoration: const InputDecoration(labelText: 'Désignation *', border: OutlineInputBorder())),
+      TextField(controller: designation, decoration: InputDecoration(labelText: t('equipment.controlForm.designationField'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: organisme, decoration: const InputDecoration(labelText: 'Organisme (optionnel)', border: OutlineInputBorder())),
+      TextField(controller: organisme, decoration: InputDecoration(labelText: t('equipment.controlForm.organismeField'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: referenceReglementaire, decoration: const InputDecoration(labelText: 'Référence réglementaire (optionnel)', border: OutlineInputBorder())),
+      TextField(controller: referenceReglementaire, decoration: InputDecoration(labelText: t('equipment.controlForm.referenceField'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
       Row(children: [
-        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text('Contrôle : ${fmtDate(dateControle.toIso8601String())}'))),
+        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text(t('equipment.controlForm.controleDate', {'date': fmtDate(dateControle.toIso8601String())})))),
         const SizedBox(width: 8),
-        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.event_repeat), label: Text(dateProchainControle == null ? 'Prochain (optionnel)' : fmtDate(dateProchainControle!.toIso8601String())))),
+        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.event_repeat), label: Text(dateProchainControle == null ? t('equipment.controlForm.prochainOptional') : fmtDate(dateProchainControle!.toIso8601String())))),
       ]),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: statut,
-        decoration: const InputDecoration(labelText: 'Statut', border: OutlineInputBorder()),
-        items: equipmentControlStatutLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+        decoration: InputDecoration(labelText: t('equipment.dialog.statut'), border: const OutlineInputBorder()),
+        items: equipmentControlStatutValues.map((k) => DropdownMenuItem(value: k, child: Text(equipmentControlStatutLabel(k)))).toList(),
         onChanged: (v) => setState(() => statut = v ?? statut),
       ),
       const SizedBox(height: 12),
-      TextField(controller: observations, maxLines: 3, decoration: const InputDecoration(labelText: 'Observations (optionnel)', border: OutlineInputBorder())),
+      TextField(controller: observations, maxLines: 3, decoration: InputDecoration(labelText: t('equipment.controlForm.observationsOptional'), border: const OutlineInputBorder())),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Enregistrer le contrôle')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('equipment.controlForm.submitBtn'))),
     ]),
   );
 }
@@ -1082,7 +1083,7 @@ class _EquipmentQrScannerPageState extends State<EquipmentQrScannerPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Scanner le QR de l\'équipement')),
+    appBar: AppBar(title: Text(t('equipment.scanner.title'))),
     body: MobileScanner(onDetect: onDetect),
   );
 }
