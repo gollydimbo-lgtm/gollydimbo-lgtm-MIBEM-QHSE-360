@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'validation_history_widgets.dart';
@@ -17,24 +18,24 @@ Color _niveauColor(String? n) => {
       'MODERE': const Color(0xFFB45309),
       'FAIBLE': QhseColors.green,
     }[n] ?? QhseColors.textSecondary;
-String _niveauLabel(String? n) => {'CRITIQUE': 'Critique', 'ELEVE': 'Élevé', 'MODERE': 'Modéré', 'FAIBLE': 'Faible'}[n] ?? '—';
+String _niveauLabel(String? n) => {'CRITIQUE': t('risksPageFlt.niveau.critique'), 'ELEVE': t('risksPageFlt.niveau.eleve'), 'MODERE': t('risksPageFlt.niveau.modere'), 'FAIBLE': t('risksPageFlt.niveau.faible')}[n] ?? '—';
 Color _alerteColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
 // Export CSV du registre (finding #30 de l'audit — export manquant côté
 // mobile alors qu'il existe déjà côté web pour Risques/NC).
 String _csvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
 // Hiérarchie de prévention (point 9 du cahier des charges) — suggestion,
 // jamais une liste figée côté serveur.
-const List<List<String>> kRiskMeasureTypes = [
-  ['SUPPRESSION', 'Suppression du danger'],
-  ['SUBSTITUTION', 'Substitution'],
-  ['PROTECTION_COLLECTIVE', 'Protection collective'],
-  ['TECHNIQUE', 'Mesure technique'],
-  ['ORGANISATIONNELLE', 'Mesure organisationnelle'],
-  ['PROCEDURE', 'Procédure / instruction'],
-  ['FORMATION', 'Formation / information'],
-  ['SIGNALISATION', 'Signalisation'],
-  ['EPI', 'EPI'],
-  ['AUTRE', 'Autre'],
+List<List<String>> get kRiskMeasureTypes => [
+  ['SUPPRESSION', t('risksPageFlt.measureTypes.suppression')],
+  ['SUBSTITUTION', t('risksPageFlt.measureTypes.substitution')],
+  ['PROTECTION_COLLECTIVE', t('risksPageFlt.measureTypes.protectionCollective')],
+  ['TECHNIQUE', t('risksPageFlt.measureTypes.technique')],
+  ['ORGANISATIONNELLE', t('risksPageFlt.measureTypes.organisationnelle')],
+  ['PROCEDURE', t('risksPageFlt.measureTypes.procedure')],
+  ['FORMATION', t('risksPageFlt.measureTypes.formation')],
+  ['SIGNALISATION', t('risksPageFlt.measureTypes.signalisation')],
+  ['EPI', t('risksPageFlt.measureTypes.epi')],
+  ['AUTRE', t('risksPageFlt.measureTypes.autre')],
 ];
 
 // --- Écran principal à 4 onglets, comme le tableau de bord web ---
@@ -92,7 +93,7 @@ class _RisksPageState extends State<RisksPage> {
   Future<void> exportCsv() async {
     setState(() => exporting = true);
     try {
-      final headers = ['Code', 'Danger', 'Catégorie', 'Unité de travail', 'Situation dangereuse', 'Événement redouté', 'Dommage potentiel', 'Personnes exposées', 'Méthode', 'Gravité', 'Probabilité', 'Exposition', 'Score brut', 'Niveau', 'Gravité résiduelle', 'Probabilité résiduelle', 'Score résiduel', 'Niveau résiduel', 'Statut de maîtrise', 'Prochaine réévaluation'];
+      final headers = [t('risksPageFlt.csv.code'), t('risksPageFlt.csv.danger'), t('risksPageFlt.csv.categorie'), t('risksPageFlt.csv.uniteTravail'), t('risksPageFlt.csv.situationDangereuse'), t('risksPageFlt.csv.evenementRedoute'), t('risksPageFlt.csv.dommagePotentiel'), t('risksPageFlt.csv.personnesExposees'), t('risksPageFlt.csv.methode'), t('risksPageFlt.csv.gravite'), t('risksPageFlt.csv.probabilite'), t('risksPageFlt.csv.exposition'), t('risksPageFlt.csv.scoreBrut'), t('risksPageFlt.csv.niveau'), t('risksPageFlt.csv.graviteResiduelle'), t('risksPageFlt.csv.probabiliteResiduelle'), t('risksPageFlt.csv.scoreResiduel'), t('risksPageFlt.csv.niveauResiduel'), t('risksPageFlt.csv.statutMaitrise'), t('risksPageFlt.csv.prochaineReevaluation')];
       final buffer = StringBuffer();
       buffer.writeln(headers.map((v) => _csvEscape(v)).join(','));
       for (final r in items) {
@@ -106,7 +107,7 @@ class _RisksPageState extends State<RisksPage> {
       final fileName = 'Registre-des-risques-${DateTime.now().millisecondsSinceEpoch}.csv';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
-      await Share.shareXFiles([XFile(file.path)], text: 'Registre des risques');
+      await Share.shareXFiles([XFile(file.path)], text: t('risksPageFlt.share.registre'));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -118,16 +119,16 @@ class _RisksPageState extends State<RisksPage> {
     length: 6,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Registre des risques'),
-        actions: [IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), onPressed: exporting ? null : exportCsv, tooltip: 'Exporter le registre')],
-        bottom: const TabBar(isScrollable: true, tabs: [
-          Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Hiérarchisation'), Tab(text: 'Cartographie'), Tab(text: 'Top 10'), Tab(text: 'Paramétrage'),
+        title: Text(t('risksPageFlt.titre')),
+        actions: [IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), onPressed: exporting ? null : exportCsv, tooltip: t('risksPageFlt.export.tooltip'))],
+        bottom: TabBar(isScrollable: true, tabs: [
+          Tab(text: t('risksPageFlt.onglets.vueEnsemble')), Tab(text: t('risksPageFlt.onglets.registre')), Tab(text: t('risksPageFlt.onglets.hierarchisation')), Tab(text: t('risksPageFlt.onglets.cartographie')), Tab(text: t('risksPageFlt.onglets.top10')), Tab(text: t('risksPageFlt.onglets.parametrage')),
         ]),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const RiskFormPage())).then((_) => load()),
         icon: const Icon(Icons.add),
-        label: const Text('Nouveau risque'),
+        label: Text(t('risksPageFlt.fab.nouveau')),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -140,7 +141,7 @@ class _RisksPageState extends State<RisksPage> {
   Widget _buildTop10(BuildContext c) => RefreshIndicator(
     onRefresh: load,
     child: top10.isEmpty
-        ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun risque enregistré')))])
+        ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('risksPageFlt.vide.aucunRisque'))))])
         : ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: top10.length,
@@ -151,7 +152,7 @@ class _RisksPageState extends State<RisksPage> {
               return Card(child: ListTile(
                 leading: CircleAvatar(backgroundColor: color, child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                 title: Text('${r['hazard']}'),
-                subtitle: Text('${r['workUnit']?['name'] ?? '—'} · ${r['category']?['label'] ?? '—'} · score ${r['grossScore'] ?? '—'} · ${nbActions > 0 ? '$nbActions action(s)' : 'Aucune action'}'),
+                subtitle: Text('${r['workUnit']?['name'] ?? '—'} · ${r['category']?['label'] ?? '—'} · ${t('risksPageFlt.top10.score', {'value': '${r['grossScore'] ?? '—'}'})} · ${nbActions > 0 ? t('risksPageFlt.top10.actionsCount', {'count': '$nbActions'}) : t('risksPageFlt.top10.aucuneAction')}'),
                 onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RiskDetailPage(riskId: r['id']))).then((_) => load()),
               ));
             },
@@ -162,26 +163,26 @@ class _RisksPageState extends State<RisksPage> {
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(12), children: [
       KpiBar([
-        KpiStat('Recensés', '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.warning_amber_outlined),
-        KpiStat('Critiques', '${dashboard['critiques'] ?? 0}', color: QhseColors.red, icon: Icons.error_outline),
-        KpiStat('Élevés', '${dashboard['eleves'] ?? 0}', color: QhseColors.amber, icon: Icons.error_outline),
-        KpiStat('Non maîtrisés', '${dashboard['nonMaitrises'] ?? 0}', color: (dashboard['nonMaitrises'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.gpp_bad_outlined),
+        KpiStat(t('risksPageFlt.kpi.recenses'), '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.warning_amber_outlined),
+        KpiStat(t('risksPageFlt.kpi.critiques'), '${dashboard['critiques'] ?? 0}', color: QhseColors.red, icon: Icons.error_outline),
+        KpiStat(t('risksPageFlt.kpi.eleves'), '${dashboard['eleves'] ?? 0}', color: QhseColors.amber, icon: Icons.error_outline),
+        KpiStat(t('risksPageFlt.kpi.nonMaitrises'), '${dashboard['nonMaitrises'] ?? 0}', color: (dashboard['nonMaitrises'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.gpp_bad_outlined),
       ]),
       const SizedBox(height: 8),
       KpiBar([
-        KpiStat('Actions en retard', '${dashboard['actionsEnRetard'] ?? 0}', color: (dashboard['actionsEnRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
-        KpiStat('À réévaluer', '${dashboard['aReevaluer'] ?? 0}', color: (dashboard['aReevaluer'] ?? 0) > 0 ? QhseColors.amber : QhseColors.green, icon: Icons.refresh),
-        KpiStat('Taux de maîtrise', '${dashboard['tauxMaitrise'] ?? '—'}%', color: QhseColors.blue, icon: Icons.shield_outlined),
-        KpiStat('Clôture actions', '${dashboard['tauxClotureActions'] ?? '—'}%', color: QhseColors.blue, icon: Icons.task_alt),
+        KpiStat(t('risksPageFlt.kpi.actionsEnRetard'), '${dashboard['actionsEnRetard'] ?? 0}', color: (dashboard['actionsEnRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
+        KpiStat(t('risksPageFlt.kpi.aReevaluer'), '${dashboard['aReevaluer'] ?? 0}', color: (dashboard['aReevaluer'] ?? 0) > 0 ? QhseColors.amber : QhseColors.green, icon: Icons.refresh),
+        KpiStat(t('risksPageFlt.kpi.tauxMaitrise'), '${dashboard['tauxMaitrise'] ?? '—'}%', color: QhseColors.blue, icon: Icons.shield_outlined),
+        KpiStat(t('risksPageFlt.kpi.clotureActions'), '${dashboard['tauxClotureActions'] ?? '—'}%', color: QhseColors.blue, icon: Icons.task_alt),
       ]),
       const SizedBox(height: 16),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('Alertes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text(t('risksPageFlt.apercu.alertesTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
         Text('${alertes.length}', style: TextStyle(color: QhseColors.textSecondary)),
       ]),
       const SizedBox(height: 6),
       if (alertes.isEmpty)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.green)))
+        Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('risksPageFlt.apercu.aucuneAlerte'), style: TextStyle(color: QhseColors.green)))
       else
         ...alertes.map((a) => Card(child: ListTile(
               dense: true,
@@ -206,7 +207,7 @@ class _RisksPageState extends State<RisksPage> {
             controller: searchCtrl,
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
-              hintText: 'Rechercher un risque (danger, situation, catégorie, unité de travail...)',
+              hintText: t('risksPageFlt.registre.rechercheHint'),
               prefixIcon: const Icon(Icons.search, size: 18),
               isDense: true,
             ),
@@ -214,7 +215,7 @@ class _RisksPageState extends State<RisksPage> {
         ),
         Expanded(
           child: list.isEmpty
-              ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(searchResults != null ? 'Aucun résultat pour cette recherche' : 'Aucun risque enregistré')))])
+              ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(searchResults != null ? t('risksPageFlt.vide.aucunResultat') : t('risksPageFlt.vide.aucunRisque'))))])
               : ListView.builder(
                   padding: const EdgeInsets.all(12),
                   itemCount: list.length,
@@ -225,7 +226,7 @@ class _RisksPageState extends State<RisksPage> {
                     return Card(child: ListTile(
                       leading: CircleAvatar(backgroundColor: color, child: Text('$score', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                       title: Text('${r['code']} — ${r['hazard']}'),
-                      subtitle: Text('${r['category']?['label'] ?? 'Sans catégorie'} · ${r['workUnit']?['name'] ?? 'Sans unité'}'),
+                      subtitle: Text('${r['category']?['label'] ?? t('risksPageFlt.registre.sansCategorie')} · ${r['workUnit']?['name'] ?? t('risksPageFlt.registre.sansUnite')}'),
                       trailing: Text(_niveauLabel(r['grossLevel']), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
                       onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RiskDetailPage(riskId: r['id']))).then((_) => load()),
                     ));
@@ -238,10 +239,10 @@ class _RisksPageState extends State<RisksPage> {
 
   Widget _buildHierarchisation(BuildContext c) {
     final groups = [
-      {'id': 'CRITIQUE', 'label': 'Priorité immédiate — Critiques', 'color': QhseColors.red},
-      {'id': 'ELEVE', 'label': 'Priorité haute — Élevés', 'color': QhseColors.amber},
-      {'id': 'MODERE', 'label': 'Priorité moyenne — Modérés', 'color': const Color(0xFFB45309)},
-      {'id': 'FAIBLE', 'label': 'Surveillance — Faibles', 'color': QhseColors.green},
+      {'id': 'CRITIQUE', 'label': t('risksPageFlt.hierarchisation.critique'), 'color': QhseColors.red},
+      {'id': 'ELEVE', 'label': t('risksPageFlt.hierarchisation.eleve'), 'color': QhseColors.amber},
+      {'id': 'MODERE', 'label': t('risksPageFlt.hierarchisation.modere'), 'color': const Color(0xFFB45309)},
+      {'id': 'FAIBLE', 'label': t('risksPageFlt.hierarchisation.faible'), 'color': QhseColors.green},
     ];
     return RefreshIndicator(
       onRefresh: load,
@@ -254,12 +255,12 @@ class _RisksPageState extends State<RisksPage> {
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(padding: const EdgeInsets.only(top: 12, bottom: 6), child: Text('${g['label']} (${risques.length})', style: TextStyle(fontWeight: FontWeight.bold, color: color))),
             if (risques.isEmpty)
-              Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Aucun risque', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(t('risksPageFlt.hierarchisation.aucunRisque'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
             else
               ...risques.map((r) => Card(child: ListTile(
                     dense: true,
                     title: Text(r['hazard'] ?? ''),
-                    subtitle: Text(r['workUnit']?['name'] ?? 'Sans unité'),
+                    subtitle: Text(r['workUnit']?['name'] ?? t('risksPageFlt.registre.sansUnite')),
                     trailing: Text('${r['grossScore'] ?? r['score'] ?? 0}', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
                     onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RiskDetailPage(riskId: r['id']))).then((_) => load()),
                   ))),
@@ -281,12 +282,12 @@ class _RisksPageState extends State<RisksPage> {
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
-        Text('Répartition par niveau de criticité', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text(t('risksPageFlt.cartographie.repartitionNiveau'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
         const SizedBox(height: 8),
         SizedBox(
           height: 200,
           child: items.isEmpty
-              ? Center(child: Text('Aucun risque enregistré', style: TextStyle(color: QhseColors.textSecondary)))
+              ? Center(child: Text(t('risksPageFlt.vide.aucunRisque'), style: TextStyle(color: QhseColors.textSecondary)))
               : BarChart(BarChartData(
                   gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: QhseColors.border, strokeWidth: 1)),
                   borderData: FlBorderData(show: false),
@@ -303,21 +304,21 @@ class _RisksPageState extends State<RisksPage> {
                 )),
         ),
         const SizedBox(height: 20),
-        Text('Répartition par catégorie', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text(t('risksPageFlt.cartographie.repartitionCategorie'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
         const SizedBox(height: 8),
         if (categories.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune donnée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+          Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('risksPageFlt.cartographie.aucuneDonnee'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
         else
           ...categories.map((cat) => Card(child: ListTile(dense: true, title: Text(cat), trailing: Text('${parCategorie[cat]}', style: const TextStyle(fontWeight: FontWeight.bold))))),
         const SizedBox(height: 20),
-        Text('Rapport de synthèse', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text(t('risksPageFlt.cartographie.rapportSynthese'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
         const SizedBox(height: 8),
         Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Total recensés : ${items.length}', style: const TextStyle(fontSize: 13)),
-          Text('Critiques : ${parNiveau['CRITIQUE']} · Élevés : ${parNiveau['ELEVE']} · Modérés : ${parNiveau['MODERE']} · Faibles : ${parNiveau['FAIBLE']}', style: const TextStyle(fontSize: 13)),
-          Text('Taux de maîtrise : ${dashboard['tauxMaitrise'] ?? '—'}% · Actions en retard : ${dashboard['actionsEnRetard'] ?? 0}', style: const TextStyle(fontSize: 13)),
+          Text(t('risksPageFlt.cartographie.totalRecenses', {'count': '${items.length}'}), style: const TextStyle(fontSize: 13)),
+          Text(t('risksPageFlt.cartographie.repartitionDetail', {'critiques': '${parNiveau['CRITIQUE']}', 'eleves': '${parNiveau['ELEVE']}', 'moderes': '${parNiveau['MODERE']}', 'faibles': '${parNiveau['FAIBLE']}'}), style: const TextStyle(fontSize: 13)),
+          Text(t('risksPageFlt.cartographie.tauxEtActions', {'taux': '${dashboard['tauxMaitrise'] ?? '—'}', 'actions': '${dashboard['actionsEnRetard'] ?? 0}'}), style: const TextStyle(fontSize: 13)),
           const SizedBox(height: 8),
-          Text('Ce rapport se recompose à partir du registre actuel — il ne s\'agit pas d\'un document figé.', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary, fontStyle: FontStyle.italic)),
+          Text(t('risksPageFlt.cartographie.rapportNote'), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary, fontStyle: FontStyle.italic)),
         ]))),
       ]),
     );
@@ -327,20 +328,20 @@ class _RisksPageState extends State<RisksPage> {
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(12), children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('Catégories de risques', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        TextButton.icon(onPressed: () => showRiskCategoryDialog(c, api, onSaved: load), icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter')),
+        Text(t('risksPageFlt.parametrage.categoriesTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        TextButton.icon(onPressed: () => showRiskCategoryDialog(c, api, onSaved: load), icon: const Icon(Icons.add, size: 16), label: Text(t('risksPageFlt.common.ajouter'))),
       ]),
       if (categories.isEmpty)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune catégorie définie — la liste reste entièrement libre', style: TextStyle(color: QhseColors.textSecondary)))
+        Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('risksPageFlt.parametrage.aucuneCategorie'), style: TextStyle(color: QhseColors.textSecondary)))
       else
         ...categories.map((cat) => Card(child: ListTile(dense: true, title: Text(cat['label'] ?? ''), subtitle: Text(cat['code'] ?? ''), onTap: () => showRiskCategoryDialog(c, api, record: cat, onSaved: load)))),
       const SizedBox(height: 16),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('Unités de travail', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        TextButton.icon(onPressed: () => showWorkUnitDialog(c, api, onSaved: load), icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter')),
+        Text(t('risksPageFlt.parametrage.unitesTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        TextButton.icon(onPressed: () => showWorkUnitDialog(c, api, onSaved: load), icon: const Icon(Icons.add, size: 16), label: Text(t('risksPageFlt.common.ajouter'))),
       ]),
       if (workUnits.isEmpty)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune unité de travail définie', style: TextStyle(color: QhseColors.textSecondary)))
+        Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('risksPageFlt.parametrage.aucuneUnite'), style: TextStyle(color: QhseColors.textSecondary)))
       else
         ...workUnits.map((w) => Card(child: ListTile(dense: true, title: Text(w['name'] ?? ''), subtitle: Text('${w['department'] ?? '—'} · ${w['service'] ?? '—'}')))),
     ]),
@@ -373,9 +374,9 @@ class _RiskDetailPageState extends State<RiskDetailPage> {
 
   Future<void> deleteRisk() async {
     final confirm = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
-      title: const Text('Archiver ce risque ?'),
-      content: const Text("Le risque ne sera pas supprimé définitivement, seulement archivé (conserve l'historique QHSE)."),
-      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Archiver'))],
+      title: Text(t('risksPageFlt.detail.archiverTitre')),
+      content: Text(t('risksPageFlt.detail.archiverMessage')),
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('risksPageFlt.common.annuler'))), FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('risksPageFlt.detail.archiverBtn')))],
     ));
     if (confirm != true) return;
     try { await api.delete('/business/risks/${widget.riskId}'); if (mounted) Navigator.pop(context); }
@@ -384,8 +385,8 @@ class _RiskDetailPageState extends State<RiskDetailPage> {
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Risque')), body: const Center(child: CircularProgressIndicator()));
-    if (error != null || risk == null) return Scaffold(appBar: AppBar(title: const Text('Risque')), body: Center(child: Text(error ?? 'Introuvable')));
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('risksPageFlt.detail.titre'))), body: const Center(child: CircularProgressIndicator()));
+    if (error != null || risk == null) return Scaffold(appBar: AppBar(title: Text(t('risksPageFlt.detail.titre'))), body: Center(child: Text(error ?? t('risksPageFlt.detail.introuvable'))));
     final r = risk!;
     final measures = List.from(r['riskMeasures'] ?? []);
     final evaluations = List.from(r['evaluations'] ?? [])..sort((a, b) => (a['evaluatedAt'] as String).compareTo(b['evaluatedAt'] as String));
@@ -398,51 +399,51 @@ class _RiskDetailPageState extends State<RiskDetailPage> {
       body: RefreshIndicator(
         onRefresh: load,
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          Text('${r['category']?['label'] ?? 'Sans catégorie'} · ${r['workUnit']?['name'] ?? 'Sans unité de travail'}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
+          Text('${r['category']?['label'] ?? t('risksPageFlt.registre.sansCategorie')} · ${r['workUnit']?['name'] ?? t('risksPageFlt.detail.sansUniteTravail')}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: _scoreCard('Risque brut', r['grossScore'] ?? r['score'], r['grossLevel'])),
+            Expanded(child: _scoreCard(t('risksPageFlt.detail.risqueBrut'), r['grossScore'] ?? r['score'], r['grossLevel'])),
             const SizedBox(width: 8),
-            Expanded(child: _scoreCard('Risque résiduel', r['residualScore'], r['residualLevel'])),
+            Expanded(child: _scoreCard(t('risksPageFlt.detail.risqueResiduel'), r['residualScore'], r['residualLevel'])),
           ]),
           const SizedBox(height: 8),
           Card(child: Padding(padding: const EdgeInsets.all(12), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('Statut de maîtrise', style: TextStyle(fontSize: 12)),
+            Text(t('risksPageFlt.detail.statutMaitriseLabel'), style: const TextStyle(fontSize: 12)),
             Text(
-              r['controlStatus'] == 'MAITRISE' ? 'Maîtrisé' : r['controlStatus'] == 'PARTIELLEMENT_MAITRISE' ? 'Partiel' : 'Non maîtrisé',
+              r['controlStatus'] == 'MAITRISE' ? t('risksPageFlt.detail.maitrise') : r['controlStatus'] == 'PARTIELLEMENT_MAITRISE' ? t('risksPageFlt.detail.partiel') : t('risksPageFlt.detail.nonMaitrise'),
               style: TextStyle(fontWeight: FontWeight.bold, color: r['controlStatus'] == 'MAITRISE' ? QhseColors.green : r['controlStatus'] == 'PARTIELLEMENT_MAITRISE' ? QhseColors.amber : QhseColors.red),
             ),
           ]))),
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Mesures de prévention (${measures.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            TextButton.icon(onPressed: () => showRiskMeasureDialog(c, api, riskId: r['id'], onSaved: load), icon: const Icon(Icons.add, size: 16), label: const Text('Mesure')),
+            Text(t('risksPageFlt.detail.mesuresTitre', {'count': '${measures.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton.icon(onPressed: () => showRiskMeasureDialog(c, api, riskId: r['id'], onSaved: load), icon: const Icon(Icons.add, size: 16), label: Text(t('risksPageFlt.detail.mesureBtn'))),
           ]),
           if (measures.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune mesure de prévention enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('risksPageFlt.detail.aucuneMesure'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...measures.map((m) => Card(child: ListTile(
                   dense: true,
                   title: Text(m['description'] ?? ''),
-                  subtitle: Text('${kRiskMeasureTypes.firstWhere((t) => t[0] == m['type'], orElse: () => ['', m['type'] ?? ''])[1]} · Efficacité ${m['efficacite']}/5'),
+                  subtitle: Text('${kRiskMeasureTypes.firstWhere((mt) => mt[0] == m['type'], orElse: () => ['', m['type'] ?? ''])[1]} · ${t('risksPageFlt.detail.efficacite', {'value': '${m['efficacite']}'})}'),
                   trailing: IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () async { await api.delete('/business/risk-measures/${m['id']}'); load(); }),
                 ))),
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Historique des évaluations (${evaluations.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            TextButton.icon(onPressed: () => showReevaluateDialog(c, api, risk: r, onSaved: load), icon: const Icon(Icons.refresh, size: 16), label: const Text('Réévaluer')),
+            Text(t('risksPageFlt.detail.historiqueTitre', {'count': '${evaluations.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton.icon(onPressed: () => showReevaluateDialog(c, api, risk: r, onSaved: load), icon: const Icon(Icons.refresh, size: 16), label: Text(t('risksPageFlt.detail.reevaluerBtn'))),
           ]),
           if (evaluations.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune évaluation enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('risksPageFlt.detail.aucuneEvaluation'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...evaluations.reversed.map((ev) => Card(child: ListTile(
                   dense: true,
-                  title: Text('${ev['evaluatedAt'].toString().substring(0, 10)} — Brut ${ev['grossScore']} (${ev['grossLevel']})'),
-                  subtitle: Text(ev['residualScore'] != null ? 'Résiduel ${ev['residualScore']} (${ev['residualLevel']})${ev['note'] != null ? ' · ${ev['note']}' : ''}' : ev['note'] ?? ''),
+                  title: Text(t('risksPageFlt.detail.evalBrut', {'date': ev['evaluatedAt'].toString().substring(0, 10), 'score': '${ev['grossScore']}', 'level': '${ev['grossLevel']}'})),
+                  subtitle: Text(ev['residualScore'] != null ? '${t('risksPageFlt.detail.evalResiduel', {'score': '${ev['residualScore']}', 'level': '${ev['residualLevel']}'})}${ev['note'] != null ? ' · ${ev['note']}' : ''}' : ev['note'] ?? ''),
                 ))),
 
           const SizedBox(height: 20),
-          CapaLinksSection(sourceModule: 'RISK', sourceEntityId: r['id'], prefill: {'title': 'Maîtriser le risque — ${r['hazard'] ?? ''}', 'source': 'RISK'}),
+          CapaLinksSection(sourceModule: 'RISK', sourceEntityId: r['id'], prefill: {'title': t('risksPageFlt.detail.capaPrefillTitre', {'hazard': '${r['hazard'] ?? ''}'}), 'source': 'RISK'}),
           const SizedBox(height: 12),
           ValidationWorkflowSection(item: r, endpointBase: '/business/risks/${r['id']}', onChanged: load),
           const SizedBox(height: 12),
@@ -530,7 +531,7 @@ class _RiskFormPageState extends State<RiskFormPage> {
 
   Future<void> submit() async {
     if (hazard.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le danger est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('risksPageFlt.form.dangerObligatoire'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -561,7 +562,7 @@ class _RiskFormPageState extends State<RiskFormPage> {
       if (e.networkError && !editing) {
         await SyncQueue.enqueue('risk', 'CREATE', createPayload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : risque enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('risksPageFlt.form.horsLigne')), duration: const Duration(seconds: 4)));
           Navigator.pop(context);
         }
       } else {
@@ -582,61 +583,61 @@ class _RiskFormPageState extends State<RiskFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text(editing ? 'Modifier le risque' : 'Nouveau risque')),
+    appBar: AppBar(title: Text(editing ? t('risksPageFlt.form.titreModifier') : t('risksPageFlt.fab.nouveau'))),
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
-            TextField(controller: hazard, decoration: const InputDecoration(labelText: 'Danger identifié')),
+            TextField(controller: hazard, decoration: InputDecoration(labelText: t('risksPageFlt.form.champDanger'))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: categoryId, isExpanded: true, decoration: const InputDecoration(labelText: 'Catégorie'),
+              value: categoryId, isExpanded: true, decoration: InputDecoration(labelText: t('risksPageFlt.form.champCategorie')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...categories.map<DropdownMenuItem<String>>((cat) => DropdownMenuItem<String>(value: cat['id'] as String, child: Text(cat['label'] ?? '')))],
               onChanged: (v) => setState(() => categoryId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail'),
+              value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('risksPageFlt.form.champUnite')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
               onChanged: (v) => setState(() => workUnitId = v),
             ),
             const SizedBox(height: 12),
-            TextField(controller: activity, decoration: const InputDecoration(labelText: 'Activité concernée')),
+            TextField(controller: activity, decoration: InputDecoration(labelText: t('risksPageFlt.form.champActivite'))),
             const SizedBox(height: 12),
-            TextField(controller: hazardousSituation, decoration: const InputDecoration(labelText: 'Situation dangereuse')),
+            TextField(controller: hazardousSituation, decoration: InputDecoration(labelText: t('risksPageFlt.form.champSituation'))),
             const SizedBox(height: 12),
-            TextField(controller: hazardousEvent, decoration: const InputDecoration(labelText: 'Événement redouté')),
+            TextField(controller: hazardousEvent, decoration: InputDecoration(labelText: t('risksPageFlt.form.champEvenement'))),
             const SizedBox(height: 12),
-            TextField(controller: potentialDamage, decoration: const InputDecoration(labelText: 'Dommage potentiel')),
+            TextField(controller: potentialDamage, decoration: InputDecoration(labelText: t('risksPageFlt.form.champDommage'))),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: exposedPersons, decoration: const InputDecoration(labelText: 'Personnes exposées'))),
+              Expanded(child: TextField(controller: exposedPersons, decoration: InputDecoration(labelText: t('risksPageFlt.form.champPersonnes')))),
               const SizedBox(width: 8),
-              SizedBox(width: 90, child: TextField(controller: exposedPersonCount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Nombre'))),
+              SizedBox(width: 90, child: TextField(controller: exposedPersonCount, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('risksPageFlt.form.champNombre')))),
             ]),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: method, decoration: const InputDecoration(labelText: "Méthode d'évaluation"),
-              items: const [DropdownMenuItem(value: 'GP', child: Text('Gravité × Probabilité')), DropdownMenuItem(value: 'GPE', child: Text('Gravité × Probabilité × Exposition'))],
+              value: method, decoration: InputDecoration(labelText: t('risksPageFlt.form.champMethode')),
+              items: [DropdownMenuItem(value: 'GP', child: Text(t('risksPageFlt.form.methodeGP'))), DropdownMenuItem(value: 'GPE', child: Text(t('risksPageFlt.form.methodeGPE')))],
               onChanged: (v) => setState(() => method = v ?? 'GP'),
             ),
             const SizedBox(height: 8),
-            _slider('Gravité', severity, (v) => setState(() => severity = v)),
-            _slider('Probabilité', probability, (v) => setState(() => probability = v)),
-            if (method == 'GPE') _slider('Exposition', exposure, (v) => setState(() => exposure = v)),
-            Text('Score brut (aperçu) : $grossScore', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            _slider(t('risksPageFlt.form.gravite'), severity, (v) => setState(() => severity = v)),
+            _slider(t('risksPageFlt.form.probabilite'), probability, (v) => setState(() => probability = v)),
+            if (method == 'GPE') _slider(t('risksPageFlt.form.exposition'), exposure, (v) => setState(() => exposure = v)),
+            Text(t('risksPageFlt.form.scoreBrutApercu', {'score': '$grossScore'}), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            TextField(controller: measures, maxLines: 2, decoration: const InputDecoration(labelText: 'Mesures de prévention existantes (résumé)')),
+            TextField(controller: measures, maxLines: 2, decoration: InputDecoration(labelText: t('risksPageFlt.form.champMesuresResume'))),
             const SizedBox(height: 12),
-            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Évaluer le risque résiduel', style: TextStyle(fontSize: 13)), value: hasResidual, onChanged: (v) => setState(() => hasResidual = v)),
+            SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(t('risksPageFlt.form.evaluerResiduel'), style: const TextStyle(fontSize: 13)), value: hasResidual, onChanged: (v) => setState(() => hasResidual = v)),
             if (hasResidual) ...[
-              _slider('Gravité résiduelle', residualSeverity, (v) => setState(() => residualSeverity = v)),
-              _slider('Probabilité résiduelle', residualProbability, (v) => setState(() => residualProbability = v)),
-              if (method == 'GPE') _slider('Exposition résiduelle', residualExposure, (v) => setState(() => residualExposure = v)),
-              Text('Score résiduel (aperçu) : $residualScoreValue', style: const TextStyle(fontWeight: FontWeight.bold)),
+              _slider(t('risksPageFlt.form.graviteResiduelle'), residualSeverity, (v) => setState(() => residualSeverity = v)),
+              _slider(t('risksPageFlt.form.probabiliteResiduelle'), residualProbability, (v) => setState(() => residualProbability = v)),
+              if (method == 'GPE') _slider(t('risksPageFlt.form.expositionResiduelle'), residualExposure, (v) => setState(() => residualExposure = v)),
+              Text(t('risksPageFlt.form.scoreResiduelApercu', {'score': '$residualScoreValue'}), style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
             if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : 'Enregistrer'))),
+            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? t('risksPageFlt.common.envoi') : t('risksPageFlt.common.enregistrer')))),
           ]),
   );
 }
@@ -648,18 +649,18 @@ Future<void> showRiskCategoryDialog(BuildContext context, Api api, {Map? record,
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: Text(record == null ? 'Nouvelle catégorie' : 'Modifier la catégorie'),
+    title: Text(record == null ? t('risksPageFlt.dialogCategorie.nouvelle') : t('risksPageFlt.dialogCategorie.modifier')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: code, decoration: const InputDecoration(labelText: 'Code')),
-      TextField(controller: label, decoration: const InputDecoration(labelText: 'Libellé')),
+      TextField(controller: code, decoration: InputDecoration(labelText: t('risksPageFlt.dialogCategorie.champCode'))),
+      TextField(controller: label, decoration: InputDecoration(labelText: t('risksPageFlt.dialogCategorie.champLibelle'))),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
     actions: [
       if (record != null) TextButton(onPressed: () async {
         try { await api.delete('/business/risk-categories/${record['id']}'); if (context.mounted) Navigator.pop(c); onSaved(); }
         catch (e) { setD(() => formError = '$e'); }
-      }, child: const Text('Supprimer', style: TextStyle(color: QhseColors.red))),
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      }, child: Text(t('risksPageFlt.common.supprimer'), style: const TextStyle(color: QhseColors.red))),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('risksPageFlt.common.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         final payload = {'code': code.text.trim(), 'label': label.text.trim()};
@@ -669,7 +670,7 @@ Future<void> showRiskCategoryDialog(BuildContext context, Api api, {Map? record,
           if (context.mounted) Navigator.pop(c);
           onSaved();
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Enregistrer')),
+      }, child: Text(saving ? '…' : t('risksPageFlt.common.enregistrer'))),
     ],
   )));
 }
@@ -681,15 +682,15 @@ Future<void> showWorkUnitDialog(BuildContext context, Api api, {required VoidCal
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: const Text('Nouvelle unité de travail'),
+    title: Text(t('risksPageFlt.dialogUnite.titre')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: name, decoration: const InputDecoration(labelText: 'Nom')),
-      TextField(controller: department, decoration: const InputDecoration(labelText: 'Département')),
-      TextField(controller: service, decoration: const InputDecoration(labelText: 'Service')),
+      TextField(controller: name, decoration: InputDecoration(labelText: t('risksPageFlt.dialogUnite.champNom'))),
+      TextField(controller: department, decoration: InputDecoration(labelText: t('risksPageFlt.dialogUnite.champDepartement'))),
+      TextField(controller: service, decoration: InputDecoration(labelText: t('risksPageFlt.dialogUnite.champService'))),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('risksPageFlt.common.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         try {
@@ -697,7 +698,7 @@ Future<void> showWorkUnitDialog(BuildContext context, Api api, {required VoidCal
           if (context.mounted) Navigator.pop(c);
           onSaved();
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Enregistrer')),
+      }, child: Text(saving ? '…' : t('risksPageFlt.common.enregistrer'))),
     ],
   )));
 }
@@ -709,24 +710,24 @@ Future<void> showRiskMeasureDialog(BuildContext context, Api api, {required Stri
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: const Text('Nouvelle mesure de prévention'),
+    title: Text(t('risksPageFlt.dialogMesure.titre')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+      TextField(controller: description, maxLines: 2, decoration: InputDecoration(labelText: t('risksPageFlt.dialogMesure.champDescription'))),
       DropdownButtonFormField<String>(
-        value: type, isExpanded: true, decoration: const InputDecoration(labelText: 'Type (hiérarchie de prévention)'),
-        items: kRiskMeasureTypes.map((t) => DropdownMenuItem(value: t[0], child: Text(t[1]))).toList(),
+        value: type, isExpanded: true, decoration: InputDecoration(labelText: t('risksPageFlt.dialogMesure.champType')),
+        items: kRiskMeasureTypes.map((mt) => DropdownMenuItem(value: mt[0], child: Text(mt[1]))).toList(),
         onChanged: (v) => setD(() => type = v ?? 'TECHNIQUE'),
       ),
       Row(children: [
-        Expanded(child: Text('Efficacité : $efficacite / 5')),
+        Expanded(child: Text(t('risksPageFlt.dialogMesure.efficaciteLabel', {'value': '$efficacite'}))),
         Expanded(child: Slider(value: efficacite.toDouble(), min: 1, max: 5, divisions: 4, label: '$efficacite', onChanged: (v) => setD(() => efficacite = v.round()))),
       ]),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('risksPageFlt.common.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
-        if (description.text.trim().isEmpty) { setD(() => formError = 'La description est obligatoire'); return; }
+        if (description.text.trim().isEmpty) { setD(() => formError = t('risksPageFlt.dialogMesure.descriptionObligatoire')); return; }
         setD(() => saving = true);
         final payload = {'riskId': riskId, 'description': description.text.trim(), 'type': type, 'efficacite': efficacite};
         try {
@@ -738,14 +739,14 @@ Future<void> showRiskMeasureDialog(BuildContext context, Api api, {required Stri
             await SyncQueue.enqueue('riskMeasure', 'CREATE', payload);
             if (context.mounted) {
               Navigator.pop(c);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : mesure enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('risksPageFlt.dialogMesure.horsLigne')), duration: const Duration(seconds: 4)));
             }
             onSaved();
           } else {
             setD(() { saving = false; formError = '$e'; });
           }
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Ajouter')),
+      }, child: Text(saving ? '…' : t('risksPageFlt.common.ajouter'))),
     ],
   )));
 }
@@ -761,22 +762,22 @@ Future<void> showReevaluateDialog(BuildContext context, Api api, {required Map r
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: const Text('Réévaluer le risque'),
+    title: Text(t('risksPageFlt.dialogReeval.titre')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Gravité : $severity / 5'),
+      Text(t('risksPageFlt.dialogReeval.gravite', {'value': '$severity'})),
       Slider(value: severity.toDouble(), min: 1, max: 5, divisions: 4, label: '$severity', onChanged: (v) => setD(() => severity = v.round())),
-      Text('Probabilité : $probability / 5'),
+      Text(t('risksPageFlt.dialogReeval.probabilite', {'value': '$probability'})),
       Slider(value: probability.toDouble(), min: 1, max: 5, divisions: 4, label: '$probability', onChanged: (v) => setD(() => probability = v.round())),
       const Divider(),
-      Text('Gravité résiduelle : ${residualSeverity ?? '—'}'),
+      Text(t('risksPageFlt.dialogReeval.graviteResiduelle', {'value': '${residualSeverity ?? '—'}'})),
       Slider(value: (residualSeverity ?? 3).toDouble(), min: 1, max: 5, divisions: 4, label: '${residualSeverity ?? 3}', onChanged: (v) => setD(() => residualSeverity = v.round())),
-      Text('Probabilité résiduelle : ${residualProbability ?? '—'}'),
+      Text(t('risksPageFlt.dialogReeval.probabiliteResiduelle', {'value': '${residualProbability ?? '—'}'})),
       Slider(value: (residualProbability ?? 3).toDouble(), min: 1, max: 5, divisions: 4, label: '${residualProbability ?? 3}', onChanged: (v) => setD(() => residualProbability = v.round())),
-      TextField(controller: note, decoration: const InputDecoration(labelText: 'Note (optionnel)')),
+      TextField(controller: note, decoration: InputDecoration(labelText: t('risksPageFlt.dialogReeval.champNote'))),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('risksPageFlt.common.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         final payload = {
@@ -793,14 +794,14 @@ Future<void> showReevaluateDialog(BuildContext context, Api api, {required Map r
             await SyncQueue.enqueue('riskReevaluate', 'UPDATE', payload, entityId: risk['id'] as String);
             if (context.mounted) {
               Navigator.pop(c);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : réévaluation enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('risksPageFlt.form.horsLigneReeval')), duration: const Duration(seconds: 4)));
             }
             onSaved();
           } else {
             setD(() { saving = false; formError = '$e'; });
           }
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Réévaluer')),
+      }, child: Text(saving ? '…' : t('risksPageFlt.dialogReeval.reevaluerBtn'))),
     ],
   )));
 }
