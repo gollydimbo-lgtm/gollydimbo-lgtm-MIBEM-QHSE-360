@@ -4,6 +4,7 @@ import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'load_error_view.dart';
+import '../i18n/i18n.dart';
 
 // ============================================================================
 // FORMATION & COMPÉTENCES — Phase 1 (parité avec FormationPage côté web) :
@@ -14,16 +15,18 @@ import 'load_error_view.dart';
 // le mobile consulte et crée/modifie les fiches.
 // ============================================================================
 
-const trainingTypeLabels = {'INDUCTION': 'Induction', 'FORMATION': 'Formation'};
-const trainingStatusLabels = {
-  'DRAFT': 'Brouillon', 'PLANNED': 'Planifiée', 'PROGRAMMED': 'Programmée', 'IN_PROGRESS': 'En cours',
-  'REALISEE': 'Réalisée', 'REPORTEE': 'Reportée', 'ANNULEE': 'Annulée', 'CLOTUREE': 'Clôturée',
+const Map<String, String> trainingTypeKeys = {'INDUCTION': 'typeInduction', 'FORMATION': 'typeFormation'};
+String trainingTypeLabel(String? v) => v == null ? '—' : t('formation.${trainingTypeKeys[v] ?? 'typeFormation'}');
+const Map<String, String> trainingStatusKeys = {
+  'DRAFT': 'statusDraft', 'PLANNED': 'statusPlanned', 'PROGRAMMED': 'statusProgrammed', 'IN_PROGRESS': 'statusInProgress',
+  'REALISEE': 'statusRealisee', 'REPORTEE': 'statusReportee', 'ANNULEE': 'statusAnnulee', 'CLOTUREE': 'statusCloturee',
 };
+String trainingStatusLabelRaw(String? status) { final k = trainingStatusKeys[status]; return k == null ? (status ?? '—') : t('formation.$k'); }
 String trainingStatusLabel(Map t) {
   final status = t['status'];
   final scheduledAt = t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']) : null;
-  if (status != 'REALISEE' && status != 'CLOTUREE' && status != 'ANNULEE' && scheduledAt != null && scheduledAt.isBefore(DateTime.now())) return 'En retard';
-  return trainingStatusLabels[status] ?? status ?? '—';
+  if (status != 'REALISEE' && status != 'CLOTUREE' && status != 'ANNULEE' && scheduledAt != null && scheduledAt.isBefore(DateTime.now())) return t('formation.statusEnRetard');
+  return trainingStatusLabelRaw(status);
 }
 Color trainingStatusColor(Map t) {
   final status = t['status'];
@@ -34,17 +37,19 @@ Color trainingStatusColor(Map t) {
   if (scheduledAt != null && scheduledAt.isBefore(DateTime.now())) return QhseColors.red;
   return QhseColors.blue;
 }
-const habilitationStatutLabels = {
-  'VALIDE': 'Valide', 'EXPIRE_BIENTOT': 'Expire bientôt', 'A_RENOUVELER': 'À renouveler',
-  'EXPIREE': 'Expirée', 'SUSPENDUE': 'Suspendue', 'EN_ATTENTE': 'En attente de renouvellement',
+const Map<String, String> habilitationStatutKeys = {
+  'VALIDE': 'habValide', 'EXPIRE_BIENTOT': 'habExpireBientot', 'A_RENOUVELER': 'habARenouveler',
+  'EXPIREE': 'habExpiree', 'SUSPENDUE': 'habSuspendue', 'EN_ATTENTE': 'habEnAttente',
 };
+String habilitationStatutLabel(String? s) { if (s == null) return '—'; final k = habilitationStatutKeys[s]; return k == null ? s : t('formation.$k'); }
 Color habilitationStatutColor(String? s) => {
       'VALIDE': QhseColors.green, 'EXPIRE_BIENTOT': QhseColors.amber, 'A_RENOUVELER': QhseColors.amber,
       'EXPIREE': QhseColors.red, 'SUSPENDUE': QhseColors.textSecondary, 'EN_ATTENTE': QhseColors.blue,
     }[s] ?? QhseColors.textSecondary;
 
 // --- Phase 3 : efficacité à froid ---
-const efficaciteLabels = {'NON_EVALUEE': 'Non évaluée', 'EFFICACE': 'Efficace', 'PARTIELLEMENT_EFFICACE': 'Partiellement efficace', 'INEFFICACE': 'Inefficace'};
+const Map<String, String> efficaciteKeys = {'NON_EVALUEE': 'effNonEvaluee', 'EFFICACE': 'effEfficace', 'PARTIELLEMENT_EFFICACE': 'effPartiellementEfficace', 'INEFFICACE': 'effInefficace'};
+String efficaciteLabel(String? s) => s == null ? '—' : t('formation.${efficaciteKeys[s] ?? 'effNonEvaluee'}');
 Color efficaciteColor(String? s) => {
       'EFFICACE': QhseColors.green, 'PARTIELLEMENT_EFFICACE': QhseColors.amber, 'INEFFICACE': QhseColors.red, 'NON_EVALUEE': QhseColors.textSecondary,
     }[s] ?? QhseColors.textSecondary;
@@ -86,18 +91,18 @@ class _FormationPageState extends State<FormationPage> {
   Future<void> _lancerDetection() async {
     setState(() => detecting = true);
     try { await api.post('/business/besoins-formation-detecter', {}); await load(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('formation.erreurPrefix', {'err': '$e'})))); }
     if (mounted) setState(() => detecting = false);
   }
 
   Future<void> _traiterBesoin(String id, String statut) async {
     try { await api.patch('/business/besoins-formation/$id', {'statut': statut}); await load(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('formation.erreurPrefix', {'err': '$e'})))); }
   }
 
   Future<void> _transformerBesoin(String id) async {
     try { await api.post('/business/besoins-formation/$id/transformer', {}); await load(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('formation.erreurPrefix', {'err': '$e'})))); }
   }
 
   // Évaluation d'efficacité simplifiée côté mobile (niveau + commentaire) —
@@ -111,24 +116,24 @@ class _FormationPageState extends State<FormationPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc2, setDState) => AlertDialog(
-        title: Text('Évaluer : ${training['title']}'),
+        title: Text(t('formation.evaluerPrefix', {'title': '${training['title']}'})),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           DropdownButtonFormField<String>(
             value: niveau,
-            items: efficaciteLabels.entries.where((e) => e.key != 'NON_EVALUEE').map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            items: efficaciteKeys.keys.where((k) => k != 'NON_EVALUEE').map((k) => DropdownMenuItem(value: k, child: Text(efficaciteLabel(k)))).toList(),
             onChanged: (v) => setDState(() => niveau = v ?? niveau),
-            decoration: const InputDecoration(labelText: "Niveau d'efficacité"),
+            decoration: InputDecoration(labelText: t('formation.niveauEfficacite')),
           ),
           const SizedBox(height: 8),
-          TextField(controller: commentaireCtrl, decoration: const InputDecoration(labelText: 'Commentaire (optionnel)'), maxLines: 2),
+          TextField(controller: commentaireCtrl, decoration: InputDecoration(labelText: t('formation.commentaireOptionnel')), maxLines: 2),
           if (niveau == 'INEFFICACE') Padding(padding: const EdgeInsets.only(top: 8), child: Text(
-            "Un besoin de formation complémentaire sera automatiquement proposé (à valider par le Responsable QHSE).",
+            t('formation.besoinComplementaireNote'),
             style: TextStyle(fontSize: 11, color: QhseColors.amber),
           )),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          ElevatedButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Enregistrer')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('formation.annuler'))),
+          ElevatedButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('formation.enregistrer'))),
         ],
       )),
     );
@@ -139,7 +144,7 @@ class _FormationPageState extends State<FormationPage> {
         'niveauEfficacite': niveau, 'commentaire': commentaireCtrl.text.isEmpty ? null : commentaireCtrl.text,
       });
       await load();
-    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'))); }
+    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('formation.erreurPrefix', {'err': '$e'})))); }
   }
 
   @override
@@ -147,8 +152,8 @@ class _FormationPageState extends State<FormationPage> {
     length: 4,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Formation & Compétences'),
-        bottom: const TabBar(isScrollable: true, tabs: [Tab(text: 'Plan de formation'), Tab(text: 'Habilitations'), Tab(text: 'Compétences & besoins'), Tab(text: 'Efficacité & pilotage')]),
+        title: Text(t('formation.pageTitle')),
+        bottom: TabBar(isScrollable: true, tabs: [Tab(text: t('formation.tabPlan')), Tab(text: t('formation.tabHabilitations')), Tab(text: t('formation.tabCompetences')), Tab(text: t('formation.tabEfficacite'))]),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -168,7 +173,7 @@ class _FormationPageState extends State<FormationPage> {
             load();
           },
           icon: const Icon(Icons.add),
-          label: Text(tabIndex == 0 ? 'Formation' : 'Habilitation'),
+          label: Text(tabIndex == 0 ? t('formation.fabFormation') : t('formation.fabHabilitation')),
         );
       }),
     ),
@@ -193,12 +198,12 @@ class _FormationPageState extends State<FormationPage> {
     return SizedBox(
       height: 90,
       child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.all(12), children: [
-        _kpiCard('Prévues', '${plan['prevues'] ?? 0}', QhseColors.blue),
-        _kpiCard('Taux réalisation', tauxRealisation != null ? '$tauxRealisation%' : '—', QhseColors.green),
-        _kpiCard('En retard', '${plan['enRetard'] ?? 0}', (plan['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green),
-        _kpiCard('Habilitations valides', '${hab['valides'] ?? 0}', QhseColors.green),
-        _kpiCard('Expirent bientôt', '${hab['expirantBientot'] ?? 0}', (hab['expirantBientot'] ?? 0) > 0 ? QhseColors.amber : QhseColors.green),
-        _kpiCard('Expirées', '${hab['expirees'] ?? 0}', (hab['expirees'] ?? 0) > 0 ? QhseColors.red : QhseColors.green),
+        _kpiCard(t('formation.kpiPrevues'), '${plan['prevues'] ?? 0}', QhseColors.blue),
+        _kpiCard(t('formation.kpiTauxRealisation'), tauxRealisation != null ? '$tauxRealisation%' : '—', QhseColors.green),
+        _kpiCard(t('formation.kpiEnRetard'), '${plan['enRetard'] ?? 0}', (plan['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green),
+        _kpiCard(t('formation.kpiHabilitationsValides'), '${hab['valides'] ?? 0}', QhseColors.green),
+        _kpiCard(t('formation.kpiExpirentBientot'), '${hab['expirantBientot'] ?? 0}', (hab['expirantBientot'] ?? 0) > 0 ? QhseColors.amber : QhseColors.green),
+        _kpiCard(t('formation.kpiExpirees'), '${hab['expirees'] ?? 0}', (hab['expirees'] ?? 0) > 0 ? QhseColors.red : QhseColors.green),
       ]),
     );
   }
@@ -206,7 +211,7 @@ class _FormationPageState extends State<FormationPage> {
   Widget _buildPlan(BuildContext c) => RefreshIndicator(
     onRefresh: load,
     child: trainings.isEmpty
-        ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune formation enregistrée')))])
+        ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('formation.aucuneFormation'))))])
         : ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: trainings.length,
@@ -216,7 +221,7 @@ class _FormationPageState extends State<FormationPage> {
               return Card(child: ListTile(
                 leading: CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(t['type'] == 'INDUCTION' ? Icons.badge_outlined : Icons.school_outlined, color: color)),
                 title: Text('${t['title']}'),
-                subtitle: Text('${trainingTypeLabels[t['type']] ?? t['type']} · ${t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']).toIso8601String().substring(0, 10) : '—'}${t['obligatoire'] == true ? ' · obligatoire' : ''}'),
+                subtitle: Text('${trainingTypeLabel(t['type'])} · ${t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']).toIso8601String().substring(0, 10) : '—'}${t['obligatoire'] == true ? ' · obligatoire' : ''}'),
                 trailing: Chip(label: Text(trainingStatusLabel(t), style: TextStyle(color: color, fontSize: 11)), backgroundColor: color.withOpacity(0.15)),
                 onTap: () async {
                   await Navigator.push(c, MaterialPageRoute(builder: (_) => TrainingFormPage(record: t)));
@@ -230,7 +235,7 @@ class _FormationPageState extends State<FormationPage> {
   Widget _buildHabilitations(BuildContext c) => RefreshIndicator(
     onRefresh: load,
     child: habilitations.isEmpty
-        ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune habilitation enregistrée')))])
+        ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('formation.aucuneHabilitation'))))])
         : ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: habilitations.length,
@@ -242,7 +247,7 @@ class _FormationPageState extends State<FormationPage> {
                 leading: CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(Icons.verified_outlined, color: color)),
                 title: Text('${h['intitule']}'),
                 subtitle: Text('${emp != null ? '${emp['firstName']} ${emp['lastName']}' : '—'} · expire le ${h['dateExpiration'] != null ? DateTime.parse(h['dateExpiration']).toIso8601String().substring(0, 10) : '—'}'),
-                trailing: Chip(label: Text(habilitationStatutLabels[h['statut']] ?? h['statut'] ?? '—', style: TextStyle(color: color, fontSize: 11)), backgroundColor: color.withOpacity(0.15)),
+                trailing: Chip(label: Text(habilitationStatutLabel(h['statut']), style: TextStyle(color: color, fontSize: 11)), backgroundColor: color.withOpacity(0.15)),
                 onTap: () async {
                   await Navigator.push(c, MaterialPageRoute(builder: (_) => TrainingFormPage(employees: employees, habilitation: true, record: h)));
                   load();
@@ -254,7 +259,7 @@ class _FormationPageState extends State<FormationPage> {
 
   Color _besoinPrioriteColor(String? p) => {'CRITIQUE': QhseColors.red, 'ELEVEE': QhseColors.amber, 'MOYENNE': QhseColors.blue, 'FAIBLE': QhseColors.textSecondary}[p] ?? QhseColors.textSecondary;
   Color _besoinStatutColor(String? s) => {'PROPOSE': QhseColors.blue, 'VALIDE': QhseColors.green, 'REJETE': QhseColors.textSecondary, 'TRANSFORME': QhseColors.green}[s] ?? QhseColors.textSecondary;
-  String _besoinStatutLabel(String? s) => {'PROPOSE': 'Proposé', 'VALIDE': 'Validé', 'REJETE': 'Rejeté', 'TRANSFORME': 'Transformé'}[s] ?? s ?? '—';
+  String _besoinStatutLabel(String? s) => {'PROPOSE': t('formation.besoinPropose'), 'VALIDE': t('formation.besoinValide'), 'REJETE': t('formation.besoinRejete'), 'TRANSFORME': t('formation.besoinTransforme')}[s] ?? s ?? '—';
 
   Widget _buildCompetences(BuildContext c) => RefreshIndicator(
     onRefresh: load,
@@ -262,11 +267,11 @@ class _FormationPageState extends State<FormationPage> {
       padding: const EdgeInsets.all(12),
       children: [
         Row(children: [
-          Expanded(child: Text('Besoins de formation détectés', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary))),
-          ElevatedButton(onPressed: detecting ? null : _lancerDetection, child: Text(detecting ? 'Analyse…' : 'Détecter')),
+          Expanded(child: Text(t('formation.besoinsDetectesTitle'), style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary))),
+          ElevatedButton(onPressed: detecting ? null : _lancerDetection, child: Text(detecting ? t('formation.analyseEnCours') : t('formation.detecter'))),
         ]),
         const SizedBox(height: 8),
-        if (besoins.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text('Aucun besoin détecté pour l\'instant'))),
+        if (besoins.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Center(child: Text(t('formation.aucunBesoin')))),
         ...besoins.map((b) {
           final color = _besoinPrioriteColor(b['priorite']);
           final emp = b['employee'];
@@ -284,17 +289,17 @@ class _FormationPageState extends State<FormationPage> {
               if (emp != null) Text('${emp['firstName']} ${emp['lastName']}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
               const SizedBox(height: 8),
               if (b['statut'] == 'PROPOSE') Row(children: [
-                TextButton(onPressed: () => _traiterBesoin(b['id'], 'VALIDE'), child: const Text('Valider')),
-                TextButton(onPressed: () => _traiterBesoin(b['id'], 'REJETE'), child: Text('Rejeter', style: TextStyle(color: QhseColors.red))),
+                TextButton(onPressed: () => _traiterBesoin(b['id'], 'VALIDE'), child: Text(t('formation.valider'))),
+                TextButton(onPressed: () => _traiterBesoin(b['id'], 'REJETE'), child: Text(t('formation.rejeter'), style: TextStyle(color: QhseColors.red))),
               ]),
-              if (b['statut'] == 'VALIDE') ElevatedButton(onPressed: () => _transformerBesoin(b['id']), child: const Text('Transformer en formation')),
+              if (b['statut'] == 'VALIDE') ElevatedButton(onPressed: () => _transformerBesoin(b['id']), child: Text(t('formation.transformerEnFormation'))),
             ]),
           ));
         }),
         const SizedBox(height: 16),
-        Text('Matrice des compétences', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+        Text(t('formation.matriceCompetencesTitle'), style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
         Text(
-          matrice['tauxCouverture'] != null ? 'Couverture ${matrice['tauxCouverture']}% · ${matrice['competencesCritiquesInsuffisantes']} écart(s) critique(s)' : 'Aucune évaluation enregistrée',
+          matrice['tauxCouverture'] != null ? t('formation.couvertureEcarts', {'taux': '${matrice['tauxCouverture']}', 'count': '${matrice['competencesCritiquesInsuffisantes']}'}) : t('formation.aucuneEvaluation'),
           style: TextStyle(fontSize: 12, color: QhseColors.textSecondary),
         ),
         const SizedBox(height: 8),
@@ -309,7 +314,7 @@ class _FormationPageState extends State<FormationPage> {
               Wrap(spacing: 6, runSpacing: 6, children: lignes.map<Widget>((l) {
                 final critique = l['critique'] == true;
                 return Chip(
-                  label: Text('${l['competence']['label']} : ${l['niveauActuel']?['label'] ?? 'non évalué'} → ${l['niveauRequis']?['label'] ?? '—'}', style: const TextStyle(fontSize: 11)),
+                  label: Text('${l['competence']['label']} : ${l['niveauActuel']?['label'] ?? t('formation.nonEvalueInline')} → ${l['niveauRequis']?['label'] ?? '—'}', style: const TextStyle(fontSize: 11)),
                   backgroundColor: critique ? QhseColors.red.withOpacity(0.15) : QhseColors.cardAlt,
                   labelStyle: TextStyle(color: critique ? QhseColors.red : QhseColors.textPrimary),
                 );
@@ -329,15 +334,15 @@ class _FormationPageState extends State<FormationPage> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Text('Accueil sécurité (induction)', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text(t('formation.accueilSecuriteTitle'), style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           Text(
-            "Indicateur approché : collaborateurs actifs ayant réalisé au moins une induction. Faute de date d'embauche tracée, l'ordre strict avant prise de poste n'est pas garanti.",
+            t('formation.accueilSecuriteExplication'),
             style: TextStyle(fontSize: 11, color: QhseColors.textSecondary),
           ),
           const SizedBox(height: 8),
           Row(children: [
-            _kpiCard('Taux accueil sécurité', taux != null ? '$taux%' : 'Données insuffisantes', taux != null && taux < 100 ? QhseColors.amber : QhseColors.green),
-            _kpiCard('Non couverts', '${nonCouverts.length}', nonCouverts.isNotEmpty ? QhseColors.red : QhseColors.green),
+            _kpiCard(t('formation.kpiTauxAccueilSecurite'), taux != null ? '$taux%' : t('formation.donneesInsuffisantes'), taux != null && taux < 100 ? QhseColors.amber : QhseColors.green),
+            _kpiCard(t('formation.kpiNonCouverts'), '${nonCouverts.length}', nonCouverts.isNotEmpty ? QhseColors.red : QhseColors.green),
           ]),
           if (nonCouverts.isNotEmpty) ...nonCouverts.map<Widget>((e) => ListTile(
                 dense: true,
@@ -346,19 +351,19 @@ class _FormationPageState extends State<FormationPage> {
                 subtitle: Text('${e['department'] ?? '—'} · ${e['position'] ?? '—'}'),
               )),
           const Divider(height: 32),
-          Text('Formations à évaluer à froid (J+30/60/90)', style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text(t('formation.evaluerAFroidTitle'), style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           const SizedBox(height: 8),
-          if (formationsAEvaluer.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text("Aucune formation en attente d'évaluation"))),
+          if (formationsAEvaluer.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Center(child: Text(t('formation.aucuneFormationAEvaluer')))),
           ...formationsAEvaluer.map((t) => Card(child: ListTile(
                 title: Text('${t['code']} — ${t['title']}'),
-                subtitle: Text('Réalisée le ${t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']).toIso8601String().substring(0, 10) : '—'} · délai ${t['delaiJours']} j'),
-                trailing: ElevatedButton(onPressed: () => _evaluerEfficacite(Map.from(t)), child: const Text('Évaluer')),
+                subtitle: Text(t('formation.realiseeLeDelai', {'date': t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']).toIso8601String().substring(0, 10) : '—', 'jours': '${t['delaiJours']}'})),
+                trailing: ElevatedButton(onPressed: () => _evaluerEfficacite(Map.from(t)), child: Text(t('formation.evaluer'))),
               ))),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Budget formation, calendrier détaillé et exports (Excel/CSV) sont disponibles sur la version web du module Formation.',
+              t('formation.footerWebNote'),
               style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: QhseColors.textSecondary),
             ),
           ),
@@ -464,7 +469,7 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
           } on ApiException catch (e) {
             if (e.networkError) {
               await SyncQueue.enqueue('training', 'CREATE', {'code': genCode(form['type'] == 'INDUCTION' ? 'IND' : 'FOR'), ...payload});
-              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : formation enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('formation.formationHorsLigne')), duration: const Duration(seconds: 4)));
             } else {
               rethrow;
             }
@@ -473,7 +478,7 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('formation.erreurPrefix', {'err': '$e'}))));
     }
     if (mounted) setState(() => saving = false);
   }
@@ -483,11 +488,11 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
   Future<void> _delete() async {
     if (widget.record == null) return;
     final confirm = await showDialog<bool>(context: context, builder: (dc) => AlertDialog(
-      title: const Text('Supprimer ?'),
-      content: Text('Confirmer la suppression de "${widget.record!['title'] ?? widget.record!['intitule']}" ?'),
+      title: Text(t('formation.supprimerTitle')),
+      content: Text(t('formation.confirmerSuppression', {'name': '${widget.record!['title'] ?? widget.record!['intitule']}'})),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-        TextButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
+        TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('formation.annuler'))),
+        TextButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('formation.supprimer'), style: const TextStyle(color: Colors.red))),
       ],
     ));
     if (confirm != true) return;
@@ -496,7 +501,7 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
       await api.delete(path);
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('formation.erreurPrefix', {'err': '$e'}))));
     }
   }
 
@@ -508,8 +513,8 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.habilitation
-            ? (editing ? "Modifier l'habilitation" : 'Nouvelle habilitation')
-            : (editing ? 'Modifier la formation' : 'Nouvelle formation / induction')),
+            ? (editing ? t('formation.modifierHabilitation') : t('formation.nouvelleHabilitation'))
+            : (editing ? t('formation.modifierFormation') : t('formation.nouvelleFormation'))),
         actions: [if (editing) IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline))],
       ),
       body: Form(
@@ -518,7 +523,7 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16),
-        child: ElevatedButton(onPressed: saving ? null : save, child: Text(saving ? 'Enregistrement…' : 'Enregistrer')),
+        child: ElevatedButton(onPressed: saving ? null : save, child: Text(saving ? t('formation.enregistrementEnCours') : t('formation.enregistrer'))),
       ),
     );
   }
@@ -527,67 +532,67 @@ class _TrainingFormPageState extends State<TrainingFormPage> {
     loadingEmployees
         ? const Center(child: CircularProgressIndicator())
         : DropdownButtonFormField<String>(
-            decoration: _dec('Collaborateur'), value: form['employeeId'],
+            decoration: _dec(t('formation.collaborateur')), value: form['employeeId'],
             items: employees.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text('${e['firstName']} ${e['lastName']}'))).toList(),
             onChanged: (v) => setState(() => form['employeeId'] = v),
-            validator: (v) => v == null ? 'Requis' : null,
+            validator: (v) => v == null ? t('formation.requis') : null,
           ),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['intitule'], decoration: _dec('Intitulé'), validator: (v) => (v == null || v.isEmpty) ? 'Requis' : null, onChanged: (v) => form['intitule'] = v),
+    TextFormField(initialValue: form['intitule'], decoration: _dec(t('formation.intitule')), validator: (v) => (v == null || v.isEmpty) ? t('formation.requis') : null, onChanged: (v) => form['intitule'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['organisme'], decoration: _dec('Organisme (optionnel)'), onChanged: (v) => form['organisme'] = v),
+    TextFormField(initialValue: form['organisme'], decoration: _dec(t('formation.organismeOptionnel')), onChanged: (v) => form['organisme'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['numeroDocument'], decoration: _dec('N° de document (optionnel)'), onChanged: (v) => form['numeroDocument'] = v),
+    TextFormField(initialValue: form['numeroDocument'], decoration: _dec(t('formation.numeroDocumentOptionnel')), onChanged: (v) => form['numeroDocument'] = v),
     const SizedBox(height: 12),
-    ListTile(contentPadding: EdgeInsets.zero, title: const Text("Date d'obtention"), subtitle: Text(form['dateObtention'] != null ? DateTime.parse(form['dateObtention']).toIso8601String().substring(0, 10) : '—'), trailing: const Icon(Icons.calendar_today, size: 18), onTap: () => _pickDate('dateObtention')),
-    ListTile(contentPadding: EdgeInsets.zero, title: const Text("Date d'expiration"), subtitle: Text(form['dateExpiration'] != null ? DateTime.parse(form['dateExpiration']).toIso8601String().substring(0, 10) : '—'), trailing: const Icon(Icons.calendar_today, size: 18), onTap: () => _pickDate('dateExpiration')),
+    ListTile(contentPadding: EdgeInsets.zero, title: Text(t('formation.dateObtention')), subtitle: Text(form['dateObtention'] != null ? DateTime.parse(form['dateObtention']).toIso8601String().substring(0, 10) : '—'), trailing: const Icon(Icons.calendar_today, size: 18), onTap: () => _pickDate('dateObtention')),
+    ListTile(contentPadding: EdgeInsets.zero, title: Text(t('formation.dateExpiration')), subtitle: Text(form['dateExpiration'] != null ? DateTime.parse(form['dateExpiration']).toIso8601String().substring(0, 10) : '—'), trailing: const Icon(Icons.calendar_today, size: 18), onTap: () => _pickDate('dateExpiration')),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['notes'], decoration: _dec('Notes (optionnel)'), maxLines: 2, onChanged: (v) => form['notes'] = v),
+    TextFormField(initialValue: form['notes'], decoration: _dec(t('formation.notesOptionnel')), maxLines: 2, onChanged: (v) => form['notes'] = v),
   ];
 
   List<Widget> _trainingFields(BuildContext c) => [
-    TextFormField(initialValue: form['title'], decoration: _dec('Intitulé'), validator: (v) => (v == null || v.isEmpty) ? 'Requis' : null, onChanged: (v) => form['title'] = v),
+    TextFormField(initialValue: form['title'], decoration: _dec(t('formation.intitule')), validator: (v) => (v == null || v.isEmpty) ? t('formation.requis') : null, onChanged: (v) => form['title'] = v),
     const SizedBox(height: 12),
     DropdownButtonFormField<String>(
-      decoration: _dec('Type'), value: form['type'],
-      items: const [DropdownMenuItem(value: 'FORMATION', child: Text('Formation')), DropdownMenuItem(value: 'INDUCTION', child: Text('Induction (accueil sécurité)'))],
+      decoration: _dec(t('formation.type')), value: form['type'],
+      items: [DropdownMenuItem(value: 'FORMATION', child: Text(t('formation.typeFormation'))), DropdownMenuItem(value: 'INDUCTION', child: Text(t('formation.typeInductionAccueil')))],
       onChanged: (v) => setState(() => form['type'] = v),
     ),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['domaine'], decoration: _dec('Domaine (optionnel)'), onChanged: (v) => form['domaine'] = v),
+    TextFormField(initialValue: form['domaine'], decoration: _dec(t('formation.domaineOptionnel')), onChanged: (v) => form['domaine'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['publicCible'], decoration: _dec('Public cible (optionnel)'), onChanged: (v) => form['publicCible'] = v),
+    TextFormField(initialValue: form['publicCible'], decoration: _dec(t('formation.publicCibleOptionnel')), onChanged: (v) => form['publicCible'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['service'], decoration: _dec('Service concerné (optionnel)'), onChanged: (v) => form['service'] = v),
+    TextFormField(initialValue: form['service'], decoration: _dec(t('formation.serviceConcerneOptionnel')), onChanged: (v) => form['service'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['objectif'], decoration: _dec('Objectif (optionnel)'), maxLines: 2, onChanged: (v) => form['objectif'] = v),
+    TextFormField(initialValue: form['objectif'], decoration: _dec(t('formation.objectifOptionnel')), maxLines: 2, onChanged: (v) => form['objectif'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['trainer'], decoration: _dec('Formateur (optionnel)'), onChanged: (v) => form['trainer'] = v),
+    TextFormField(initialValue: form['trainer'], decoration: _dec(t('formation.formateurOptionnel')), onChanged: (v) => form['trainer'] = v),
     const SizedBox(height: 12),
     DropdownButtonFormField<String>(
-      decoration: _dec('Interne / externe'), value: form['interneExterne'],
-      items: const [DropdownMenuItem(value: 'INTERNE', child: Text('Interne')), DropdownMenuItem(value: 'EXTERNE', child: Text('Externe'))],
+      decoration: _dec(t('formation.interneExterne')), value: form['interneExterne'],
+      items: [DropdownMenuItem(value: 'INTERNE', child: Text(t('formation.interne'))), DropdownMenuItem(value: 'EXTERNE', child: Text(t('formation.externe')))],
       onChanged: (v) => setState(() => form['interneExterne'] = v),
     ),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['organisme'], decoration: _dec('Organisme (optionnel)'), onChanged: (v) => form['organisme'] = v),
+    TextFormField(initialValue: form['organisme'], decoration: _dec(t('formation.organismeOptionnel')), onChanged: (v) => form['organisme'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['competenceVisee'], decoration: _dec('Compétence visée (optionnel)'), onChanged: (v) => form['competenceVisee'] = v),
+    TextFormField(initialValue: form['competenceVisee'], decoration: _dec(t('formation.competenceViseeOptionnel')), onChanged: (v) => form['competenceVisee'] = v),
     const SizedBox(height: 12),
-    ListTile(contentPadding: EdgeInsets.zero, title: const Text('Date prévue'), subtitle: Text(form['scheduledAt'] != null ? DateTime.parse(form['scheduledAt']).toIso8601String().substring(0, 10) : 'Choisir…'), trailing: const Icon(Icons.calendar_today, size: 18), onTap: () => _pickDate('scheduledAt')),
+    ListTile(contentPadding: EdgeInsets.zero, title: Text(t('formation.datePrevue')), subtitle: Text(form['scheduledAt'] != null ? DateTime.parse(form['scheduledAt']).toIso8601String().substring(0, 10) : t('formation.choisir')), trailing: const Icon(Icons.calendar_today, size: 18), onTap: () => _pickDate('scheduledAt')),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['durationHours'], decoration: _dec('Durée en heures (optionnel)'), keyboardType: TextInputType.number, onChanged: (v) => form['durationHours'] = v),
+    TextFormField(initialValue: form['durationHours'], decoration: _dec(t('formation.dureeHeuresOptionnel')), keyboardType: TextInputType.number, onChanged: (v) => form['durationHours'] = v),
     const SizedBox(height: 12),
     DropdownButtonFormField<String>(
-      decoration: _dec('Statut'), value: form['status'],
-      items: trainingStatusLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+      decoration: _dec(t('formation.statut')), value: form['status'],
+      items: trainingStatusKeys.keys.map((k) => DropdownMenuItem(value: k, child: Text(trainingStatusLabelRaw(k)))).toList(),
       onChanged: (v) => setState(() => form['status'] = v),
     ),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['coutPrevu'], decoration: _dec('Coût prévu (optionnel)'), keyboardType: TextInputType.number, onChanged: (v) => form['coutPrevu'] = v),
+    TextFormField(initialValue: form['coutPrevu'], decoration: _dec(t('formation.coutPrevuOptionnel')), keyboardType: TextInputType.number, onChanged: (v) => form['coutPrevu'] = v),
     const SizedBox(height: 12),
-    TextFormField(initialValue: form['budgetAlloue'], decoration: _dec('Budget alloué (optionnel)'), keyboardType: TextInputType.number, onChanged: (v) => form['budgetAlloue'] = v),
+    TextFormField(initialValue: form['budgetAlloue'], decoration: _dec(t('formation.budgetAlloueOptionnel')), keyboardType: TextInputType.number, onChanged: (v) => form['budgetAlloue'] = v),
     const SizedBox(height: 12),
-    SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Formation obligatoire'), value: form['obligatoire'] == true, onChanged: (v) => setState(() => form['obligatoire'] = v)),
+    SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(t('formation.formationObligatoire')), value: form['obligatoire'] == true, onChanged: (v) => setState(() => form['obligatoire'] = v)),
   ];
 }
