@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'capa_link_widget.dart';
 import 'haccp_monitoring_form_page.dart';
 import 'haccp_page.dart';
@@ -42,7 +43,7 @@ class _HaccpCcpDetailPageState extends State<HaccpCcpDetailPage> {
       final list = List.from(await api.get('/haccp/studies/${widget.studyId}/ccps'));
       final found = list.firstWhere((x) => x['id'] == widget.ccpId, orElse: () => null);
       ccp = found != null ? Map.from(found) : null;
-      if (ccp == null) error = 'CCP introuvable';
+      if (ccp == null) error = t('haccpCcpDetail.ccpIntrouvable');
     } catch (e) { error = '$e'; }
     await Future.wait([loadMonitoring(), loadUsers()]);
     setState(() => loading = false);
@@ -85,46 +86,46 @@ class _HaccpCcpDetailPageState extends State<HaccpCcpDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: Text('Modifier ${k['reference']}'),
+        title: Text(t('haccpCcpDetail.modifierTitre', {'reference': '${k['reference']}'})),
         content: SizedBox(width: 440, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: dangerMaitrise, decoration: const InputDecoration(labelText: 'Danger maîtrisé')),
+          TextField(controller: dangerMaitrise, decoration: InputDecoration(labelText: t('haccpCcpDetail.dangerMaitrise'))),
           const SizedBox(height: 10),
-          TextField(controller: causeDanger, maxLines: 2, decoration: const InputDecoration(labelText: 'Cause du danger')),
+          TextField(controller: causeDanger, maxLines: 2, decoration: InputDecoration(labelText: t('haccpCcpDetail.causeDanger'))),
           const SizedBox(height: 10),
-          TextField(controller: mesureMaitrise, maxLines: 2, decoration: const InputDecoration(labelText: 'Mesure de maîtrise')),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: TextField(controller: limiteCritique, decoration: const InputDecoration(labelText: 'Limite critique'))),
-            const SizedBox(width: 8),
-            Expanded(child: TextField(controller: unite, decoration: const InputDecoration(labelText: 'Unité'))),
-          ]),
-          const SizedBox(height: 10),
-          TextField(controller: critereAcceptation, decoration: const InputDecoration(labelText: 'Critère d\'acceptation')),
-          const SizedBox(height: 10),
-          TextField(controller: parametre, decoration: const InputDecoration(labelText: 'Paramètre surveillé')),
+          TextField(controller: mesureMaitrise, maxLines: 2, decoration: InputDecoration(labelText: t('haccpCcpDetail.mesureMaitrise'))),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(child: TextField(controller: methode, decoration: const InputDecoration(labelText: 'Méthode'))),
+            Expanded(child: TextField(controller: limiteCritique, decoration: InputDecoration(labelText: t('haccpCcpDetail.limiteCritique')))),
             const SizedBox(width: 8),
-            Expanded(child: TextField(controller: instrument, decoration: const InputDecoration(labelText: 'Instrument'))),
+            Expanded(child: TextField(controller: unite, decoration: InputDecoration(labelText: t('haccpCcpDetail.unite')))),
           ]),
           const SizedBox(height: 10),
-          TextField(controller: frequence, decoration: const InputDecoration(labelText: 'Fréquence de surveillance')),
+          TextField(controller: critereAcceptation, decoration: InputDecoration(labelText: t('haccpCcpDetail.critereAcceptation'))),
           const SizedBox(height: 10),
-          TextField(controller: enregistrementAssocie, decoration: const InputDecoration(labelText: 'Enregistrement associé')),
+          TextField(controller: parametre, decoration: InputDecoration(labelText: t('haccpCcpDetail.parametreSurveille'))),
           const SizedBox(height: 10),
-          TextField(controller: actionImmediate, maxLines: 2, decoration: const InputDecoration(labelText: 'Action immédiate en cas d\'écart')),
+          Row(children: [
+            Expanded(child: TextField(controller: methode, decoration: InputDecoration(labelText: t('haccpCcpDetail.methode')))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: instrument, decoration: InputDecoration(labelText: t('haccpCcpDetail.instrument')))),
+          ]),
+          const SizedBox(height: 10),
+          TextField(controller: frequence, decoration: InputDecoration(labelText: t('haccpCcpDetail.frequenceDeSurveillance'))),
+          const SizedBox(height: 10),
+          TextField(controller: enregistrementAssocie, decoration: InputDecoration(labelText: t('haccpCcpDetail.enregistrementAssocie'))),
+          const SizedBox(height: 10),
+          TextField(controller: actionImmediate, maxLines: 2, decoration: InputDecoration(labelText: t('haccpCcpDetail.actionImmediateEnCasEcart'))),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable'), value: responsableId,
+            isExpanded: true, decoration: InputDecoration(labelText: t('haccpCcpDetail.responsable')), value: responsableId,
             items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
             onChanged: (v) => setD(() => responsableId = v),
           ),
-          CheckboxListTile(contentPadding: EdgeInsets.zero, value: active, title: const Text('Point actif', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => active = v ?? true)),
+          CheckboxListTile(contentPadding: EdgeInsets.zero, value: active, title: Text(t('haccpCcpDetail.pointActif'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setD(() => active = v ?? true)),
         ]))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Enregistrer')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpCcpDetail.annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('haccpCcpDetail.enregistrer'))),
         ],
       )),
     );
@@ -153,10 +154,10 @@ class _HaccpCcpDetailPageState extends State<HaccpCcpDetailPage> {
 
   Future<void> deleteCcp() async {
     final ok = await showDialog<bool>(context: context, builder: (dc) => AlertDialog(
-      title: Text('Supprimer ${ccp?['reference']} ?'),
+      title: Text(t('haccpCcpDetail.supprimerTitre', {'reference': '${ccp?['reference']}'})),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-        FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Supprimer')),
+        TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpCcpDetail.annuler'))),
+        FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('haccpCcpDetail.supprimer'))),
       ],
     ));
     if (ok != true) return;
@@ -174,8 +175,8 @@ class _HaccpCcpDetailPageState extends State<HaccpCcpDetailPage> {
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Point de maîtrise')), body: const Center(child: CircularProgressIndicator()));
-    if (ccp == null) return Scaffold(appBar: AppBar(title: const Text('Point de maîtrise')), body: Center(child: Text(error ?? 'Introuvable')));
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('haccpCcpDetail.pointDeMaitrise'))), body: const Center(child: CircularProgressIndicator()));
+    if (ccp == null) return Scaffold(appBar: AppBar(title: Text(t('haccpCcpDetail.pointDeMaitrise'))), body: Center(child: Text(error ?? t('haccpCcpDetail.introuvable'))));
     final k = ccp!;
     final typeColor = k['type'] == 'CCP' ? QhseColors.red : QhseColors.blue;
 
@@ -190,37 +191,37 @@ class _HaccpCcpDetailPageState extends State<HaccpCcpDetailPage> {
             child: Row(children: [
               Icon(k['type'] == 'CCP' ? Icons.gpp_maybe_outlined : Icons.shield_outlined, color: typeColor),
               const SizedBox(width: 8),
-              Expanded(child: Text(k['type'] == 'CCP' ? 'Point critique de maîtrise (CCP)' : 'Point de vigilance (CP)', style: TextStyle(color: typeColor, fontWeight: FontWeight.bold))),
-              haccpChip(k['active'] == true ? 'Actif' : 'Inactif', k['active'] == true ? QhseColors.green : QhseColors.textSecondary),
+              Expanded(child: Text(k['type'] == 'CCP' ? t('haccpCcpDetail.pointCritiqueDeMaitrise') : t('haccpCcpDetail.pointDeVigilance'), style: TextStyle(color: typeColor, fontWeight: FontWeight.bold))),
+              haccpChip(k['active'] == true ? t('haccpCcpDetail.actif') : t('haccpCcpDetail.inactif'), k['active'] == true ? QhseColors.green : QhseColors.textSecondary),
             ]),
           ),
           const SizedBox(height: 12),
-          _metaRow('Danger maîtrisé', k['dangerMaitrise']),
-          _metaRow('Cause du danger', k['causeDanger']),
-          _metaRow('Mesure de maîtrise', k['mesureMaitrise']),
-          _metaRow('Limite critique', k['limiteCritique'] != null ? '${k['limiteCritique']}${k['unite'] != null ? ' ${k['unite']}' : ''}' : null),
-          _metaRow('Critère d\'acceptation', k['critereAcceptation']),
-          _metaRow('Paramètre surveillé', k['parametre']),
-          _metaRow('Méthode / instrument', [k['methode'], k['instrument']].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
-          _metaRow('Fréquence de surveillance', k['frequence']),
-          _metaRow('Responsable', userName(k['responsableId'])),
-          _metaRow('Enregistrement associé', k['enregistrementAssocie']),
-          _metaRow('Action immédiate', k['actionImmediate']),
+          _metaRow(t('haccpCcpDetail.dangerMaitrise'), k['dangerMaitrise']),
+          _metaRow(t('haccpCcpDetail.causeDanger'), k['causeDanger']),
+          _metaRow(t('haccpCcpDetail.mesureMaitrise'), k['mesureMaitrise']),
+          _metaRow(t('haccpCcpDetail.limiteCritique'), k['limiteCritique'] != null ? '${k['limiteCritique']}${k['unite'] != null ? ' ${k['unite']}' : ''}' : null),
+          _metaRow(t('haccpCcpDetail.critereAcceptation'), k['critereAcceptation']),
+          _metaRow(t('haccpCcpDetail.parametreSurveille'), k['parametre']),
+          _metaRow(t('haccpCcpDetail.methodeInstrument'), [k['methode'], k['instrument']].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
+          _metaRow(t('haccpCcpDetail.frequenceDeSurveillance'), k['frequence']),
+          _metaRow(t('haccpCcpDetail.responsable'), userName(k['responsableId'])),
+          _metaRow(t('haccpCcpDetail.enregistrementAssocie'), k['enregistrementAssocie']),
+          _metaRow(t('haccpCcpDetail.actionImmediate'), k['actionImmediate']),
 
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton.icon(onPressed: busy ? null : editCcp, icon: const Icon(Icons.edit, size: 16), label: const Text('Modifier')),
-            TextButton.icon(onPressed: busy ? null : deleteCcp, icon: Icon(Icons.delete_outline, size: 16, color: QhseColors.red), label: Text('Supprimer', style: TextStyle(color: QhseColors.red))),
+            OutlinedButton.icon(onPressed: busy ? null : editCcp, icon: const Icon(Icons.edit, size: 16), label: Text(t('haccpCcpDetail.modifier'))),
+            TextButton.icon(onPressed: busy ? null : deleteCcp, icon: Icon(Icons.delete_outline, size: 16, color: QhseColors.red), label: Text(t('haccpCcpDetail.supprimer'), style: TextStyle(color: QhseColors.red))),
           ]),
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Historique de surveillance (${monitoring.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            FilledButton.icon(onPressed: newRecord, icon: const Icon(Icons.add, size: 16), label: const Text('Nouveau relevé')),
+            Text(t('haccpCcpDetail.historiqueDeSurveillance', {'count': '${monitoring.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            FilledButton.icon(onPressed: newRecord, icon: const Icon(Icons.add, size: 16), label: Text(t('haccpCcpDetail.nouveauReleve'))),
           ]),
           const SizedBox(height: 8),
           if (monitoring.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucun relevé enregistré', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('haccpCcpDetail.aucunReleveEnregistre'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...monitoring.map((m) {
               final nonConforme = m['statut'] == 'NON_CONFORME';
@@ -230,7 +231,7 @@ class _HaccpCcpDetailPageState extends State<HaccpCcpDetailPage> {
                   color: haccpMonitoringStatutColor(m['statut']),
                 ),
                 title: Text(m['valeur'] != null ? '${m['valeur']}${k['unite'] ?? ''}' : (m['valeurTexte'] ?? '—')),
-                subtitle: Text('${haccpFmtDateTime(m['dateRealisee'] ?? m['datePrevue'])}${m['lotNumero'] != null ? ' · Lot ${m['lotNumero']}' : ''}'),
+                subtitle: Text('${haccpFmtDateTime(m['dateRealisee'] ?? m['datePrevue'])}${m['lotNumero'] != null ? ' · ' + t('haccpCcpDetail.lot', {'numero': '${m['lotNumero']}'}) : ''}'),
                 trailing: haccpChip(haccpMonitoringStatutLabels[m['statut']] ?? '${m['statut']}', haccpMonitoringStatutColor(m['statut'])),
               ));
               if (!nonConforme) return tile;
@@ -244,16 +245,16 @@ class _HaccpCcpDetailPageState extends State<HaccpCcpDetailPage> {
                     Row(children: [
                       Icon(Icons.error_outline, color: QhseColors.red, size: 18),
                       const SizedBox(width: 6),
-                      const Expanded(child: Text('Non-conformité créée automatiquement', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                      Expanded(child: Text(t('haccpCcpDetail.ncCreeeAutomatiquement'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                       if (m['nonConformityId'] != null)
-                        TextButton(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => NonConformityDetailPage(ncId: m['nonConformityId']))), child: const Text('Voir', style: TextStyle(fontSize: 12))),
+                        TextButton(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => NonConformityDetailPage(ncId: m['nonConformityId']))), child: Text(t('haccpCcpDetail.voir'), style: const TextStyle(fontSize: 12))),
                     ]),
                     const SizedBox(height: 6),
                     CapaLinksSection(
                       key: ValueKey('capa-haccp-${m['id']}'),
                       sourceModule: 'HACCP_CCP',
                       sourceEntityId: m['id'],
-                      prefill: {'title': 'Traiter l\'écart CCP — ${k['reference']}'},
+                      prefill: {'title': t('haccpCcpDetail.traiterEcartCcp', {'reference': '${k['reference']}'})},
                     ),
                   ]),
                 ),
