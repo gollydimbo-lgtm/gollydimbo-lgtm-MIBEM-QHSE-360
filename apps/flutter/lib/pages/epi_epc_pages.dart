@@ -6,6 +6,7 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
+import '../i18n/i18n.dart';
 
 // --- Catégories (réutilisé pour EPI et EPC — une seule entrée : le nom) ---
 class CategoryListTab extends StatefulWidget {
@@ -37,9 +38,9 @@ class _CategoryListTabState extends State<CategoryListTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(record == null ? 'Nouvelle catégorie ${widget.label}' : 'Modifier la catégorie'),
+        title: Text(record == null ? t('epiEpcPages.nouvelleCategorieTitre', {'label': widget.label}) : t('epiEpcPages.modifierCategorieTitre')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Nom')),
+          TextField(controller: name, decoration: InputDecoration(labelText: t('epiEpcPages.nomLabel'))),
           if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
         ]),
         actions: [
@@ -48,9 +49,9 @@ class _CategoryListTabState extends State<CategoryListTab> {
               try { await api.delete('${widget.endpoint}/${record['id']}'); if (context.mounted) Navigator.pop(c); load(); }
               catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+            child: Text(t('epiEpcPages.supprimerBtn'), style: const TextStyle(color: QhseColors.red)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: () async {
               try {
@@ -60,7 +61,7 @@ class _CategoryListTabState extends State<CategoryListTab> {
                 load();
               } catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Enregistrer'),
+            child: Text(t('epiEpcPages.enregistrerBtn')),
           ),
         ],
       )),
@@ -76,9 +77,9 @@ class _CategoryListTabState extends State<CategoryListTab> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('Catégorie'))),
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: Text(t('epiEpcPages.categorieBtn')))),
           const SizedBox(height: 8),
-          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucune catégorie', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(t('epiEpcPages.aucuneCategorie'), style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((c) => Card(child: ListTile(title: Text(c['name'] ?? ''), onTap: () => _openForm(record: c)))),
         ],
       ),
@@ -119,15 +120,15 @@ class _EmployeeTabState extends State<EmployeeTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(record == null ? 'Nouvel employé' : "Modifier l'employé"),
+        title: Text(record == null ? t('epiEpcPages.nouvelEmployeTitre') : t('epiEpcPages.modifierEmployeTitre')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: matricule, decoration: const InputDecoration(labelText: 'Matricule')),
-            TextField(controller: firstName, decoration: const InputDecoration(labelText: 'Prénom')),
-            TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Nom')),
-            TextField(controller: department, decoration: const InputDecoration(labelText: 'Département')),
-            TextField(controller: position, decoration: const InputDecoration(labelText: 'Poste')),
-            if (record != null) CheckboxListTile(value: active, title: const Text('Actif'), onChanged: (v) => setD(() => active = v ?? true), controlAffinity: ListTileControlAffinity.leading),
+            TextField(controller: matricule, decoration: InputDecoration(labelText: t('epiEpcPages.matriculeLabel'))),
+            TextField(controller: firstName, decoration: InputDecoration(labelText: t('epiEpcPages.prenomLabel'))),
+            TextField(controller: lastName, decoration: InputDecoration(labelText: t('epiEpcPages.nomLabel'))),
+            TextField(controller: department, decoration: InputDecoration(labelText: t('epiEpcPages.departementLabel'))),
+            TextField(controller: position, decoration: InputDecoration(labelText: t('epiEpcPages.posteLabel'))),
+            if (record != null) CheckboxListTile(value: active, title: Text(t('epiEpcPages.actifLabel')), onChanged: (v) => setD(() => active = v ?? true), controlAffinity: ListTileControlAffinity.leading),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
         ),
@@ -137,9 +138,9 @@ class _EmployeeTabState extends State<EmployeeTab> {
               try { await api.delete('/epi/employees/${record['id']}'); if (context.mounted) Navigator.pop(c); load(); }
               catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+            child: Text(t('epiEpcPages.supprimerBtn'), style: const TextStyle(color: QhseColors.red)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: () async {
               final payload = {'matricule': matricule.text, 'firstName': firstName.text, 'lastName': lastName.text, 'department': department.text, 'position': position.text, if (record != null) 'active': active};
@@ -150,7 +151,7 @@ class _EmployeeTabState extends State<EmployeeTab> {
                 load();
               } catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Enregistrer'),
+            child: Text(t('epiEpcPages.enregistrerBtn')),
           ),
         ],
       )),
@@ -166,15 +167,15 @@ class _EmployeeTabState extends State<EmployeeTab> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.person_add_alt_1, size: 16), label: const Text('Employé'))),
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.person_add_alt_1, size: 16), label: Text(t('epiEpcPages.employeBtn')))),
           const SizedBox(height: 8),
-          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucun employé enregistré', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(t('epiEpcPages.aucunEmploye'), style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((e) => Card(child: ListTile(
                 title: Text('${e['firstName']} ${e['lastName']}'),
                 subtitle: Text('${e['matricule']} • ${e['department'] ?? '—'} • ${e['position'] ?? '—'}'),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   // Point 35 — fiche employé unifiée, même vue transversale que le web.
-                  IconButton(icon: const Icon(Icons.badge_outlined, size: 20), tooltip: 'Voir la fiche', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeDossierPage(employee: e)))),
+                  IconButton(icon: const Icon(Icons.badge_outlined, size: 20), tooltip: t('epiEpcPages.voirFicheTooltip'), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeDossierPage(employee: e)))),
                   Icon(Icons.circle, size: 10, color: e['active'] == true ? QhseColors.green : QhseColors.red),
                 ]),
                 onTap: () => _openForm(record: e),
@@ -215,7 +216,7 @@ class _EmployeeDossierPageState extends State<EmployeeDossierPage> {
     return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
       const SizedBox(height: 6),
-      if (items.isEmpty) Text('Aucun élément', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
+      if (items.isEmpty) Text(t('epiEpcPages.aucunElement'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
       else ...items.map((it) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Text('${titleFn(Map.from(it))} — ${subtitleFn(Map.from(it))}', style: const TextStyle(fontSize: 12)))),
     ])));
   }
@@ -224,7 +225,7 @@ class _EmployeeDossierPageState extends State<EmployeeDossierPage> {
   Widget build(BuildContext context) {
     final d = dossier;
     return Scaffold(
-      appBar: AppBar(title: Text('Fiche — ${widget.employee['firstName']} ${widget.employee['lastName']}')),
+      appBar: AppBar(title: Text(t('epiEpcPages.ficheTitre', {'nom': '${widget.employee['firstName']} ${widget.employee['lastName']}'}))),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null
@@ -232,12 +233,12 @@ class _EmployeeDossierPageState extends State<EmployeeDossierPage> {
               : RefreshIndicator(
                   onRefresh: load,
                   child: ListView(padding: const EdgeInsets.all(12), children: [
-                    _section('Événements sécurité — personne concernée', List.from(d?['evenementsConcerne'] ?? []), (e) => '${e['title']}', (e) => '${e['type']}'),
-                    _section('Événements sécurité — témoin', List.from(d?['evenementsTemoin'] ?? []), (e) => '${e['title']}', (e) => '${e['type']}'),
-                    _section('Dotations EPI', List.from(d?['dotationsEpi'] ?? []), (a) => '${a['epi']?['name'] ?? '—'}', (a) => a['renewalAt'] != null ? 'Renouvellement ${a['renewalAt'].toString().substring(0, 10)}' : '—'),
-                    _section('Habilitations', List.from(d?['habilitations'] ?? []), (h) => '${h['intitule']}', (h) => '${h['statut']}'),
-                    _section('Formations', List.from(d?['formations'] ?? []), (f) => '${f['training']?['title'] ?? f['training']?['intitule'] ?? '—'}', (f) => '${f['resultat'] ?? '—'}'),
-                    _section('Expositions surveillées', List.from(d?['expositions'] ?? []), (ex) => '${ex['agentDangereux'] ?? '—'}', (ex) => ex['conforme'] == null ? '—' : (ex['conforme'] == true ? 'Conforme' : 'Non conforme')),
+                    _section(t('epiEpcPages.evenementsConcerne'), List.from(d?['evenementsConcerne'] ?? []), (e) => '${e['title']}', (e) => '${e['type']}'),
+                    _section(t('epiEpcPages.evenementsTemoin'), List.from(d?['evenementsTemoin'] ?? []), (e) => '${e['title']}', (e) => '${e['type']}'),
+                    _section(t('epiEpcPages.dotationsEpi'), List.from(d?['dotationsEpi'] ?? []), (a) => '${a['epi']?['name'] ?? '—'}', (a) => a['renewalAt'] != null ? t('epiEpcPages.renouvellementLe', {'date': a['renewalAt'].toString().substring(0, 10)}) : '—'),
+                    _section(t('epiEpcPages.habilitations'), List.from(d?['habilitations'] ?? []), (h) => '${h['intitule']}', (h) => '${h['statut']}'),
+                    _section(t('epiEpcPages.formations'), List.from(d?['formations'] ?? []), (f) => '${f['training']?['title'] ?? f['training']?['intitule'] ?? '—'}', (f) => '${f['resultat'] ?? '—'}'),
+                    _section(t('epiEpcPages.expositionsSurveillees'), List.from(d?['expositions'] ?? []), (ex) => '${ex['agentDangereux'] ?? '—'}', (ex) => ex['conforme'] == null ? '—' : (ex['conforme'] == true ? t('epiEpcPages.conforme') : t('epiEpcPages.nonConforme'))),
                   ]),
                 ),
     );
@@ -282,25 +283,25 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(record == null ? 'Nouvel EPC' : "Modifier l'EPC"),
+        title: Text(record == null ? t('epiEpcPages.nouvelEpcTitre') : t('epiEpcPages.modifierEpcTitre')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: code, enabled: record == null, decoration: const InputDecoration(labelText: 'Code')),
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'Désignation')),
+            TextField(controller: code, enabled: record == null, decoration: InputDecoration(labelText: t('epiEpcPages.codeLabel'))),
+            TextField(controller: name, decoration: InputDecoration(labelText: t('epiEpcPages.designationLabel'))),
             DropdownButtonFormField<String>(
               value: categoryId, isExpanded: true,
               items: categories.map<DropdownMenuItem<String>>((cat) => DropdownMenuItem(value: cat['id'] as String, child: Text(cat['name']))).toList(),
               onChanged: (v) => setD(() => categoryId = v),
-              decoration: const InputDecoration(labelText: 'Catégorie'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.categorieLabel')),
             ),
-            TextField(controller: location, decoration: const InputDecoration(labelText: 'Localisation')),
-            TextField(controller: zone, decoration: const InputDecoration(labelText: 'Zone')),
-            TextField(controller: manufacturer, decoration: const InputDecoration(labelText: 'Fabricant')),
+            TextField(controller: location, decoration: InputDecoration(labelText: t('epiEpcPages.localisationLabel'))),
+            TextField(controller: zone, decoration: InputDecoration(labelText: t('epiEpcPages.zoneLabel'))),
+            TextField(controller: manufacturer, decoration: InputDecoration(labelText: t('epiEpcPages.fabricantLabel'))),
             DropdownButtonFormField<String>(
               value: status,
-              items: const [DropdownMenuItem(value: 'ACTIVE', child: Text('Actif')), DropdownMenuItem(value: 'MAINTENANCE', child: Text('En maintenance')), DropdownMenuItem(value: 'NON_CONFORME', child: Text('Non conforme')), DropdownMenuItem(value: 'HORS_SERVICE', child: Text('Hors service'))],
+              items: [DropdownMenuItem(value: 'ACTIVE', child: Text(t('epiEpcPages.statutActif'))), DropdownMenuItem(value: 'MAINTENANCE', child: Text(t('epiEpcPages.statutMaintenance'))), DropdownMenuItem(value: 'NON_CONFORME', child: Text(t('epiEpcPages.statutNonConforme'))), DropdownMenuItem(value: 'HORS_SERVICE', child: Text(t('epiEpcPages.statutHorsService')))],
               onChanged: (v) => setD(() => status = v ?? 'ACTIVE'),
-              decoration: const InputDecoration(labelText: 'Statut'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.statutLabel')),
             ),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
@@ -311,9 +312,9 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
               try { await api.delete('/epi/epc/${record['id']}'); if (context.mounted) Navigator.pop(c); load(); }
               catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+            child: Text(t('epiEpcPages.supprimerBtn'), style: const TextStyle(color: QhseColors.red)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: () async {
               final payload = {'name': name.text, 'categoryId': categoryId, 'location': location.text, 'zone': zone.text, 'manufacturer': manufacturer.text, 'status': status};
@@ -324,7 +325,7 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
                 load();
               } catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Enregistrer'),
+            child: Text(t('epiEpcPages.enregistrerBtn')),
           ),
         ],
       )),
@@ -340,9 +341,9 @@ class _EpcLibraryTabState extends State<EpcLibraryTab> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('EPC'))),
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: Text(t('epiEpcPages.epcBtn')))),
           const SizedBox(height: 8),
-          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucun EPC enregistré', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(t('epiEpcPages.aucunEpc'), style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((e) => Card(child: ListTile(
                 title: Text('${e['code']} — ${e['name']}'),
                 subtitle: Text('${e['category']?['name'] ?? '—'} • ${e['location'] ?? '—'}'),
@@ -404,37 +405,37 @@ class _EpiLibraryTabState extends State<EpiLibraryTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(record == null ? 'Nouvel EPI' : "Modifier l'EPI"),
+        title: Text(record == null ? t('epiEpcPages.nouvelEpiTitre') : t('epiEpcPages.modifierEpiTitre')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: code, enabled: record == null, decoration: const InputDecoration(labelText: 'Code')),
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'Désignation')),
+            TextField(controller: code, enabled: record == null, decoration: InputDecoration(labelText: t('epiEpcPages.codeLabel'))),
+            TextField(controller: name, decoration: InputDecoration(labelText: t('epiEpcPages.designationLabel'))),
             DropdownButtonFormField<String>(
               value: categoryId, isExpanded: true,
               items: categories.map<DropdownMenuItem<String>>((cat) => DropdownMenuItem(value: cat['id'] as String, child: Text(cat['name']))).toList(),
               onChanged: (v) => setD(() => categoryId = v),
-              decoration: const InputDecoration(labelText: 'Catégorie'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.categorieLabel')),
             ),
             DropdownButtonFormField<String>(
               value: frequency,
-              items: const [DropdownMenuItem(value: 'DAILY', child: Text('Quotidienne')), DropdownMenuItem(value: 'ANNUAL', child: Text('Annuelle'))],
+              items: [DropdownMenuItem(value: 'DAILY', child: Text(t('epiEpcPages.frequenceQuotidienne'))), DropdownMenuItem(value: 'ANNUAL', child: Text(t('epiEpcPages.frequenceAnnuelle')))],
               onChanged: (v) => setD(() => frequency = v ?? 'DAILY'),
-              decoration: const InputDecoration(labelText: 'Fréquence de distribution'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.frequenceDistributionLabel')),
             ),
             Row(children: [
-              Expanded(child: TextField(controller: manufacturer, decoration: const InputDecoration(labelText: 'Fabricant'))),
+              Expanded(child: TextField(controller: manufacturer, decoration: InputDecoration(labelText: t('epiEpcPages.fabricantLabel')))),
               const SizedBox(width: 8),
-              Expanded(child: TextField(controller: model, decoration: const InputDecoration(labelText: 'Modèle'))),
+              Expanded(child: TextField(controller: model, decoration: InputDecoration(labelText: t('epiEpcPages.modeleLabel')))),
             ]),
-            TextField(controller: standard, decoration: const InputDecoration(labelText: 'Norme applicable')),
-            TextField(controller: location, decoration: const InputDecoration(labelText: 'Emplacement')),
+            TextField(controller: standard, decoration: InputDecoration(labelText: t('epiEpcPages.normeApplicableLabel'))),
+            TextField(controller: location, decoration: InputDecoration(labelText: t('epiEpcPages.emplacementLabel'))),
             Row(children: [
-              Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock minimum'))),
+              Expanded(child: TextField(controller: minStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('epiEpcPages.stockMinimumLabel')))),
               const SizedBox(width: 8),
-              Expanded(child: TextField(controller: maxStock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock maximum'))),
+              Expanded(child: TextField(controller: maxStock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('epiEpcPages.stockMaximumLabel')))),
             ]),
-            CheckboxListTile(value: disposable, title: const Text('Jetable'), onChanged: (v) => setD(() => disposable = v ?? false), controlAffinity: ListTileControlAffinity.leading),
-            CheckboxListTile(value: shared, title: const Text('Partagé (non individuel)'), onChanged: (v) => setD(() => shared = v ?? false), controlAffinity: ListTileControlAffinity.leading),
+            CheckboxListTile(value: disposable, title: Text(t('epiEpcPages.jetableLabel')), onChanged: (v) => setD(() => disposable = v ?? false), controlAffinity: ListTileControlAffinity.leading),
+            CheckboxListTile(value: shared, title: Text(t('epiEpcPages.partageLabel')), onChanged: (v) => setD(() => shared = v ?? false), controlAffinity: ListTileControlAffinity.leading),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
         ),
@@ -444,9 +445,9 @@ class _EpiLibraryTabState extends State<EpiLibraryTab> {
               try { await api.delete('/epi/catalog/${record['id']}'); if (context.mounted) Navigator.pop(c); load(); }
               catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+            child: Text(t('epiEpcPages.supprimerBtn'), style: const TextStyle(color: QhseColors.red)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: () async {
               final payload = {
@@ -462,7 +463,7 @@ class _EpiLibraryTabState extends State<EpiLibraryTab> {
                 load();
               } catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Enregistrer'),
+            child: Text(t('epiEpcPages.enregistrerBtn')),
           ),
         ],
       )),
@@ -479,10 +480,10 @@ class _EpiLibraryTabState extends State<EpiLibraryTab> {
         title: Text('${e['name']}'),
         subtitle: Text(
           e['frequency'] == 'DAILY'
-              ? "Stock restant : $s • distribués aujourd'hui : ${e['dailyDistributed'] ?? 0}"
-              : 'Stock restant : $s',
+              ? t('epiEpcPages.stockRestantJournalier', {'stock': '$s', 'distribues': '${e['dailyDistributed'] ?? 0}'})
+              : t('epiEpcPages.stockRestant', {'stock': '$s'}),
         ),
-        trailing: low ? const Chip(label: Text('Stock bas'), backgroundColor: Color(0xFFFFCDD2)) : null,
+        trailing: low ? Chip(label: Text(t('epiEpcPages.stockBas')), backgroundColor: const Color(0xFFFFCDD2)) : null,
         onTap: () => _openForm(record: e),
       ),
     );
@@ -495,7 +496,7 @@ class _EpiLibraryTabState extends State<EpiLibraryTab> {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(error!, style: const TextStyle(color: QhseColors.red)),
         const SizedBox(height: 12),
-        OutlinedButton(onPressed: load, child: const Text('Réessayer')),
+        OutlinedButton(onPressed: load, child: Text(t('epiEpcPages.reessayerBtn'))),
       ]));
     }
     final daily = stock.where((e) => e['frequency'] == 'DAILY').toList();
@@ -505,17 +506,17 @@ class _EpiLibraryTabState extends State<EpiLibraryTab> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvel EPI'))),
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: Text(t('epiEpcPages.nouvelEpiBtn')))),
           const SizedBox(height: 8),
-          const Text('EPI journaliers (gants, cache-nez, charlotte…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('epiEpcPages.epiJournaliersTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 6),
           ...daily.map((e) => _epiCard(e)),
-          if (daily.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucun EPI journalier configuré', style: TextStyle(color: QhseColors.textSecondary))),
+          if (daily.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(t('epiEpcPages.aucunEpiJournalier'), style: TextStyle(color: QhseColors.textSecondary))),
           const SizedBox(height: 16),
-          const Text('EPI annuels (chaussures, tenue, lunettes, casque…)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('epiEpcPages.epiAnnuelsTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 6),
           ...annual.map((e) => _epiCard(e)),
-          if (annual.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucun EPI annuel configuré', style: TextStyle(color: QhseColors.textSecondary))),
+          if (annual.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(t('epiEpcPages.aucunEpiAnnuel'), style: TextStyle(color: QhseColors.textSecondary))),
         ],
       ),
     );
@@ -557,30 +558,30 @@ class _InspectionsTabState extends State<InspectionsTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(isEpi ? 'Nouvelle inspection EPI' : 'Nouvelle inspection EPC'),
+        title: Text(isEpi ? t('epiEpcPages.nouvelleInspectionEpiTitre') : t('epiEpcPages.nouvelleInspectionEpcTitre')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<String>(
               value: targetId, isExpanded: true,
               items: options.map<DropdownMenuItem<String>>((o) => DropdownMenuItem(value: o['id'] as String, child: Text(o['name']))).toList(),
               onChanged: (v) => setD(() => targetId = v),
-              decoration: InputDecoration(labelText: isEpi ? 'EPI inspecté' : 'EPC inspecté'),
+              decoration: InputDecoration(labelText: isEpi ? t('epiEpcPages.epiInspecteLabel') : t('epiEpcPages.epcInspecteLabel')),
             ),
             DropdownButtonFormField<String>(
               value: result,
-              items: const [DropdownMenuItem(value: 'CONFORME', child: Text('Conforme')), DropdownMenuItem(value: 'NON_CONFORME', child: Text('Non conforme')), DropdownMenuItem(value: 'A_SURVEILLER', child: Text('À surveiller')), DropdownMenuItem(value: 'A_REFORMER', child: Text('À réformer'))],
+              items: [DropdownMenuItem(value: 'CONFORME', child: Text(t('epiEpcPages.resultatConforme'))), DropdownMenuItem(value: 'NON_CONFORME', child: Text(t('epiEpcPages.resultatNonConforme'))), DropdownMenuItem(value: 'A_SURVEILLER', child: Text(t('epiEpcPages.resultatASurveiller'))), DropdownMenuItem(value: 'A_REFORMER', child: Text(t('epiEpcPages.resultatAReformer')))],
               onChanged: (v) => setD(() => result = v ?? 'CONFORME'),
-              decoration: const InputDecoration(labelText: 'Résultat'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.resultatLabel')),
             ),
-            TextField(controller: observations, decoration: const InputDecoration(labelText: 'Observations'), maxLines: 2),
+            TextField(controller: observations, decoration: InputDecoration(labelText: t('epiEpcPages.observationsLabel')), maxLines: 2),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: () async {
-              if (targetId == null) { setD(() => formError = 'Sélectionnez un équipement'); return; }
+              if (targetId == null) { setD(() => formError = t('epiEpcPages.selectionnezEquipement')); return; }
               final endpoint = isEpi ? '/epi/epi-inspections' : '/epi/epc-inspections';
               final key = isEpi ? 'epiId' : 'epcId';
               final payload = {key: targetId, 'result': result, 'observations': observations.text};
@@ -592,7 +593,7 @@ class _InspectionsTabState extends State<InspectionsTab> {
                 if (e.networkError) {
                   await SyncQueue.enqueue(isEpi ? 'epiInspection' : 'epcInspection', 'CREATE', payload);
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : inspection enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('epiEpcPages.horsLigneInspectionMessage')), duration: const Duration(seconds: 4)));
                     Navigator.pop(c);
                   }
                   load();
@@ -601,7 +602,7 @@ class _InspectionsTabState extends State<InspectionsTab> {
                 }
               } catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Enregistrer'),
+            child: Text(t('epiEpcPages.enregistrerBtn')),
           ),
         ],
       )),
@@ -609,7 +610,7 @@ class _InspectionsTabState extends State<InspectionsTab> {
   }
 
   Color _resultColor(String? r) => r == 'NON_CONFORME' || r == 'A_REFORMER' ? QhseColors.red : r == 'A_SURVEILLER' ? QhseColors.amber : QhseColors.green;
-  String _resultLabel(String? r) => {'CONFORME': 'Conforme', 'NON_CONFORME': 'Non conforme', 'A_SURVEILLER': 'À surveiller', 'A_REFORMER': 'À réformer'}[r] ?? '$r';
+  String _resultLabel(String? r) => {'CONFORME': t('epiEpcPages.resultatConforme'), 'NON_CONFORME': t('epiEpcPages.resultatNonConforme'), 'A_SURVEILLER': t('epiEpcPages.resultatASurveiller'), 'A_REFORMER': t('epiEpcPages.resultatAReformer')}[r] ?? '$r';
   bool _isBad(String? r) => r == 'NON_CONFORME' || r == 'A_REFORMER';
 
   Future<void> _createNcQuick({required String title, String? description, required String source, required int severity, String? epiId, String? epcId}) async {
@@ -620,16 +621,16 @@ class _InspectionsTabState extends State<InspectionsTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Nouvelle non-conformité'),
+        title: Text(t('epiEpcPages.nouvelleNcTitre')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Titre')),
-            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description'), maxLines: 2),
+            TextField(controller: titleCtrl, decoration: InputDecoration(labelText: t('epiEpcPages.titreLabel'))),
+            TextField(controller: descCtrl, decoration: InputDecoration(labelText: t('epiEpcPages.descriptionLabel')), maxLines: 2),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: saving ? null : () async {
               setD(() => saving = true);
@@ -642,7 +643,7 @@ class _InspectionsTabState extends State<InspectionsTab> {
                 if (context.mounted) Navigator.pop(c);
               } catch (e) { setD(() { saving = false; formError = '$e'; }); }
             },
-            child: Text(saving ? 'Enregistrement…' : 'Créer'),
+            child: Text(saving ? t('epiEpcPages.enregistrementEnCours') : t('epiEpcPages.creerBtn')),
           ),
         ],
       )),
@@ -659,11 +660,11 @@ class _InspectionsTabState extends State<InspectionsTab> {
         padding: const EdgeInsets.all(12),
         children: [
           Row(children: [
-            const Expanded(child: Text('Inspections EPI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-            FilledButton.icon(onPressed: () => _openForm(isEpi: true), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle')),
+            Expanded(child: Text(t('epiEpcPages.inspectionsEpiTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+            FilledButton.icon(onPressed: () => _openForm(isEpi: true), icon: const Icon(Icons.add, size: 16), label: Text(t('epiEpcPages.nouvelleBtn'))),
           ]),
           const SizedBox(height: 6),
-          if (epiInsp.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucune inspection EPI', style: TextStyle(color: QhseColors.textSecondary))),
+          if (epiInsp.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(t('epiEpcPages.aucuneInspectionEpi'), style: TextStyle(color: QhseColors.textSecondary))),
           ...epiInsp.map((i) => Card(child: ListTile(
                 title: Text(i['epi']?['name'] ?? '—'),
                 subtitle: Text(i['observations'] ?? ''),
@@ -673,21 +674,21 @@ class _InspectionsTabState extends State<InspectionsTab> {
                     TextButton(
                       style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 24)),
                       onPressed: () => _createNcQuick(
-                        title: 'EPI non conforme — ${i['epi']?['name'] ?? ''}',
+                        title: t('epiEpcPages.epiNonConformeTitre', {'nom': '${i['epi']?['name'] ?? ''}'}),
                         description: i['observations'],
                         source: 'EPI', severity: i['result'] == 'A_REFORMER' ? 3 : 2, epiId: i['epiId'],
                       ),
-                      child: const Text('Créer une NC', style: TextStyle(fontSize: 11, color: QhseColors.red)),
+                      child: Text(t('epiEpcPages.creerNcBtn'), style: const TextStyle(fontSize: 11, color: QhseColors.red)),
                     ),
                 ]),
               ))),
           const SizedBox(height: 20),
           Row(children: [
-            const Expanded(child: Text('Inspections EPC', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-            FilledButton.icon(onPressed: () => _openForm(isEpi: false), icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle')),
+            Expanded(child: Text(t('epiEpcPages.inspectionsEpcTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+            FilledButton.icon(onPressed: () => _openForm(isEpi: false), icon: const Icon(Icons.add, size: 16), label: Text(t('epiEpcPages.nouvelleBtn'))),
           ]),
           const SizedBox(height: 6),
-          if (epcInsp.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Aucune inspection EPC', style: TextStyle(color: QhseColors.textSecondary))),
+          if (epcInsp.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(t('epiEpcPages.aucuneInspectionEpc'), style: TextStyle(color: QhseColors.textSecondary))),
           ...epcInsp.map((i) => Card(child: ListTile(
                 title: Text(i['epc']?['name'] ?? '—'),
                 subtitle: Text(i['observations'] ?? ''),
@@ -697,11 +698,11 @@ class _InspectionsTabState extends State<InspectionsTab> {
                     TextButton(
                       style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 24)),
                       onPressed: () => _createNcQuick(
-                        title: 'EPC non conforme — ${i['epc']?['name'] ?? ''}',
+                        title: t('epiEpcPages.epcNonConformeTitre', {'nom': '${i['epc']?['name'] ?? ''}'}),
                         description: i['observations'],
                         source: 'EPC', severity: i['result'] == 'A_REFORMER' ? 3 : 2, epcId: i['epcId'],
                       ),
-                      child: const Text('Créer une NC', style: TextStyle(fontSize: 11, color: QhseColors.red)),
+                      child: Text(t('epiEpcPages.creerNcBtn'), style: const TextStyle(fontSize: 11, color: QhseColors.red)),
                     ),
                 ]),
               ))),
@@ -747,26 +748,26 @@ class _EpcMaintenanceTabState extends State<EpcMaintenanceTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Nouvelle intervention de maintenance'),
+        title: Text(t('epiEpcPages.nouvelleInterventionTitre')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<String>(
               value: epcId, isExpanded: true,
               items: epcs.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text('${e['code']} — ${e['name']}'))).toList(),
               onChanged: (v) => setD(() => epcId = v),
-              decoration: const InputDecoration(labelText: 'Équipement'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.equipementLabel')),
             ),
             DropdownButtonFormField<String>(
               value: type,
-              items: const [DropdownMenuItem(value: 'PREVENTIVE', child: Text('Préventive')), DropdownMenuItem(value: 'CORRECTIVE', child: Text('Corrective'))],
+              items: [DropdownMenuItem(value: 'PREVENTIVE', child: Text(t('epiEpcPages.typePreventive'))), DropdownMenuItem(value: 'CORRECTIVE', child: Text(t('epiEpcPages.typeCorrective')))],
               onChanged: (v) => setD(() => type = v ?? 'PREVENTIVE'),
-              decoration: const InputDecoration(labelText: "Type d'intervention"),
+              decoration: InputDecoration(labelText: t('epiEpcPages.typeInterventionLabel')),
             ),
-            TextField(controller: description, decoration: const InputDecoration(labelText: 'Description'), maxLines: 2),
-            TextField(controller: cost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Coût (optionnel)')),
+            TextField(controller: description, decoration: InputDecoration(labelText: t('epiEpcPages.descriptionLabel')), maxLines: 2),
+            TextField(controller: cost, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('epiEpcPages.coutOptionnelLabel'))),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(nextMaintenanceAt == null ? 'Prochaine échéance (optionnel)' : 'Échéance : ${nextMaintenanceAt!.day}/${nextMaintenanceAt!.month}/${nextMaintenanceAt!.year}'),
+              title: Text(nextMaintenanceAt == null ? t('epiEpcPages.prochaineEcheanceLabel') : t('epiEpcPages.echeanceValeur', {'jour': '${nextMaintenanceAt!.day}', 'mois': '${nextMaintenanceAt!.month}', 'annee': '${nextMaintenanceAt!.year}'})),
               trailing: const Icon(Icons.edit_calendar),
               onTap: () async {
                 final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035));
@@ -777,10 +778,10 @@ class _EpcMaintenanceTabState extends State<EpcMaintenanceTab> {
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: saving ? null : () async {
-              if (epcId == null) { setD(() => formError = 'Sélectionnez un équipement'); return; }
+              if (epcId == null) { setD(() => formError = t('epiEpcPages.selectionnezEquipement')); return; }
               setD(() => saving = true);
               try {
                 await api.post('/epi/maintenance', {
@@ -792,7 +793,7 @@ class _EpcMaintenanceTabState extends State<EpcMaintenanceTab> {
                 load();
               } catch (e) { setD(() { saving = false; formError = '$e'; }); }
             },
-            child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
+            child: Text(saving ? t('epiEpcPages.enregistrementEnCours') : t('epiEpcPages.enregistrerBtn')),
           ),
         ],
       )),
@@ -808,14 +809,14 @@ class _EpcMaintenanceTabState extends State<EpcMaintenanceTab> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: _openForm, icon: const Icon(Icons.add, size: 16), label: const Text('Nouvelle intervention'))),
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: _openForm, icon: const Icon(Icons.add, size: 16), label: Text(t('epiEpcPages.nouvelleInterventionBtn')))),
           const SizedBox(height: 8),
-          if (items.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text('Aucune intervention enregistrée', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(t('epiEpcPages.aucuneIntervention'), style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((m) => Card(child: ListTile(
                 leading: Icon(Icons.build, color: m['type'] == 'CORRECTIVE' ? QhseColors.red : QhseColors.blue),
                 title: Text(m['epc']?['name'] ?? '—'),
-                subtitle: Text('${m['type'] == 'PREVENTIVE' ? 'Préventive' : 'Corrective'} • ${(m['date'] ?? '').toString().substring(0, 10)}${m['description'] != null && m['description'] != '' ? ' • ${m['description']}' : ''}'),
-                trailing: m['nextMaintenanceAt'] != null ? Text('Échéance\n${(m['nextMaintenanceAt']).toString().substring(0, 10)}', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)) : null,
+                subtitle: Text('${m['type'] == 'PREVENTIVE' ? t('epiEpcPages.typePreventive') : t('epiEpcPages.typeCorrective')} • ${(m['date'] ?? '').toString().substring(0, 10)}${m['description'] != null && m['description'] != '' ? ' • ${m['description']}' : ''}'),
+                trailing: m['nextMaintenanceAt'] != null ? Text(t('epiEpcPages.echeanceLabel', {'date': (m['nextMaintenanceAt']).toString().substring(0, 10)}), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)) : null,
               ))),
         ],
       ),
@@ -859,24 +860,24 @@ class _MatrixTabState extends State<MatrixTab> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(record == null ? 'Nouvelle ligne — Poste/Risque/Protection' : 'Modifier la ligne'),
+        title: Text(record == null ? t('epiEpcPages.nouvelleLigneMatriceTitre') : t('epiEpcPages.modifierLigneTitre')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: jobTitle, decoration: const InputDecoration(labelText: 'Poste')),
-            TextField(controller: hazard, decoration: const InputDecoration(labelText: 'Danger')),
-            TextField(controller: riskDescription, decoration: const InputDecoration(labelText: 'Risque')),
-            TextField(controller: preventionMeasure, decoration: const InputDecoration(labelText: 'Mesure de prévention')),
+            TextField(controller: jobTitle, decoration: InputDecoration(labelText: t('epiEpcPages.posteLabel'))),
+            TextField(controller: hazard, decoration: InputDecoration(labelText: t('epiEpcPages.dangerLabel'))),
+            TextField(controller: riskDescription, decoration: InputDecoration(labelText: t('epiEpcPages.risqueLabel'))),
+            TextField(controller: preventionMeasure, decoration: InputDecoration(labelText: t('epiEpcPages.mesurePreventionLabel'))),
             DropdownButtonFormField<String>(
               value: epiId, isExpanded: true,
               items: epis.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text(e['name']))).toList(),
               onChanged: (v) => setD(() => epiId = v),
-              decoration: const InputDecoration(labelText: 'EPI associé'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.epiAssocieLabel')),
             ),
             DropdownButtonFormField<String>(
               value: epcId, isExpanded: true,
               items: epcs.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text(e['name']))).toList(),
               onChanged: (v) => setD(() => epcId = v),
-              decoration: const InputDecoration(labelText: 'EPC associé'),
+              decoration: InputDecoration(labelText: t('epiEpcPages.epcAssocieLabel')),
             ),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
@@ -887,9 +888,9 @@ class _MatrixTabState extends State<MatrixTab> {
               try { await api.delete('/epi/job-risk-protection/${record['id']}'); if (context.mounted) Navigator.pop(c); load(); }
               catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+            child: Text(t('epiEpcPages.supprimerBtn'), style: const TextStyle(color: QhseColors.red)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: () async {
               final payload = {'jobTitle': jobTitle.text, 'hazard': hazard.text, 'riskDescription': riskDescription.text, 'preventionMeasure': preventionMeasure.text, 'epiId': epiId, 'epcId': epcId};
@@ -900,7 +901,7 @@ class _MatrixTabState extends State<MatrixTab> {
                 load();
               } catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Enregistrer'),
+            child: Text(t('epiEpcPages.enregistrerBtn')),
           ),
         ],
       )),
@@ -916,9 +917,9 @@ class _MatrixTabState extends State<MatrixTab> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: const Text('Ligne'))),
+          Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _openForm(), icon: const Icon(Icons.add, size: 16), label: Text(t('epiEpcPages.ligneBtn')))),
           const SizedBox(height: 8),
-          if (items.isEmpty) Padding(padding: EdgeInsets.all(16), child: Text('Aucune ligne enregistrée', style: TextStyle(color: QhseColors.textSecondary))),
+          if (items.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(t('epiEpcPages.aucuneLigne'), style: TextStyle(color: QhseColors.textSecondary))),
           ...items.map((m) => Card(child: ListTile(
                 title: Text('${m['jobTitle']} — ${m['hazard']}'),
                 subtitle: Text('${m['riskDescription'] ?? ''} • EPI: ${m['epi']?['name'] ?? '—'} • EPC: ${m['epc']?['name'] ?? '—'}'),
@@ -1059,7 +1060,7 @@ class _AttributionTabState extends State<AttributionTab> {
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('epiEpcPages.annulerBtn'))),
           FilledButton(
             onPressed: saving ? null : () async {
               if (employeeId == null || epiId == null) { setD(() => formError = 'Employé et EPI obligatoires'); return; }
