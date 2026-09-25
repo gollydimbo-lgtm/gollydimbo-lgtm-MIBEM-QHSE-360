@@ -354,10 +354,10 @@ class _FormationPageState extends State<FormationPage> {
           Text(t('formation.evaluerAFroidTitle'), style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           const SizedBox(height: 8),
           if (formationsAEvaluer.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Center(child: Text(t('formation.aucuneFormationAEvaluer')))),
-          ...formationsAEvaluer.map((t) => Card(child: ListTile(
-                title: Text('${t['code']} — ${t['title']}'),
-                subtitle: Text(t('formation.realiseeLeDelai', {'date': t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']).toIso8601String().substring(0, 10) : '—', 'jours': '${t['delaiJours']}'})),
-                trailing: ElevatedButton(onPressed: () => _evaluerEfficacite(Map.from(t)), child: Text(t('formation.evaluer'))),
+          ...formationsAEvaluer.map((f) => Card(child: ListTile(
+                title: Text('${f['code']} — ${f['title']}'),
+                subtitle: Text(t('formation.realiseeLeDelai', {'date': f['scheduledAt'] != null ? DateTime.parse(f['scheduledAt']).toIso8601String().substring(0, 10) : '—', 'jours': '${f['delaiJours']}'})),
+                trailing: ElevatedButton(onPressed: () => _evaluerEfficacite(Map.from(f)), child: Text(t('formation.evaluer'))),
               ))),
           const SizedBox(height: 8),
           Padding(

@@ -604,11 +604,11 @@ class _ProcessusHomeState extends State<ProcessusHome> {
                         ),
                       ]),
                       const SizedBox(height: 6),
-                      ...kProcessTypeKeys.keys.expand((t) {
-                        final group = items.where((p) => (p['type'] ?? 'OPERATIONNEL') == t).toList();
+                      ...kProcessTypeKeys.keys.expand((procType) {
+                        final group = items.where((p) => (p['type'] ?? 'OPERATIONNEL') == procType).toList();
                         if (group.isEmpty) return <Widget>[];
                         return [
-                          Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(kProcessTypeLabel(t), style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textSecondary))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(kProcessTypeLabel(procType), style: TextStyle(fontWeight: FontWeight.bold, color: QhseColors.textSecondary))),
                           ...group.map((p) => Card(
                                 color: linkSourceId == p['id'] ? QhseColors.blue.withOpacity(0.15) : null,
                                 child: ListTile(

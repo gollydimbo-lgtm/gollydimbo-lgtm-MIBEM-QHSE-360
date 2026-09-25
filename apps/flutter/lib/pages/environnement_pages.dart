@@ -151,13 +151,13 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
         if (tendances.isEmpty)
           Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('environnement.aucuneDonneeTendance'), style: TextStyle(color: QhseColors.textSecondary)))
         else
-          ...tendances.map((t) {
-            final points = List.from(t['points'] ?? []);
+          ...tendances.map((tendance) {
+            final points = List.from(tendance['points'] ?? []);
             final spots = [for (int i = 0; i < points.length; i++) FlSpot(i.toDouble(), ((points[i]['valeur'] ?? 0) as num).toDouble())];
             return Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${t['categorie']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: QhseColors.textSecondary)),
+                Text('${tendance['categorie']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: QhseColors.textSecondary)),
                 const SizedBox(height: 6),
                 SizedBox(
                   height: 140,

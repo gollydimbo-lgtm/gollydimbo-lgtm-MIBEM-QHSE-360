@@ -1026,13 +1026,13 @@ class _ObjectifLibraryTabState extends State<ObjectifLibraryTab> {
           ),
           for (final entry in byFamille.entries) ...[
             objSectionTitle('${objFamilleValues.contains(entry.key) ? objFamilleLabel(entry.key) : entry.key} (${entry.value.length})'),
-            ...entry.value.map((t) => Card(
+            ...entry.value.map((obj) => Card(
                   child: ListTile(
-                    title: Text(t['titre'] ?? t['libelle'] ?? '—'),
-                    subtitle: Text(t['description'] ?? t['objectif'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                    title: Text(obj['titre'] ?? obj['libelle'] ?? '—'),
+                    subtitle: Text(obj['description'] ?? obj['objectif'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
                     trailing: FilledButton(
                       onPressed: () async {
-                        final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => ObjectifFormPage(record: Map<String, dynamic>.from(t)..remove('id'))));
+                        final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => ObjectifFormPage(record: Map<String, dynamic>.from(obj)..remove('id'))));
                         if (ok == true && context.mounted) Navigator.pop(context, true);
                       },
                       child: Text(t('objectifsQhse.library.utiliser')),
