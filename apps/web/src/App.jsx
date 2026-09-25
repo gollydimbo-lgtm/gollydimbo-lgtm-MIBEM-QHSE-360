@@ -13857,6 +13857,7 @@ function exportSynthesisKpiExcel(dash) {
 
 function FormationPage() {
   const C = useTheme();
+  const { t } = useI18n();
   const dashQ = useCollection('/business/formation-dashboard');
   const trainingsQ = useCollection('/business/trainings');
   const habilitationsQ = useCollection('/business/habilitations');
@@ -13910,10 +13911,10 @@ function FormationPage() {
     catch (err) { alert(err.message); }
   }
   const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const trainingsFiltered = trainings.filter((t) => {
-    if (typeFilter !== 'TOUS' && t.type !== typeFilter) return false;
-    if (employeeFilter && !(t.participantsList || []).some((p) => p.employeeId === employeeFilter)) return false;
-    if (search.trim() && !norm([t.code, t.title, t.domaine, t.trainer].join(' ')).includes(norm(search))) return false;
+  const trainingsFiltered = trainings.filter((tr) => {
+    if (typeFilter !== 'TOUS' && tr.type !== typeFilter) return false;
+    if (employeeFilter && !(tr.participantsList || []).some((p) => p.employeeId === employeeFilter)) return false;
+    if (search.trim() && !norm([tr.code, tr.title, tr.domaine, tr.trainer].join(' ')).includes(norm(search))) return false;
     return true;
   });
   const habilitationsFiltered = habilitations.filter((h) => !employeeFilter || h.employeeId === employeeFilter);
@@ -13921,7 +13922,7 @@ function FormationPage() {
   // côté client à partir des données déjà chargées (même choix que les
   // exports : pas de nouvel endpoint dédié).
   const calendarEvents = [
-    ...trainings.filter((t) => t.status !== 'ANNULEE' && t.status !== 'CLOTUREE').map((t) => ({ date: new Date(t.scheduledAt), label: `${TRAINING_TYPE_LABELS[t.type] || t.type} — ${t.title}`, kind: 'formation' })),
+    ...trainings.filter((tr) => tr.status !== 'ANNULEE' && tr.status !== 'CLOTUREE').map((tr) => ({ date: new Date(tr.scheduledAt), label: `${TRAINING_TYPE_LABELS[tr.type] || tr.type} — ${tr.title}`, kind: 'formation' })),
     ...habilitations.filter((h) => h.dateExpiration).map((h) => ({ date: new Date(h.dateExpiration), label: `Expiration habilitation — ${h.intitule} (${h.employee.firstName} ${h.employee.lastName})`, kind: 'habilitation' })),
   ].sort((a, b) => a.date - b.date);
   const calendarByMonth = {};
@@ -13942,37 +13943,37 @@ function FormationPage() {
       <div className="flex items-center justify-between">
         <LiveBadge />
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setShowFormationTrainingForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Formation / Induction</button>
-          <button onClick={() => setShowHabForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>+ Habilitation</button>
-          <button onClick={() => setShowCompetenceQuick(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>+ Compétence</button>
-          <button onClick={() => setShowCompForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>+ Évaluation matrice</button>
-          <button onClick={() => exportFormationExcel(trainings)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Export Excel</button>
-          <button onClick={() => exportFormationCsv(trainings)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Export CSV</button>
+          <button onClick={() => setShowFormationTrainingForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('formation.btnFormationInduction')}</button>
+          <button onClick={() => setShowHabForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{t('formation.btnHabilitation')}</button>
+          <button onClick={() => setShowCompetenceQuick(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('formation.btnCompetence')}</button>
+          <button onClick={() => setShowCompForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('formation.btnEvaluationMatrice')}</button>
+          <button onClick={() => exportFormationExcel(trainings)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('formation.exporterExcel')}</button>
+          <button onClick={() => exportFormationCsv(trainings)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('formation.exporterCsv')}</button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="Formations prévues" value={dash.plan.prevues} objectif={`${dash.plan.realisees} réalisée(s)`} color={C.blue} icon={GraduationCap} />
-        <KpiCard label="Taux de réalisation" value={dash.plan.tauxRealisation != null ? `${dash.plan.tauxRealisation}%` : '—'} objectif="plan de formation" color={C.green} icon={CheckCircle2} />
-        <KpiCard label="En retard" value={dash.plan.enRetard} color={dash.plan.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-        <KpiCard label="Obligatoires non réalisées" value={dash.plan.obligatoiresNonRealisees} color={dash.plan.obligatoiresNonRealisees > 0 ? C.red : C.green} icon={FileWarning} />
-        <KpiCard label="Taux de participation" value={dash.participation.tauxParticipation != null ? `${dash.participation.tauxParticipation}%` : '—'} objectif={`${dash.participation.presents}/${dash.participation.attendus}`} color={C.blue} icon={Users} />
-        <KpiCard label="Taux de réussite" value={dash.evaluation.tauxReussite != null ? `${dash.evaluation.tauxReussite}%` : '—'} objectif={dash.evaluation.evalues ? `${dash.evaluation.evalues} évalué(s)` : 'aucune évaluation'} color={C.green} icon={Award} />
+        <KpiCard label={t('formation.kpiFormationsPrevues')} value={dash.plan.prevues} objectif={t('formation.objRealisees', { count: dash.plan.realisees })} color={C.blue} icon={GraduationCap} />
+        <KpiCard label={t('formation.kpiTauxRealisation')} value={dash.plan.tauxRealisation != null ? `${dash.plan.tauxRealisation}%` : '—'} objectif={t('formation.objPlanFormation')} color={C.green} icon={CheckCircle2} />
+        <KpiCard label={t('formation.kpiEnRetard')} value={dash.plan.enRetard} color={dash.plan.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+        <KpiCard label={t('formation.kpiObligatoiresNonRealisees')} value={dash.plan.obligatoiresNonRealisees} color={dash.plan.obligatoiresNonRealisees > 0 ? C.red : C.green} icon={FileWarning} />
+        <KpiCard label={t('formation.kpiTauxParticipation')} value={dash.participation.tauxParticipation != null ? `${dash.participation.tauxParticipation}%` : '—'} objectif={`${dash.participation.presents}/${dash.participation.attendus}`} color={C.blue} icon={Users} />
+        <KpiCard label={t('formation.kpiTauxReussite')} value={dash.evaluation.tauxReussite != null ? `${dash.evaluation.tauxReussite}%` : '—'} objectif={dash.evaluation.evalues ? t('formation.objEvalues', { count: dash.evaluation.evalues }) : t('formation.objAucuneEvaluation')} color={C.green} icon={Award} />
       </div>
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="Habilitations valides" value={dash.habilitations.valides} objectif={`${dash.habilitations.total} au total`} color={C.green} icon={ShieldCheck} />
-        <KpiCard label="Expirant / à renouveler" value={dash.habilitations.expirantBientot} color={dash.habilitations.expirantBientot > 0 ? C.amber : C.green} icon={AlertTriangle} />
-        <KpiCard label="Expirées" value={dash.habilitations.expirees} color={dash.habilitations.expirees > 0 ? C.red : C.green} icon={FileWarning} />
-        <KpiCard label="Budget consommé" value={dash.budget.tauxConsommation != null ? `${dash.budget.tauxConsommation}%` : '—'} objectif={dash.budget.prevu ? `${dash.budget.consomme.toLocaleString('fr-FR')} / ${dash.budget.prevu.toLocaleString('fr-FR')} FCFA` : 'aucun budget prévu'} color={C.blue} icon={Wrench} />
+        <KpiCard label={t('formation.kpiHabilitationsValides')} value={dash.habilitations.valides} objectif={t('formation.objAuTotal', { count: dash.habilitations.total })} color={C.green} icon={ShieldCheck} />
+        <KpiCard label={t('formation.kpiExpirantARenouveler')} value={dash.habilitations.expirantBientot} color={dash.habilitations.expirantBientot > 0 ? C.amber : C.green} icon={AlertTriangle} />
+        <KpiCard label={t('formation.kpiExpirees')} value={dash.habilitations.expirees} color={dash.habilitations.expirees > 0 ? C.red : C.green} icon={FileWarning} />
+        <KpiCard label={t('formation.kpiBudgetConsomme')} value={dash.budget.tauxConsommation != null ? `${dash.budget.tauxConsommation}%` : '—'} objectif={dash.budget.prevu ? t('formation.objBudgetConsomme', { consomme: dash.budget.consomme.toLocaleString('fr-FR'), prevu: dash.budget.prevu.toLocaleString('fr-FR') }) : t('formation.objAucunBudgetPrevu')} color={C.blue} icon={Wrench} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {[['plan', 'Plan de formation'], ['habilitations', 'Habilitations & certifications'], ['competences', 'Compétences & besoins'], ['efficacite', 'Efficacité à froid'], ['pilotage', 'Budget & pilotage']].map(([id, label]) => (
+        {[['plan', t('formation.tabPlan')], ['habilitations', t('formation.tabHabilitations')], ['competences', t('formation.tabCompetences')], ['efficacite', t('formation.tabEfficacite')], ['pilotage', t('formation.tabPilotage')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
         ))}
         <div className="flex-1" />
         <select value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)}>
-          <option value="">Tous les collaborateurs</option>
+          <option value="">{t('formation.tousLesCollaborateurs')}</option>
           {employeesQ.data.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
         </select>
       </div>
@@ -13980,42 +13981,42 @@ function FormationPage() {
       {tab === 'plan' && (
         <>
           <div className="flex flex-wrap gap-2">
-            {[['TOUS', 'Tous'], ['INDUCTION', 'Induction'], ['FORMATION', 'Formation']].map(([id, label]) => (
+            {[['TOUS', t('formation.typeTous')], ['INDUCTION', t('formation.typeInduction')], ['FORMATION', t('formation.typeFormation')]].map(([id, label]) => (
               <button key={id} onClick={() => setTypeFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: typeFilter === id ? C.blue : C.cardAlt, color: typeFilter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
             ))}
           </div>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une formation (code, intitulé, domaine, formateur...)" className="w-full max-w-md px-3 py-2 rounded-lg text-xs outline-none" style={inputStyle(C)} />
-          <Panel title="Plan de formation" subtitle={`${trainingsFiltered.length} session(s)`}>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('formation.rechercherFormationPlaceholder')} className="w-full max-w-md px-3 py-2 rounded-lg text-xs outline-none" style={inputStyle(C)} />
+          <Panel title={t('formation.planFormationTitle')} subtitle={t('formation.sessionCount', { count: trainingsFiltered.length })}>
             {trainingsFiltered.length ? (
-              <DataTable columns={['Code', 'Intitulé', 'Type', 'Domaine', 'Date prévue', 'Statut', 'Obligatoire']}
-                rows={trainingsFiltered.map((t) => [
-                  t.code, t.title, TRAINING_TYPE_LABELS[t.type] || t.type, t.domaine || '—',
-                  new Date(t.scheduledAt).toLocaleDateString('fr-FR'),
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${trainingStatusColor(C, t.status, t.scheduledAt)}22`, color: trainingStatusColor(C, t.status, t.scheduledAt) }}>{trainingStatusLabel(t)}</span>,
-                  t.obligatoire ? <span style={{ color: C.red }}>Oui</span> : 'Non',
+              <DataTable columns={[t('formation.colCode'), t('formation.colIntitule'), t('formation.colType'), t('formation.colDomaine'), t('formation.colDatePrevue'), t('formation.colStatut'), t('formation.colObligatoire')]}
+                rows={trainingsFiltered.map((tr) => [
+                  tr.code, tr.title, TRAINING_TYPE_LABELS[tr.type] || tr.type, tr.domaine || '—',
+                  new Date(tr.scheduledAt).toLocaleDateString('fr-FR'),
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${trainingStatusColor(C, tr.status, tr.scheduledAt)}22`, color: trainingStatusColor(C, tr.status, tr.scheduledAt) }}>{trainingStatusLabel(tr)}</span>,
+                  tr.obligatoire ? <span style={{ color: C.red }}>{t('formation.oui')}</span> : t('formation.non'),
                 ])} onRowClick={(i) => setDetailId(trainingsFiltered[i].id)} />
-            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune formation pour ce filtre</p>}
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('formation.aucuneFormationFiltre')}</p>}
           </Panel>
         </>
       )}
 
       {tab === 'habilitations' && (
-        <Panel title="Registre des habilitations & certifications" subtitle={`${habilitationsFiltered.length} habilitation(s)`}>
+        <Panel title={t('formation.registreHabilitationsTitle')} subtitle={t('formation.habilitationCount', { count: habilitationsFiltered.length })}>
           {habilitationsFiltered.length ? (
-            <DataTable columns={['Code', 'Collaborateur', 'Intitulé', 'Catégorie', 'Expiration', 'Statut']}
+            <DataTable columns={[t('formation.colCode'), t('formation.colCollaborateur'), t('formation.colIntitule'), t('formation.colCategorie'), t('formation.colExpiration'), t('formation.colStatut')]}
               rows={habilitationsFiltered.map((h) => [
                 h.code, `${h.employee.firstName} ${h.employee.lastName}`, h.intitule, h.category?.label || '—',
                 h.dateExpiration ? new Date(h.dateExpiration).toLocaleDateString('fr-FR') : '—',
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${habilitationStatutColor(C, h.statut)}22`, color: habilitationStatutColor(C, h.statut) }}>{HABILITATION_STATUT_LABELS[h.statut] || h.statut}</span>,
               ])} onRowClick={(i) => setEditingHab(habilitationsFiltered[i])} />
-          ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune habilitation pour ce filtre</p>}
+          ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('formation.aucuneHabilitationFiltre')}</p>}
         </Panel>
       )}
 
       {tab === 'competences' && (
         <div className="space-y-4">
-          <Panel title="Besoins de formation détectés" subtitle={`${besoins.filter((b) => b.statut === 'PROPOSE').length} en attente de validation`} right={
-            <button onClick={lancerDetection} disabled={detecting} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{detecting ? 'Analyse…' : 'Lancer la détection'}</button>
+          <Panel title={t('formation.besoinsDetectesTitle')} subtitle={t('formation.enAttenteValidation', { count: besoins.filter((b) => b.statut === 'PROPOSE').length })} right={
+            <button onClick={lancerDetection} disabled={detecting} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{detecting ? t('formation.analyseEnCours') : t('formation.lancerLaDetection')}</button>
           }>
             {besoins.length ? (
               <div className="space-y-2">
@@ -14031,12 +14032,12 @@ function FormationPage() {
                     </div>
                     {b.statut === 'PROPOSE' && (
                       <div className="flex gap-2">
-                        <button onClick={() => traiterBesoin(b.id, 'VALIDE')} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Valider</button>
-                        <button onClick={() => traiterBesoin(b.id, 'REJETE')} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.red, border: `1px solid ${C.border}` }}>Rejeter</button>
+                        <button onClick={() => traiterBesoin(b.id, 'VALIDE')} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('formation.valider')}</button>
+                        <button onClick={() => traiterBesoin(b.id, 'REJETE')} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.red, border: `1px solid ${C.border}` }}>{t('formation.rejeter')}</button>
                       </div>
                     )}
                     {b.statut === 'VALIDE' && (
-                      <button onClick={() => transformerBesoin(b)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Transformer en formation</button>
+                      <button onClick={() => transformerBesoin(b)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{t('formation.transformerEnFormation')}</button>
                     )}
                     {b.statut === 'TRANSFORME' && b.training && (
                       <span className="text-xs px-2 py-1 rounded-lg" style={{ color: C.textMuted }}>→ {b.training.code}</span>
@@ -14044,10 +14045,10 @@ function FormationPage() {
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun besoin détecté pour l'instant — lancez une détection.</p>}
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('formation.aucunBesoinDetecte')}</p>}
           </Panel>
 
-          <Panel title="Matrice des compétences" subtitle={matrice.tauxCouverture != null ? `Couverture ${matrice.tauxCouverture}% · ${matrice.competencesCritiquesInsuffisantes} écart(s) critique(s)` : 'Aucune évaluation enregistrée'}>
+          <Panel title={t('formation.matriceCompetencesTitle')} subtitle={matrice.tauxCouverture != null ? t('formation.couvertureSubtitle', { pct: matrice.tauxCouverture, count: matrice.competencesCritiquesInsuffisantes }) : t('formation.aucuneEvaluationEnregistree')}>
             {matrice.collaborateurs.length ? (
               <div className="space-y-3">
                 {matrice.collaborateurs.map((c) => (
@@ -14056,86 +14057,86 @@ function FormationPage() {
                     <div className="flex flex-wrap gap-2">
                       {c.lignes.map((l) => (
                         <span key={l.id} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1" style={{ backgroundColor: l.critique ? `${C.red}22` : C.card, color: l.critique ? C.red : C.text, border: `1px solid ${C.border}` }}>
-                          {l.competence.label} : {l.niveauActuel?.label || 'non évalué'} → {l.niveauRequis?.label || '—'}
+                          {l.competence.label} : {l.niveauActuel?.label || t('formation.nonEvalue')} → {l.niveauRequis?.label || '—'}
                         </span>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne de matrice — utilisez "+ Évaluation matrice"</p>}
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('formation.aucuneLigneMatrice')}</p>}
           </Panel>
         </div>
       )}
 
       {tab === 'efficacite' && (
         <div className="space-y-4">
-          <Panel title="Formations à évaluer à froid (délai J+30/60/90 atteint)" subtitle={`${formationsAEvaluer.length} en attente d'évaluation`}>
+          <Panel title={t('formation.formationsAEvaluerTitle')} subtitle={t('formation.enAttenteEvaluation', { count: formationsAEvaluer.length })}>
             {formationsAEvaluer.length ? (
               <div className="space-y-2">
-                {formationsAEvaluer.map((t) => (
-                  <div key={t.id} className="flex flex-wrap items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
+                {formationsAEvaluer.map((fa) => (
+                  <div key={fa.id} className="flex flex-wrap items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
                     <div className="flex-1 min-w-[220px]">
-                      <p className="text-sm font-medium" style={{ color: C.text }}>{t.code} — {t.title}</p>
-                      <p className="text-xs" style={{ color: C.textMuted }}>Réalisée le {new Date(t.scheduledAt).toLocaleDateString('fr-FR')} · délai d'évaluation : {t.delaiJours} jours</p>
+                      <p className="text-sm font-medium" style={{ color: C.text }}>{fa.code} — {fa.title}</p>
+                      <p className="text-xs" style={{ color: C.textMuted }}>{t('formation.realiseeLe', { date: new Date(fa.scheduledAt).toLocaleDateString('fr-FR'), days: fa.delaiJours })}</p>
                     </div>
-                    <button onClick={() => setEvalTrainingId(t.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Évaluer</button>
+                    <button onClick={() => setEvalTrainingId(fa.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{t('formation.evaluer')}</button>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune formation en attente d'évaluation d'efficacité</p>}
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('formation.aucuneFormationEnAttenteEval')}</p>}
           </Panel>
 
-          <Panel title="Historique des évaluations d'efficacité" subtitle={`${efficaciteEvaluations.length} évaluation(s)`}>
+          <Panel title={t('formation.historiqueEvaluationsTitle')} subtitle={t('formation.evaluationCount', { count: efficaciteEvaluations.length })}>
             {efficaciteEvaluations.length ? (
-              <DataTable columns={['Formation', 'Collaborateur', 'Date', 'Délai (j)', 'Efficacité', 'Commentaire']}
+              <DataTable columns={[t('formation.colFormation'), t('formation.colCollaborateur'), t('formation.colDate'), t('formation.colDelaiJours'), t('formation.colEfficacite'), t('formation.colCommentaire')]}
                 rows={efficaciteEvaluations.map((ev) => [
                   ev.training ? `${ev.training.code} — ${ev.training.title}` : '—',
-                  ev.employee ? `${ev.employee.firstName} ${ev.employee.lastName}` : 'Global',
+                  ev.employee ? `${ev.employee.firstName} ${ev.employee.lastName}` : t('formation.global'),
                   new Date(ev.dateEvaluation).toLocaleDateString('fr-FR'), ev.delaiJours,
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${efficaciteColor(C, ev.niveauEfficacite)}22`, color: efficaciteColor(C, ev.niveauEfficacite) }}>{EFFICACITE_LABELS[ev.niveauEfficacite] || ev.niveauEfficacite}</span>,
                   ev.commentaire || '—',
                 ])} />
-            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune évaluation enregistrée</p>}
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('formation.aucuneEvaluationEnregistree')}</p>}
           </Panel>
         </div>
       )}
 
       {tab === 'pilotage' && (
         <div className="space-y-4">
-          <Panel title="Accueil sécurité (induction)" subtitle="Indicateur approché : collaborateurs actifs ayant réalisé au moins une induction — faute de date d'embauche tracée dans l'application, l'ordre strict « avant la prise de poste » n'est pas garanti formellement.">
+          <Panel title={t('formation.accueilSecuriteTitle')} subtitle={t('formation.accueilSecuriteSubtitle')}>
             <div className="flex flex-wrap gap-3 mb-3">
-              <KpiCard label="Taux d'accueil sécurité" value={accueilSecurite.tauxAccueilSecurite != null ? `${accueilSecurite.tauxAccueilSecurite}%` : 'Données insuffisantes'} objectif={`${accueilSecurite.collaborateursCouverts}/${accueilSecurite.collaborateursActifs} collaborateurs`} color={accueilSecurite.tauxAccueilSecurite != null && accueilSecurite.tauxAccueilSecurite < 100 ? C.amber : C.green} icon={ShieldCheck} />
-              <KpiCard label="Non couverts" value={accueilSecurite.collaborateursNonCouverts.length} color={accueilSecurite.collaborateursNonCouverts.length > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label={t('formation.kpiTauxAccueilSecurite')} value={accueilSecurite.tauxAccueilSecurite != null ? `${accueilSecurite.tauxAccueilSecurite}%` : t('formation.donneesInsuffisantes')} objectif={t('formation.objCollaborateurs', { couverts: accueilSecurite.collaborateursCouverts, actifs: accueilSecurite.collaborateursActifs })} color={accueilSecurite.tauxAccueilSecurite != null && accueilSecurite.tauxAccueilSecurite < 100 ? C.amber : C.green} icon={ShieldCheck} />
+              <KpiCard label={t('formation.kpiNonCouverts')} value={accueilSecurite.collaborateursNonCouverts.length} color={accueilSecurite.collaborateursNonCouverts.length > 0 ? C.red : C.green} icon={AlertTriangle} />
             </div>
             {accueilSecurite.collaborateursNonCouverts.length > 0 && (
-              <DataTable columns={['Collaborateur', 'Service', 'Poste']}
+              <DataTable columns={[t('formation.colCollaborateur'), t('formation.colService'), t('formation.colPoste')]}
                 rows={accueilSecurite.collaborateursNonCouverts.map((e) => [`${e.firstName} ${e.lastName}`, e.department || '—', e.position || '—'])} />
             )}
           </Panel>
 
-          <Panel title="Budget formation" subtitle="Prévu vs consommé, par service et par type">
+          <Panel title={t('formation.budgetFormationTitle')} subtitle={t('formation.budgetFormationSubtitle')}>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Par service</p>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>{t('formation.parService')}</p>
                 {budgetDetail.parService.length ? (
-                  <DataTable columns={['Service', 'Prévu', 'Consommé']} rows={budgetDetail.parService.map((r) => [r.nom, r.prevu.toLocaleString('fr-FR'), r.consomme.toLocaleString('fr-FR')])} />
-                ) : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune donnée</p>}
+                  <DataTable columns={[t('formation.colService'), t('formation.colPrevu'), t('formation.colConsomme')]} rows={budgetDetail.parService.map((r) => [r.nom, r.prevu.toLocaleString('fr-FR'), r.consomme.toLocaleString('fr-FR')])} />
+                ) : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>{t('formation.aucuneDonnee')}</p>}
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>Par type</p>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>{t('formation.parType')}</p>
                 {budgetDetail.parType.length ? (
-                  <DataTable columns={['Type', 'Prévu', 'Consommé']} rows={budgetDetail.parType.map((r) => [r.nom, r.prevu.toLocaleString('fr-FR'), r.consomme.toLocaleString('fr-FR')])} />
-                ) : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>Aucune donnée</p>}
+                  <DataTable columns={[t('formation.colType'), t('formation.colPrevu'), t('formation.colConsomme')]} rows={budgetDetail.parType.map((r) => [r.nom, r.prevu.toLocaleString('fr-FR'), r.consomme.toLocaleString('fr-FR')])} />
+                ) : <p className="text-sm text-center py-3" style={{ color: C.textMuted }}>{t('formation.aucuneDonnee')}</p>}
               </div>
             </div>
           </Panel>
 
-          <Panel title="Calendrier formation & habilitations" subtitle="Vue regroupée par mois — formations à venir et échéances d'habilitation" right={
+          <Panel title={t('formation.calendrierTitle')} subtitle={t('formation.calendrierSubtitle')} right={
             <div className="flex gap-2">
-              <button onClick={() => exportHabilitationsExcel(habilitations)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Export habilitations (Excel)</button>
-              <button onClick={() => exportHabilitationsCsv(habilitations)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>CSV</button>
-              <button onClick={() => exportSynthesisKpiExcel(dash)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Synthèse KPI (Excel)</button>
+              <button onClick={() => exportHabilitationsExcel(habilitations)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('formation.exportHabilitationsExcel')}</button>
+              <button onClick={() => exportHabilitationsCsv(habilitations)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('formation.csv')}</button>
+              <button onClick={() => exportSynthesisKpiExcel(dash)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('formation.syntheseKpiExcel')}</button>
             </div>
           }>
             {Object.keys(calendarByMonth).length ? (
@@ -14147,7 +14148,7 @@ function FormationPage() {
                       {events.map((ev, i) => (
                         <div key={i} className="flex items-center gap-2 text-sm px-2 py-1 rounded" style={{ backgroundColor: C.cardAlt, color: C.text }}>
                           <span className="text-xs" style={{ color: C.textMuted }}>{ev.date.toLocaleDateString('fr-FR')}</span>
-                          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: ev.kind === 'formation' ? `${C.blue}22` : `${C.amber}22`, color: ev.kind === 'formation' ? C.blue : C.amber }}>{ev.kind === 'formation' ? 'Formation' : 'Habilitation'}</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: ev.kind === 'formation' ? `${C.blue}22` : `${C.amber}22`, color: ev.kind === 'formation' ? C.blue : C.amber }}>{ev.kind === 'formation' ? t('formation.kindFormation') : t('formation.kindHabilitation')}</span>
                           {ev.label}
                         </div>
                       ))}
@@ -14155,7 +14156,7 @@ function FormationPage() {
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun événement à venir</p>}
+            ) : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('formation.aucunEvenementAVenir')}</p>}
           </Panel>
         </div>
       )}
