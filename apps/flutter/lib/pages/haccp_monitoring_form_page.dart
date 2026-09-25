@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'capa_link_widget.dart';
 import 'haccp_page.dart';
 import 'non_conformities_page.dart';
@@ -71,8 +72,8 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
     final d = await showDatePicker(context: context, initialDate: dateRealisee, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 1)));
     if (d == null) return;
     if (!mounted) return;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(dateRealisee));
-    setState(() => dateRealisee = DateTime(d.year, d.month, d.day, t?.hour ?? dateRealisee.hour, t?.minute ?? dateRealisee.minute));
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(dateRealisee));
+    setState(() => dateRealisee = DateTime(d.year, d.month, d.day, time?.hour ?? dateRealisee.hour, time?.minute ?? dateRealisee.minute));
   }
 
   Map<String, dynamic> _basePayload(bool conforme) {
@@ -135,8 +136,8 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
       return _resultScaffold(
         color: QhseColors.amber,
         icon: Icons.cloud_off,
-        title: 'Relevé enregistré hors-ligne',
-        message: 'Pas de réseau : le relevé sera synchronisé automatiquement dès le retour de la connexion. S\'il s\'agit d\'un résultat non conforme, il sera transformé en non-conformité à la synchronisation.',
+        title: t('haccpMonitoringForm.releveEnregistreHorsLigne'),
+        message: t('haccpMonitoringForm.messageHorsLigne'),
         children: const [],
       );
     }
@@ -145,8 +146,8 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
     return _resultScaffold(
       color: conforme == true ? QhseColors.green : QhseColors.red,
       icon: conforme == true ? Icons.check_circle_outline : Icons.report_gmailerrorred,
-      title: conforme == true ? 'Relevé conforme enregistré' : 'Relevé non conforme enregistré',
-      message: conforme == true ? 'Aucune action supplémentaire n\'est requise.' : 'Une non-conformité a été créée automatiquement à partir de ce relevé.',
+      title: conforme == true ? t('haccpMonitoringForm.releveConformeEnregistre') : t('haccpMonitoringForm.releveNonConformeEnregistre'),
+      message: conforme == true ? t('haccpMonitoringForm.aucuneActionRequise') : t('haccpMonitoringForm.ncCreeeAutomatiquement'),
       children: [
         if (conforme == false && ncId != null) ...[
           const SizedBox(height: 16),
@@ -156,15 +157,15 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
             child: Row(children: [
               Icon(Icons.error_outline, color: QhseColors.red),
               const SizedBox(width: 8),
-              const Expanded(child: Text('Non-conformité créée automatiquement', style: TextStyle(fontWeight: FontWeight.bold))),
-              TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NonConformityDetailPage(ncId: ncId))), child: const Text('Voir')),
+              Expanded(child: Text(t('haccpMonitoringForm.ncCreeeAutomatiquementCourt'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NonConformityDetailPage(ncId: ncId))), child: Text(t('haccpMonitoringForm.voir'))),
             ]),
           ),
           const SizedBox(height: 16),
           CapaLinksSection(
             sourceModule: 'HACCP_CCP',
             sourceEntityId: r['id'],
-            prefill: {'title': 'Traiter l\'écart CCP — ${widget.ccp['reference'] ?? ''}'},
+            prefill: {'title': t('haccpMonitoringForm.traiterEcartCcp', {'reference': '${widget.ccp['reference'] ?? ''}'})},
           ),
         ],
       ],
@@ -172,7 +173,7 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
   }
 
   Widget _resultScaffold({required Color color, required IconData icon, required String title, required String message, required List<Widget> children}) => Scaffold(
-    appBar: AppBar(title: const Text('Relevé de surveillance')),
+    appBar: AppBar(title: Text(t('haccpMonitoringForm.releveDeSurveillance'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
       Container(
         padding: const EdgeInsets.all(14),
@@ -185,7 +186,7 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
       ),
       ...children,
       const SizedBox(height: 24),
-      SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Terminer'))),
+      SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t('haccpMonitoringForm.terminer')))),
     ]),
   );
 
@@ -194,7 +195,7 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
     if (savedRecord != null || savedOffline) return _confirmationView();
     final ccp = widget.ccp;
     return Scaffold(
-      appBar: AppBar(title: Text('Relevé — ${ccp['reference'] ?? ''}')),
+      appBar: AppBar(title: Text(t('haccpMonitoringForm.releveTitre', {'reference': '${ccp['reference'] ?? ''}'}))),
       body: loadingLists
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.all(16), children: [
@@ -207,8 +208,8 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
                     const SizedBox(width: 8),
                     Expanded(child: Text('${ccp['dangerMaitrise'] ?? ccp['parametre'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold))),
                   ]),
-                  if (ccp['limiteCritique'] != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Limite critique : ${ccp['limiteCritique']}', style: const TextStyle(fontSize: 13))),
-                  if (ccp['critereAcceptation'] != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('Critère d\'acceptation : ${ccp['critereAcceptation']}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
+                  if (ccp['limiteCritique'] != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(t('haccpMonitoringForm.limiteCritique', {'valeur': '${ccp['limiteCritique']}'}), style: const TextStyle(fontSize: 13))),
+                  if (ccp['critereAcceptation'] != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(t('haccpMonitoringForm.critereAcceptation', {'valeur': '${ccp['critereAcceptation']}'}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
                   if (ccp['methode'] != null || ccp['instrument'] != null)
                     Padding(padding: const EdgeInsets.only(top: 2), child: Text([ccp['methode'], ccp['instrument']].where((x) => x != null).join(' · '), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
                 ]),
@@ -216,44 +217,44 @@ class _HaccpMonitoringFormPageState extends State<HaccpMonitoringFormPage> {
               const SizedBox(height: 16),
               TextField(
                 controller: valeur, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                decoration: InputDecoration(labelText: 'Valeur mesurée', suffixText: ccp['unite']),
+                decoration: InputDecoration(labelText: t('haccpMonitoringForm.valeurMesuree'), suffixText: ccp['unite']),
               ),
               const SizedBox(height: 12),
-              TextField(controller: valeurTexte, decoration: const InputDecoration(labelText: 'Valeur (observation qualitative, si non numérique)')),
+              TextField(controller: valeurTexte, decoration: InputDecoration(labelText: t('haccpMonitoringForm.valeurQualitative'))),
               const SizedBox(height: 12),
-              TextField(controller: lotNumero, decoration: const InputDecoration(labelText: 'Numéro de lot / production')),
+              TextField(controller: lotNumero, decoration: InputDecoration(labelText: t('haccpMonitoringForm.numeroDeLot'))),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                isExpanded: true, decoration: const InputDecoration(labelText: 'Contrôleur'), value: responsableId,
+                isExpanded: true, decoration: InputDecoration(labelText: t('haccpMonitoringForm.controleur')), value: responsableId,
                 items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
                 onChanged: (v) => setState(() => responsableId = v),
               ),
               const SizedBox(height: 12),
-              OutlinedButton.icon(onPressed: pickDateRealisee, icon: const Icon(Icons.event, size: 16), label: Text('Réalisé le ${haccpFmtDateTime(dateRealisee.toIso8601String())}')),
+              OutlinedButton.icon(onPressed: pickDateRealisee, icon: const Icon(Icons.event, size: 16), label: Text(t('haccpMonitoringForm.realiseLe', {'date': haccpFmtDateTime(dateRealisee.toIso8601String())}))),
               const SizedBox(height: 12),
-              TextField(controller: signature, decoration: const InputDecoration(labelText: 'Signature (nom / initiales)')),
+              TextField(controller: signature, decoration: InputDecoration(labelText: t('haccpMonitoringForm.signature'))),
               const SizedBox(height: 12),
-              TextField(controller: commentaire, maxLines: 3, decoration: const InputDecoration(labelText: 'Commentaire')),
+              TextField(controller: commentaire, maxLines: 3, decoration: InputDecoration(labelText: t('haccpMonitoringForm.commentaire'))),
               const SizedBox(height: 24),
-              const Text('Résultat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(t('haccpMonitoringForm.resultat'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 8),
               Row(children: [
                 Expanded(child: FilledButton.icon(
                   onPressed: busy ? null : () => save(true),
                   style: FilledButton.styleFrom(backgroundColor: QhseColors.green),
                   icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Conforme'),
+                  label: Text(t('haccpMonitoringForm.conforme')),
                 )),
                 const SizedBox(width: 10),
                 Expanded(child: FilledButton.icon(
                   onPressed: busy ? null : () => save(false),
                   style: FilledButton.styleFrom(backgroundColor: QhseColors.red),
                   icon: const Icon(Icons.report_gmailerrorred),
-                  label: const Text('Non conforme'),
+                  label: Text(t('haccpMonitoringForm.nonConforme')),
                 )),
               ]),
               const SizedBox(height: 6),
-              Text('Un résultat non conforme crée automatiquement une non-conformité (en ligne). Hors-ligne, le relevé est mis en file d\'attente et sera transformé en non-conformité à la synchronisation.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+              Text(t('haccpMonitoringForm.noteConversionNc'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
               if (busy) const Padding(padding: EdgeInsets.only(top: 16), child: Center(child: CircularProgressIndicator())),
             ]),
     );
