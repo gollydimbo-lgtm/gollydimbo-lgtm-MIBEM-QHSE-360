@@ -7,35 +7,38 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 // ---------------------------------------------------------------------------
 // Constantes portées depuis apps/web (RAPPORT_DOMAINES, RAPPORT_FAMILLE_LABELS)
 // ---------------------------------------------------------------------------
 
-const List<Map<String, String>> rapportDomaines = [
-  {'value': 'QUALITE', 'label': 'Qualité'},
-  {'value': 'SECURITE', 'label': 'Sécurité'},
-  {'value': 'ENVIRONNEMENT', 'label': 'Environnement'},
+const List<String> rapportDomaineValues = ['QUALITE', 'SECURITE', 'ENVIRONNEMENT'];
+
+String rapportDomaineLabel(String v) => t('rapports.domaine.$v');
+
+const List<String> rapportFamilleValues = [
+  'NC',
+  'CAPA',
+  'AUDIT',
+  'RISQUE',
+  'INCIDENT',
+  'FORMATION',
+  'DECHET',
+  'CONSOMMATION',
+  'REGLEMENTAIRE',
 ];
 
-const Map<String, String> rapportFamilleLabels = {
-  'NC': 'Non-conformités',
-  'CAPA': 'Actions correctives/préventives',
-  'AUDIT': 'Audits',
-  'RISQUE': 'Risques',
-  'INCIDENT': 'Incidents/Accidents',
-  'FORMATION': 'Formations',
-  'DECHET': 'Déchets',
-  'CONSOMMATION': 'Consommations',
-  'REGLEMENTAIRE': 'Conformité réglementaire',
-};
+String rapportFamilleLabel(String famille) => rapportFamilleValues.contains(famille)
+    ? t('rapports.famille.$famille')
+    : famille;
 
-const Map<String, String> rapportStatutLabels = {
-  'BROUILLON': 'Brouillon',
-  'EN_REVUE': 'En revue',
-  'VALIDE': 'Validé',
-  'DISTRIBUE': 'Distribué',
-};
+const List<String> rapportStatutValues = ['BROUILLON', 'EN_REVUE', 'VALIDE', 'DISTRIBUE'];
+
+String rapportStatutLabel(String? statut) =>
+    statut != null && rapportStatutValues.contains(statut)
+        ? t('rapports.statut.$statut')
+        : (statut ?? '');
 
 Color rapportStatutColor(String? statut) {
   switch (statut) {
@@ -84,11 +87,11 @@ class RapportsPage extends StatelessWidget {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Rapports'),
-          bottom: const TabBar(tabs: [
-            Tab(text: 'Rapports QHSE'),
-            Tab(text: 'Export rapide'),
-            Tab(text: 'Identité entreprise'),
+          title: Text(t('rapports.appBarTitle')),
+          bottom: TabBar(tabs: [
+            Tab(text: t('rapports.tabQhse')),
+            Tab(text: t('rapports.tabExport')),
+            Tab(text: t('rapports.tabIdentity')),
           ]),
         ),
         body: const TabBarView(children: [
@@ -164,22 +167,22 @@ class _RapportsQhseTabState extends State<_RapportsQhseTab> {
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
     if (error != null) {
-      return Center(child: Text('Erreur : $error'));
+      return Center(child: Text(t('rapports.error', {'error': '$error'})));
     }
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: openCreation,
         icon: const Icon(Icons.add),
-        label: const Text('Nouveau rapport'),
+        label: Text(t('rapports.newReport')),
       ),
       body: RefreshIndicator(
         onRefresh: load,
         child: rapports.isEmpty
             ? ListView(
-                children: const [
+                children: [
                   Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: Text('Aucun rapport pour le moment.')),
+                    padding: const EdgeInsets.all(32),
+                    child: Center(child: Text(t('rapports.emptyState'))),
                   ),
                 ],
               )
@@ -192,13 +195,13 @@ class _RapportsQhseTabState extends State<_RapportsQhseTab> {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: ListTile(
-                      title: Text(r['titre']?.toString() ?? 'Rapport sans titre'),
+                      title: Text(r['titre']?.toString() ?? t('rapports.untitledReport')),
                       subtitle: Text(
                         '${r['mode'] ?? ''} · ${r['from'] ?? ''} → ${r['to'] ?? ''}',
                       ),
                       trailing: Chip(
                         label: Text(
-                          rapportStatutLabels[statut] ?? statut ?? '',
+                          rapportStatutLabel(statut),
                           style: const TextStyle(color: Colors.white, fontSize: 12),
                         ),
                         backgroundColor: rapportStatutColor(statut),
@@ -256,7 +259,7 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
 
   Future<void> create() async {
     if (titreCtrl.text.trim().isEmpty || from == null || to == null) {
-      setState(() => error = 'Titre, date de début et date de fin sont requis.');
+      setState(() => error = t('rapports.dialog.validationRequired'));
       return;
     }
     setState(() {
@@ -286,7 +289,7 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Nouveau rapport'),
+      title: Text(t('rapports.dialog.newReportTitle')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -294,7 +297,7 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
           children: [
             TextField(
               controller: titreCtrl,
-              decoration: const InputDecoration(labelText: 'Titre'),
+              decoration: InputDecoration(labelText: t('rapports.dialog.titreField')),
             ),
             const SizedBox(height: 12),
             Row(
@@ -303,7 +306,7 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
                   child: OutlinedButton(
                     onPressed: () => pickDate(true),
                     child: Text(from == null
-                        ? 'Date début'
+                        ? t('rapports.dialog.dateDebut')
                         : from!.toIso8601String().substring(0, 10)),
                   ),
                 ),
@@ -312,7 +315,7 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
                   child: OutlinedButton(
                     onPressed: () => pickDate(false),
                     child: Text(to == null
-                        ? 'Date fin'
+                        ? t('rapports.dialog.dateFin')
                         : to!.toIso8601String().substring(0, 10)),
                   ),
                 ),
@@ -321,11 +324,11 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: mode,
-              decoration: const InputDecoration(labelText: 'Mode'),
-              items: const [
-                DropdownMenuItem(value: 'COMPLET', child: Text('Complet')),
-                DropdownMenuItem(value: 'SYNTHESE', child: Text('Synthèse')),
-                DropdownMenuItem(value: 'THEMATIQUE', child: Text('Thématique')),
+              decoration: InputDecoration(labelText: t('rapports.dialog.mode')),
+              items: [
+                DropdownMenuItem(value: 'COMPLET', child: Text(t('rapports.dialog.modeComplet'))),
+                DropdownMenuItem(value: 'SYNTHESE', child: Text(t('rapports.dialog.modeSynthese'))),
+                DropdownMenuItem(value: 'THEMATIQUE', child: Text(t('rapports.dialog.modeThematique'))),
               ],
               onChanged: (v) => setState(() => mode = v ?? 'COMPLET'),
             ),
@@ -333,11 +336,11 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: domaineThematique,
-                decoration: const InputDecoration(labelText: 'Domaine'),
-                items: rapportDomaines
-                    .map((d) => DropdownMenuItem(
-                          value: d['value'],
-                          child: Text(d['label']!),
+                decoration: InputDecoration(labelText: t('rapports.dialog.domaine')),
+                items: rapportDomaineValues
+                    .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(rapportDomaineLabel(v)),
                         ))
                     .toList(),
                 onChanged: (v) => setState(() => domaineThematique = v),
@@ -346,11 +349,11 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: confidentialite,
-              decoration: const InputDecoration(labelText: 'Confidentialité'),
-              items: const [
-                DropdownMenuItem(value: 'PUBLIC', child: Text('Public')),
-                DropdownMenuItem(value: 'INTERNE', child: Text('Interne')),
-                DropdownMenuItem(value: 'CONFIDENTIEL', child: Text('Confidentiel')),
+              decoration: InputDecoration(labelText: t('rapports.dialog.confidentialite')),
+              items: [
+                DropdownMenuItem(value: 'PUBLIC', child: Text(t('rapports.dialog.confidentialitePublic'))),
+                DropdownMenuItem(value: 'INTERNE', child: Text(t('rapports.dialog.confidentialiteInterne'))),
+                DropdownMenuItem(value: 'CONFIDENTIEL', child: Text(t('rapports.dialog.confidentialiteConfidentiel'))),
               ],
               onChanged: (v) => setState(() => confidentialite = v ?? 'INTERNE'),
             ),
@@ -364,7 +367,7 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
       actions: [
         TextButton(
           onPressed: saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Annuler'),
+          child: Text(t('rapports.dialog.cancel')),
         ),
         FilledButton(
           onPressed: saving ? null : create,
@@ -374,7 +377,7 @@ class _RapportCreationDialogState extends State<_RapportCreationDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Créer'),
+              : Text(t('rapports.dialog.create')),
         ),
       ],
     );
@@ -458,13 +461,13 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Rapport enregistré.')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.detail.saved'))));
       }
       await load();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
       }
     } finally {
       setState(() => saving = false);
@@ -476,19 +479,19 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
     final nom = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Valider le rapport'),
+        title: Text(t('rapports.detail.validerTitle')),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Nom du validateur'),
+          decoration: InputDecoration(labelText: t('rapports.detail.validateurField')),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuler'),
+            child: Text(t('rapports.dialog.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(ctrl.text.trim()),
-            child: const Text('Valider'),
+            child: Text(t('rapports.detail.valider')),
           ),
         ],
       ),
@@ -500,7 +503,7 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
       }
     }
   }
@@ -511,28 +514,28 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Distribuer le rapport'),
+        title: Text(t('rapports.detail.distribuerTitle')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: emailCtrl,
-              decoration: const InputDecoration(labelText: 'Email(s) destinataire(s)'),
+              decoration: InputDecoration(labelText: t('rapports.detail.emailDestinataires')),
             ),
             TextField(
               controller: parCtrl,
-              decoration: const InputDecoration(labelText: 'Distribué par'),
+              decoration: InputDecoration(labelText: t('rapports.detail.distribuePar')),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Annuler'),
+            child: Text(t('rapports.dialog.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Distribuer'),
+            child: Text(t('rapports.detail.distribuer')),
           ),
         ],
       ),
@@ -547,7 +550,7 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
       }
     }
   }
@@ -563,7 +566,7 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
       }
     }
   }
@@ -580,7 +583,7 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
       }
     }
   }
@@ -590,14 +593,14 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
       await api.post('/business/rapports/${widget.rapportId}/archiver-ged', {});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rapport archivé dans la GED.')),
+          SnackBar(content: Text(t('rapports.detail.archivedInGed'))),
         );
       }
       await load();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
       }
     }
   }
@@ -613,7 +616,7 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            rapportFamilleLabels[famille] ?? famille,
+            rapportFamilleLabel(famille),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 6),
@@ -634,7 +637,7 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (error != null || rapport == null) {
-      return Scaffold(body: Center(child: Text('Erreur : $error')));
+      return Scaffold(body: Center(child: Text(t('rapports.error', {'error': '$error'}))));
     }
     final r = rapport!;
     final statut = r['statut']?.toString();
@@ -642,14 +645,14 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(r['titre']?.toString() ?? 'Rapport'),
+        title: Text(r['titre']?.toString() ?? t('rapports.detail.defaultTitle')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Center(
               child: Chip(
                 label: Text(
-                  rapportStatutLabels[statut] ?? statut ?? '',
+                  rapportStatutLabel(statut),
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
                 backgroundColor: rapportStatutColor(statut),
@@ -667,17 +670,17 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Période : ${r['from'] ?? ''} → ${r['to'] ?? ''}'),
-                  Text('Mode : ${r['mode'] ?? ''}'),
+                  Text(t('rapports.detail.periode', {'from': '${r['from'] ?? ''}', 'to': '${r['to'] ?? ''}'})),
+                  Text(t('rapports.detail.mode', {'mode': '${r['mode'] ?? ''}'})),
                   if (r['domaineThematique'] != null)
-                    Text('Domaine : ${r['domaineThematique']}'),
-                  Text('Confidentialité : ${r['confidentialite'] ?? ''}'),
+                    Text(t('rapports.detail.domaine', {'domaine': '${r['domaineThematique']}'})),
+                  Text(t('rapports.detail.confidentialite', {'confidentialite': '${r['confidentialite'] ?? ''}'})),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          const Text('Résumé exécutif', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('rapports.detail.resumeExecutif'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 6),
           TextField(
             controller: resumeCtrl,
@@ -686,16 +689,20 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
             decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
           const SizedBox(height: 20),
-          const Text('Sections thématiques', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(t('rapports.detail.sectionsThematiques'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
           ...sections.entries.map((e) => buildDomainSection(e.key, e.value)),
           if (r['journalDistribution'] is List &&
               (r['journalDistribution'] as List).isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('Journal de distribution', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(t('rapports.detail.journalDistribution'), style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             ...List.from(r['journalDistribution']).map((j) => Text(
-                  '${j['date'] ?? ''} · ${j['email'] ?? ''} · par ${j['distribuePar'] ?? ''}',
+                  t('rapports.detail.journalEntry', {
+                    'date': '${j['date'] ?? ''}',
+                    'email': '${j['email'] ?? ''}',
+                    'par': '${j['distribuePar'] ?? ''}',
+                  }),
                 )),
           ],
           const SizedBox(height: 24),
@@ -707,36 +714,36 @@ class _RapportDetailPageState extends State<RapportDetailPage> {
                 FilledButton.icon(
                   onPressed: saving ? null : save,
                   icon: const Icon(Icons.save),
-                  label: const Text('Enregistrer'),
+                  label: Text(t('rapports.detail.enregistrer')),
                 ),
               if (statut == 'BROUILLON' || statut == 'EN_REVUE')
                 OutlinedButton.icon(
                   onPressed: valider,
                   icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Valider'),
+                  label: Text(t('rapports.detail.valider')),
                 ),
               if (statut == 'VALIDE')
                 OutlinedButton.icon(
                   onPressed: distribuer,
                   icon: const Icon(Icons.send),
-                  label: const Text('Distribuer'),
+                  label: Text(t('rapports.detail.distribuer')),
                 ),
               OutlinedButton.icon(
                 onPressed: telechargerPdf,
                 icon: const Icon(Icons.picture_as_pdf),
-                label: const Text('Télécharger PDF'),
+                label: Text(t('rapports.detail.telechargerPdf')),
               ),
               if (statut == 'VALIDE' || statut == 'DISTRIBUE')
                 OutlinedButton.icon(
                   onPressed: archiverGed,
                   icon: const Icon(Icons.archive_outlined),
-                  label: const Text('Archiver GED'),
+                  label: Text(t('rapports.detail.archiverGed')),
                 ),
               if (verrouille)
                 OutlinedButton.icon(
                   onPressed: nouvelleVersion,
                   icon: const Icon(Icons.difference_outlined),
-                  label: const Text('Nouvelle version'),
+                  label: Text(t('rapports.detail.nouvelleVersion')),
                 ),
             ],
           ),
@@ -762,6 +769,8 @@ class _ReportSpec {
     required this.colonnes,
   });
 }
+
+String reportSpecLabel(String id) => t('rapports.export.spec.$id');
 
 const List<_ReportSpec> _reports = [
   _ReportSpec(
@@ -836,11 +845,11 @@ class _ExportRapideTabState extends State<_ExportRapideTab> {
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/${spec.id}_export.csv');
       await file.writeAsString(buffer.toString());
-      await Share.shareXFiles([XFile(file.path)], text: spec.titre);
+      await Share.shareXFiles([XFile(file.path)], text: reportSpecLabel(spec.id));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
       }
     } finally {
       if (mounted) {
@@ -863,8 +872,8 @@ class _ExportRapideTabState extends State<_ExportRapideTab> {
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: ListTile(
-            title: Text(spec.titre),
-            subtitle: const Text('Export CSV local'),
+            title: Text(reportSpecLabel(spec.id)),
+            subtitle: Text(t('rapports.export.csvLocal')),
             trailing: isLoading
                 ? const SizedBox(
                     width: 20,
@@ -966,7 +975,7 @@ class _CompanyIdentityTabState extends State<_CompanyIdentityTab> {
       final b64 = base64Encode(bytes);
       setState(() => logoUrl = 'data:image/$ext;base64,$b64');
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur lors de la sélection du logo : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('rapports.identity.logoError', {'error': '$e'}))));
     }
   }
 
@@ -986,11 +995,11 @@ class _CompanyIdentityTabState extends State<_CompanyIdentityTab> {
         if (logoUrl != null) 'logoUrl': logoUrl,
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Identité de l\'entreprise enregistrée.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('rapports.identity.saved'))));
       }
       await load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('rapports.error', {'error': '$e'}))));
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -1009,7 +1018,7 @@ class _CompanyIdentityTabState extends State<_CompanyIdentityTab> {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
-    if (error != null) return Center(child: Text('Erreur : $error'));
+    if (error != null) return Center(child: Text(t('rapports.error', {'error': '$error'})));
     ImageProvider? preview;
     if (logoUrl != null && logoUrl!.startsWith('data:')) {
       try {
@@ -1022,25 +1031,25 @@ class _CompanyIdentityTabState extends State<_CompanyIdentityTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text(
-          "Identité de l'entreprise",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        Text(
+          t('rapports.identity.title'),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
-        const Text(
-          "Réutilisée automatiquement sur la page de garde et l'en-tête des rapports",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+        Text(
+          t('rapports.identity.subtitle'),
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 16),
-        _field('Nom officiel', nomOfficielCtrl),
-        _field('Nom commercial', nomCommercialCtrl),
-        _field('Sigle', sigleCtrl),
-        _field('Slogan', sloganCtrl),
-        _field('Adresse', adresseCtrl),
-        _field('Pays', paysCtrl),
-        _field('Téléphone', telephoneCtrl),
-        _field('Email', emailCtrl),
-        _field('Site internet', siteInternetCtrl),
-        const Text('Logo', style: TextStyle(fontWeight: FontWeight.w600)),
+        _field(t('rapports.identity.nomOfficiel'), nomOfficielCtrl),
+        _field(t('rapports.identity.nomCommercial'), nomCommercialCtrl),
+        _field(t('rapports.identity.sigle'), sigleCtrl),
+        _field(t('rapports.identity.slogan'), sloganCtrl),
+        _field(t('rapports.identity.adresse'), adresseCtrl),
+        _field(t('rapports.identity.pays'), paysCtrl),
+        _field(t('rapports.identity.telephone'), telephoneCtrl),
+        _field(t('rapports.identity.email'), emailCtrl),
+        _field(t('rapports.identity.siteInternet'), siteInternetCtrl),
+        Text(t('rapports.identity.logo'), style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Row(children: [
           if (preview != null)
@@ -1051,14 +1060,14 @@ class _CompanyIdentityTabState extends State<_CompanyIdentityTab> {
               child: Image(image: preview, fit: BoxFit.contain),
             ),
           if (preview != null) const SizedBox(width: 12),
-          OutlinedButton.icon(onPressed: pickLogo, icon: const Icon(Icons.image_outlined), label: const Text('Choisir un logo')),
+          OutlinedButton.icon(onPressed: pickLogo, icon: const Icon(Icons.image_outlined), label: Text(t('rapports.identity.chooseLogo'))),
         ]),
         const SizedBox(height: 24),
         FilledButton(
           onPressed: saving ? null : save,
           child: saving
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Enregistrer'),
+              : Text(t('rapports.detail.enregistrer')),
         ),
       ],
     );
