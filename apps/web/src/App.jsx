@@ -6625,6 +6625,7 @@ function WorkedHoursForm({ record, onClose, onCreated }) {
 
 function SecuriteAccidentsPage() {
   const C = useTheme();
+  const { t, lang } = useI18n();
   const events = useCollection('/business/safety-events');
   const workedHours = useCollection('/business/worked-hours');
   const stats = useCollection('/business/safety-events-stats');
@@ -6648,6 +6649,7 @@ function SecuriteAccidentsPage() {
   const byType = groupCount(list, (e) => e.type);
   const bySeverity = groupCount(list, (e) => `Sévérité ${e.severity}`);
   const sorted = [...list].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt));
+  const dateLocale = lang === 'en' ? 'en-US' : 'fr-FR';
 
   // TF/TG calculés sur l'année civile en cours, à partir des heures
   // travaillées enregistrées et des accidents avec arrêt de travail.
@@ -6663,8 +6665,8 @@ function SecuriteAccidentsPage() {
   const filteredEvents = search.trim() ? sorted.filter((e) => norm([e.type, e.title, e.statut].join(' ')).includes(norm(search))) : sorted;
   function safetyEventsExportRows() {
     return [
-      ['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt (j)', 'Statut'],
-      ...filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? (e.lostDays || 0) : 0, SAFETY_EVENT_STATUT_LABELS[e.statut] || e.statut || 'Déclaré']),
+      [t('accidents.colType'), t('accidents.colTitre'), t('accidents.colDate'), t('accidents.colSeverite'), t('accidents.colArretJ'), t('accidents.colStatut')],
+      ...filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString(dateLocale), e.severity, e.withLostTime ? (e.lostDays || 0) : 0, SAFETY_EVENT_STATUT_LABELS[e.statut] || e.statut || t('accidents.declare')]),
     ];
   }
   function exportSafetyEventsExcel() { downloadWorkbook([['Événements sécurité', safetyEventsExportRows()]], `Evenements-securite-${new Date().toISOString().slice(0, 10)}.xlsx`); }
@@ -6678,20 +6680,20 @@ function SecuriteAccidentsPage() {
       <div className="flex items-center justify-between">
         <LiveBadge />
         <div className="flex gap-2">
-          <button onClick={() => setShowHoursForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>+ Heures travaillées</button>
-          <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer un événement</button>
+          <button onClick={() => setShowHoursForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{t('accidents.heuresTravaillees')}</button>
+          <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('accidents.declarerEvenement')}</button>
         </div>
       </div>
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="Événements enregistrés" value={list.length} color={C.blue} icon={AlertTriangle} />
-        <KpiCard label="Sévérité moyenne" value={list.length ? (list.reduce((s, e) => s + e.severity, 0) / list.length).toFixed(1) : '—'} color={C.amber} icon={Activity} />
-        <KpiCard label="Taux de Fréquence (TF)" value={tf != null ? tf.toFixed(1) : '—'} color={C.red} icon={AlertTriangle} />
-        <KpiCard label="Taux de Gravité (TG)" value={tg != null ? tg.toFixed(2) : '—'} color={C.red} icon={Activity} />
+        <KpiCard label={t('accidents.kpiEnregistres')} value={list.length} color={C.blue} icon={AlertTriangle} />
+        <KpiCard label={t('accidents.kpiSeveriteMoyenne')} value={list.length ? (list.reduce((s, e) => s + e.severity, 0) / list.length).toFixed(1) : '—'} color={C.amber} icon={Activity} />
+        <KpiCard label={t('accidents.kpiTf')} value={tf != null ? tf.toFixed(1) : '—'} color={C.red} icon={AlertTriangle} />
+        <KpiCard label={t('accidents.kpiTg')} value={tg != null ? tg.toFixed(2) : '—'} color={C.red} icon={Activity} />
       </div>
       {totalHours === 0
-        ? <p className="text-xs" style={{ color: C.textMuted }}>Aucune heure travaillée enregistrée pour {new Date().getFullYear()} — utilisez « + Heures travaillées » pour pouvoir calculer le TF/TG.</p>
-        : <p className="text-xs" style={{ color: C.textMuted }}>Calculé sur {new Date().getFullYear()} : {totalHours.toLocaleString('fr-FR')} h travaillées, {accidentsAvecArret} accident(s) avec arrêt, {journeesPerdues} journée(s) perdue(s). TF = accidents avec arrêt × 1 000 000 / heures. TG = journées perdues × 1 000 / heures.</p>}
-      <Panel title="Alertes automatiques" subtitle={`${alertes.length} événement(s) ouvert(s) nécessitant attention`}>
+        ? <p className="text-xs" style={{ color: C.textMuted }}>{t('accidents.aucuneHeure', { year: new Date().getFullYear() })}</p>
+        : <p className="text-xs" style={{ color: C.textMuted }}>{t('accidents.calcule', { year: new Date().getFullYear(), hours: totalHours.toLocaleString(dateLocale), accidents: accidentsAvecArret, days: journeesPerdues })}</p>}
+      <Panel title={t('accidents.alertesTitle')} subtitle={t('accidents.alertesSubtitle', { count: alertes.length })}>
         {alertes.length
           ? <div className="space-y-2">
               {alertes.map((a) => (
@@ -6704,13 +6706,13 @@ function SecuriteAccidentsPage() {
                 </div>
               ))}
             </div>
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('accidents.aucuneAlerte')}</p>}
       </Panel>
 
       {(recidives.parCauseRacine.length > 0 || recidives.parZone.length > 0 || recidives.parMecanisme.length > 0) && (
-        <Panel title="Risque de récidive détecté" subtitle="Même cause racine, même zone ou même mécanisme apparu plus d'une fois.">
+        <Panel title={t('accidents.recidiveTitle')} subtitle={t('accidents.recidiveSubtitle')}>
           <div className="grid grid-cols-3 gap-4">
-            {[['Par cause racine', recidives.parCauseRacine], ['Par zone', recidives.parZone], ['Par mécanisme', recidives.parMecanisme]].map(([label, items]) => (
+            {[[t('accidents.parCauseRacine'), recidives.parCauseRacine], [t('accidents.parZone'), recidives.parZone], [t('accidents.parMecanisme'), recidives.parMecanisme]].map(([label, items]) => (
               <div key={label}>
                 <p className="text-xs font-semibold mb-2" style={{ color: C.textMuted }}>{label}</p>
                 {items.length
@@ -6722,7 +6724,7 @@ function SecuriteAccidentsPage() {
         </Panel>
       )}
 
-      <Panel title="Pareto des causes" subtitle="Identifié lors des enquêtes — 80% des événements viennent généralement de 20% des causes.">
+      <Panel title={t('accidents.paretoTitle')} subtitle={t('accidents.paretoSubtitle')}>
         {s.pareto.length
           ? <ResponsiveContainer width="100%" height={260}>
               <ComposedChart data={s.pareto}>
@@ -6731,37 +6733,37 @@ function SecuriteAccidentsPage() {
                 <YAxis yAxisId="left" tick={{ fontSize: 10, fill: C.textMuted }} />
                 <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: C.textMuted }} />
                 <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
-                <Bar yAxisId="left" dataKey="value" name="Nombre" fill={C.red} radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="cumulPct" name="% cumulé" stroke={C.amber} strokeWidth={2} dot={{ r: 3 }} />
+                <Bar yAxisId="left" dataKey="value" name={t('accidents.paretoNombre')} fill={C.red} radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="cumulPct" name={t('accidents.paretoCumulPct')} stroke={C.amber} strokeWidth={2} dot={{ r: 3 }} />
               </ComposedChart>
             </ResponsiveContainer>
-          : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune cause racine renseignée dans les enquêtes pour le moment</p>}
+          : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('accidents.aucuneCauseEnquete')}</p>}
       </Panel>
 
       <div className="grid grid-cols-2 gap-4">
-        <Panel title="Répartition par type d'événement">
-          {byType.length ? <DonutChart data={byType} colors={[C.red, '#F97316', C.amber, '#8B5CF6', C.blue, C.green]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun événement enregistré</p>}
+        <Panel title={t('accidents.parType')}>
+          {byType.length ? <DonutChart data={byType} colors={[C.red, '#F97316', C.amber, '#8B5CF6', C.blue, C.green]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('accidents.aucunEvenement')}</p>}
         </Panel>
-        <Panel title="Répartition par sévérité">
-          {bySeverity.length ? <HorizontalBars data={bySeverity} labelKey="name" valueKey="value" color={C.amber} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun événement enregistré</p>}
+        <Panel title={t('accidents.parSeverite')}>
+          {bySeverity.length ? <HorizontalBars data={bySeverity} labelKey="name" valueKey="value" color={C.amber} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('accidents.aucunEvenement')}</p>}
         </Panel>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un événement (type, titre, statut...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('accidents.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
         <button onClick={exportSafetyEventsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
         <button onClick={exportSafetyEventsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
       </div>
-      <Panel title={search.trim() ? `Résultats de recherche (${filteredEvents.length})` : "Registre des événements sécurité"} subtitle="Cliquez une ligne pour ouvrir l'enquête et le plan d'actions.">
+      <Panel title={search.trim() ? t('accidents.resultatsRecherche', { count: filteredEvents.length }) : t('accidents.registreTitre')} subtitle={t('accidents.registreSubtitle')}>
         {filteredEvents.length
-          ? <DataTable columns={['Type', 'Titre', 'Date', 'Sévérité', 'Arrêt', 'Statut']} rows={filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString('fr-FR'), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', SAFETY_EVENT_STATUT_LABELS[e.statut] || e.statut || 'Déclaré'])}
+          ? <DataTable columns={[t('accidents.colType'), t('accidents.colTitre'), t('accidents.colDate'), t('accidents.colSeverite'), t('accidents.colArret'), t('accidents.colStatut')]} rows={filteredEvents.map((e) => [e.type, e.title, new Date(e.occurredAt).toLocaleDateString(dateLocale), e.severity, e.withLostTime ? `${e.lostDays || 0} j` : '—', SAFETY_EVENT_STATUT_LABELS[e.statut] || e.statut || t('accidents.declare')])}
               onRowClick={(i) => setDetailFor(filteredEvents[i].id)} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun événement enregistré pour le moment'}</p>}
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('accidents.aucunResultat') : t('accidents.aucunEnregistrePourInstant')}</p>}
       </Panel>
-      <Panel title="Heures travaillées enregistrées">
+      <Panel title={t('accidents.heuresTitle')}>
         {hoursList.length
-          ? <DataTable columns={['Période', 'Heures', 'Site']} rows={hoursList.map((h) => [`${new Date(h.periodStart).toLocaleDateString('fr-FR')} → ${new Date(h.periodEnd).toLocaleDateString('fr-FR')}`, h.hours.toLocaleString('fr-FR'), h.site || '—'])}
+          ? <DataTable columns={[t('accidents.colPeriode'), t('accidents.colHeures'), t('accidents.colSite')]} rows={hoursList.map((h) => [`${new Date(h.periodStart).toLocaleDateString(dateLocale)} → ${new Date(h.periodEnd).toLocaleDateString(dateLocale)}`, h.hours.toLocaleString(dateLocale), h.site || '—'])}
               onRowClick={(i) => setSelectedHours(hoursList[i])} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune période enregistrée pour le moment</p>}
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('accidents.aucunePeriode')}</p>}
       </Panel>
     </div>
   );
