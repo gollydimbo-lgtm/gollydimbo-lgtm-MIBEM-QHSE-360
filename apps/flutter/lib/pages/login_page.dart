@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../main.dart';
+import '../i18n/i18n.dart';
 import 'settings_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -18,7 +19,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> login() async {
     if (email.text.trim().isEmpty || password.text.isEmpty) {
-      setState(() => error = 'Email et mot de passe requis');
+      setState(() => error = t('loginPage.champsRequis'));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -32,7 +33,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } catch (e) {
-      setState(() => error = 'Identifiants invalides ou serveur injoignable');
+      setState(() => error = t('loginPage.identifiantsInvalides'));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -45,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
         title: const Text(''),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Réglages serveur', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())))],
+        actions: [IconButton(icon: const Icon(Icons.settings_outlined), tooltip: t('loginPage.reglagesServeur'), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())))],
       ),
       body: Center(
         child: ConstrainedBox(
@@ -57,20 +58,20 @@ class _LoginPageState extends State<LoginPage> {
               children: [
                 const Icon(Icons.shield_moon, size: 56, color: Colors.indigo),
                 const SizedBox(height: 8),
-                const Text('QHSE MIBEM', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-                const Text('Plateforme QHSE V4', style: TextStyle(color: Colors.grey)),
+                Text(t('loginPage.appTitre'), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+                Text(t('loginPage.appSousTitre'), style: const TextStyle(color: Colors.grey)),
                 const SizedBox(height: 28),
                 TextField(
                   controller: email,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined), border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: t('loginPage.email'), prefixIcon: const Icon(Icons.email_outlined), border: const OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: password,
                   obscureText: true,
                   onSubmitted: (_) => login(),
-                  decoration: const InputDecoration(labelText: 'Mot de passe', prefixIcon: Icon(Icons.lock_outline), border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: t('loginPage.motDePasse'), prefixIcon: const Icon(Icons.lock_outline), border: const OutlineInputBorder()),
                 ),
                 if (error != null)
                   Padding(
@@ -85,7 +86,7 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: busy ? null : login,
                     child: busy
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Se connecter'),
+                        : Text(t('loginPage.seConnecter')),
                   ),
                 ),
               ],
