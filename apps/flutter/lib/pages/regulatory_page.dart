@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'referentiel_pages.dart' show RegulatoryLegacyCataloguePage;
 
 // ============================================================================
@@ -14,14 +15,16 @@ import 'referentiel_pages.dart' show RegulatoryLegacyCataloguePage;
 // une note modifiée directement).
 // ============================================================================
 
-const regApplicabiliteLabels = {'OUI': 'Applicable', 'NON': 'Non applicable', 'PARTIELLEMENT': 'Partiellement applicable', 'A_ANALYSER': 'À analyser'};
-const regStatutConformiteLabels = {'CONFORME': 'Conforme', 'PARTIEL': 'Partiellement conforme', 'NON_CONFORME': 'Non conforme'};
-const regStatutFileLabels = {
-  'NOUVEAU': 'Nouveau', 'A_ANALYSER': 'À analyser', 'APPLICABILITE_A_DETERMINER': 'Applicabilité à déterminer',
-  'EVALUATION_A_REALISER': 'Évaluation à réaliser', 'VERIFICATION': 'Vérification', 'ACTIONS_NECESSAIRES': 'Actions nécessaires', 'CLOTURE': 'Clôturé',
-};
-const regEvidenceStatutLabels = {'VALIDE': 'Valide', 'EXPIRE_BIENTOT': 'Expire bientôt', 'A_RENOUVELER': 'À renouveler', 'EXPIRE': 'Expiré'};
-const regCriticiteLabels = {'CRITIQUE': 'Critique', 'HAUTE': 'Haute', 'MOYENNE': 'Moyenne', 'FAIBLE': 'Faible'};
+const regApplicabiliteValues = ['OUI', 'NON', 'PARTIELLEMENT', 'A_ANALYSER'];
+String regApplicabiliteLabel(String? k) => k == null ? '—' : (regApplicabiliteValues.contains(k) ? t('regulatory.applicabilite.$k') : k);
+const regStatutConformiteValues = ['CONFORME', 'PARTIEL', 'NON_CONFORME'];
+String regStatutConformiteLabel(String? k) => k == null ? '—' : (regStatutConformiteValues.contains(k) ? t('regulatory.statutConformite.$k') : k);
+const regStatutFileValues = ['NOUVEAU', 'A_ANALYSER', 'APPLICABILITE_A_DETERMINER', 'EVALUATION_A_REALISER', 'VERIFICATION', 'ACTIONS_NECESSAIRES', 'CLOTURE'];
+String regStatutFileLabel(String? k) => k == null ? '—' : (regStatutFileValues.contains(k) ? t('regulatory.statutFile.$k') : k);
+const regEvidenceStatutValues = ['VALIDE', 'EXPIRE_BIENTOT', 'A_RENOUVELER', 'EXPIRE'];
+String regEvidenceStatutLabel(String? k) => k == null ? '—' : (regEvidenceStatutValues.contains(k) ? t('regulatory.evidenceStatut.$k') : k);
+const regCriticiteValues = ['CRITIQUE', 'HAUTE', 'MOYENNE', 'FAIBLE'];
+String regCriticiteLabel(String? k) => k == null ? '—' : (regCriticiteValues.contains(k) ? t('regulatory.criticite.$k') : k);
 
 Color regApplicabiliteColor(String? v) => {'OUI': QhseColors.green, 'NON': QhseColors.textSecondary, 'PARTIELLEMENT': QhseColors.amber, 'A_ANALYSER': QhseColors.blue}[v] ?? QhseColors.textSecondary;
 Color regConformiteColor(String? v) => {'CONFORME': QhseColors.green, 'PARTIEL': QhseColors.amber, 'NON_CONFORME': QhseColors.red}[v] ?? QhseColors.textSecondary;
@@ -56,10 +59,10 @@ class RegulatoryPage extends StatelessWidget {
       length: 8,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Veille réglementaire'),
-          bottom: const TabBar(isScrollable: true, tabs: [
-            Tab(text: 'Tableau de bord'), Tab(text: 'Textes'), Tab(text: 'Exigences'), Tab(text: 'Alertes'),
-            Tab(text: 'Réévaluations'), Tab(text: 'Rapports'), Tab(text: 'Domaines'), Tab(text: 'Catalogue simple (ancien)'),
+          title: Text(t('regulatory.appBarTitle')),
+          bottom: TabBar(isScrollable: true, tabs: [
+            Tab(text: t('regulatory.tab.dashboard')), Tab(text: t('regulatory.tab.textes')), Tab(text: t('regulatory.tab.exigences')), Tab(text: t('regulatory.tab.alertes')),
+            Tab(text: t('regulatory.tab.reevaluations')), Tab(text: t('regulatory.tab.rapports')), Tab(text: t('regulatory.tab.domaines')), Tab(text: t('regulatory.tab.catalogueLegacy')),
           ]),
         ),
         body: const TabBarView(children: [
@@ -94,33 +97,33 @@ class _RegulatoryDashboardTabState extends State<RegulatoryDashboardTab> {
 
   @override
   Widget build(BuildContext c) {
-    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))]));
+    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))]));
     if (dash == null) return const Center(child: CircularProgressIndicator());
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
         Row(children: [
-          regKpi('Exigences totales', '${dash!['total'] ?? 0}', QhseColors.blue),
+          regKpi(t('regulatory.kpi.exigencesTotales'), '${dash!['total'] ?? 0}', QhseColors.blue),
           const SizedBox(width: 8),
-          regKpi('Applicables', '${dash!['applicables'] ?? 0}', QhseColors.blue),
+          regKpi(t('regulatory.kpi.applicables'), '${dash!['applicables'] ?? 0}', QhseColors.blue),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          regKpi('Taux de conformité', dash!['tauxConformite'] != null ? '${dash!['tauxConformite']}%' : '—', QhseColors.green),
+          regKpi(t('regulatory.kpi.tauxConformite'), dash!['tauxConformite'] != null ? '${dash!['tauxConformite']}%' : '—', QhseColors.green),
           const SizedBox(width: 8),
-          regKpi('À analyser', '${dash!['aAnalyser'] ?? 0}', QhseColors.amber),
+          regKpi(t('regulatory.kpi.aAnalyser'), '${dash!['aAnalyser'] ?? 0}', QhseColors.amber),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          regKpi('Conformes', '${dash!['conformes'] ?? 0}', QhseColors.green),
+          regKpi(t('regulatory.kpi.conformes'), '${dash!['conformes'] ?? 0}', QhseColors.green),
           const SizedBox(width: 8),
-          regKpi('Partielles', '${dash!['partielles'] ?? 0}', QhseColors.amber),
+          regKpi(t('regulatory.kpi.partielles'), '${dash!['partielles'] ?? 0}', QhseColors.amber),
           const SizedBox(width: 8),
-          regKpi('Non conformes', '${dash!['nonConformes'] ?? 0}', QhseColors.red),
+          regKpi(t('regulatory.kpi.nonConformes'), '${dash!['nonConformes'] ?? 0}', QhseColors.red),
         ]),
-        regSectionTitle('Non encore évaluées'),
-        Text('${dash!['nonEvaluees'] ?? 0} exigence(s) applicable(s) sans évaluation enregistrée.'),
-        regSectionTitle('Méthode de calcul'),
+        regSectionTitle(t('regulatory.dashboard.nonEvalueesTitle')),
+        Text(t('regulatory.dashboard.nonEvalueesText', {'count': '${dash!['nonEvaluees'] ?? 0}'})),
+        regSectionTitle(t('regulatory.dashboard.methodeCalculTitle')),
         Text(dash!['methodeCalcul'] ?? '', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
       ]),
     );
@@ -161,20 +164,20 @@ class _RegulatoryTextsTabState extends State<RegulatoryTextsTab> {
           final saved = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => const RegulatoryTextFormPage()));
           if (saved == true) load();
         },
-        icon: const Icon(Icons.add), label: const Text('Nouveau texte'),
+        icon: const Icon(Icons.add), label: Text(t('regulatory.newTexte')),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null
-              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))]))
+              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))]))
               : RefreshIndicator(onRefresh: load, child: items.isEmpty
-                  ? ListView(children: [regEmpty('Aucun texte réglementaire enregistré')])
+                  ? ListView(children: [regEmpty(t('regulatory.texts.empty'))])
                   : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
                       final t = items[i];
                       return Card(child: ListTile(
                         title: Text(t['titre'] ?? ''),
-                        subtitle: Text('${t['reference'] ?? t['typeTexte'] ?? '—'} • ${t['domain']?['label'] ?? 'Sans domaine'}'),
-                        trailing: regChip(t['statut'] == 'EN_VIGUEUR' ? 'En vigueur' : (t['statut'] == 'ABROGE' ? 'Abrogé' : 'Modifié'), t['statut'] == 'ABROGE' ? QhseColors.red : (t['statut'] == 'MODIFIE' ? QhseColors.amber : QhseColors.green)),
+                        subtitle: Text('${t['reference'] ?? t['typeTexte'] ?? '—'} • ${t['domain']?['label'] ?? t('regulatory.sansDomaine')}'),
+                        trailing: regChip(t['statut'] == 'EN_VIGUEUR' ? t('regulatory.textStatut.EN_VIGUEUR') : (t['statut'] == 'ABROGE' ? t('regulatory.textStatut.ABROGE') : t('regulatory.textStatut.MODIFIE')), t['statut'] == 'ABROGE' ? QhseColors.red : (t['statut'] == 'MODIFIE' ? QhseColors.amber : QhseColors.green)),
                         onTap: () async {
                           await Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryTextDetailPage(textId: t['id'])));
                           load();
@@ -231,7 +234,7 @@ class _RegulatoryTextFormPageState extends State<RegulatoryTextFormPage> {
   }
 
   Future<void> submit() async {
-    if (titre.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre est obligatoire'))); return; }
+    if (titre.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('regulatory.textForm.titreRequired')))); return; }
     setState(() { busy = true; error = null; });
     final payload = {
       'reference': reference.text.trim().isEmpty ? null : reference.text.trim(), 'titre': titre.text.trim(),
@@ -252,50 +255,50 @@ class _RegulatoryTextFormPageState extends State<RegulatoryTextFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text(editing ? 'Modifier le texte' : 'Nouveau texte réglementaire')),
+    appBar: AppBar(title: Text(editing ? t('regulatory.textForm.editTitle') : t('regulatory.textForm.createTitle'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      TextField(controller: reference, decoration: const InputDecoration(labelText: 'Référence (ex. Loi n°...)', border: OutlineInputBorder())),
+      TextField(controller: reference, decoration: InputDecoration(labelText: t('regulatory.textForm.reference'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: titre, decoration: const InputDecoration(labelText: 'Titre *', border: OutlineInputBorder())),
+      TextField(controller: titre, decoration: InputDecoration(labelText: t('regulatory.textForm.titre'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: typeTexte, decoration: const InputDecoration(labelText: 'Type de texte (loi, décret, norme...)', border: OutlineInputBorder())),
+      TextField(controller: typeTexte, decoration: InputDecoration(labelText: t('regulatory.textForm.typeTexte'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: domains.any((d) => d['id'] == domainId) ? domainId : null,
-        decoration: const InputDecoration(labelText: 'Domaine', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.domaine'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...domains.map((d) => DropdownMenuItem(value: d['id'] as String, child: Text(d['label'])))],
         onChanged: (v) => setState(() => domainId = v),
       ),
       const SizedBox(height: 12),
-      TextField(controller: sousDomaine, decoration: const InputDecoration(labelText: 'Sous-domaine', border: OutlineInputBorder())),
+      TextField(controller: sousDomaine, decoration: InputDecoration(labelText: t('regulatory.textForm.sousDomaine'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: pays, decoration: const InputDecoration(labelText: 'Pays', border: OutlineInputBorder())),
+      TextField(controller: pays, decoration: InputDecoration(labelText: t('regulatory.textForm.pays'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: autoriteEmettrice, decoration: const InputDecoration(labelText: 'Autorité émettrice', border: OutlineInputBorder())),
+      TextField(controller: autoriteEmettrice, decoration: InputDecoration(labelText: t('regulatory.textForm.autoriteEmettrice'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
       Row(children: [
-        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text(datePublication == null ? 'Publication' : regFmtDate(datePublication!.toIso8601String())))),
+        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text(datePublication == null ? t('regulatory.textForm.publication') : regFmtDate(datePublication!.toIso8601String())))),
         const SizedBox(width: 8),
-        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.gavel), label: Text(dateEntreeVigueur == null ? 'Entrée en vigueur' : regFmtDate(dateEntreeVigueur!.toIso8601String())))),
+        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.gavel), label: Text(dateEntreeVigueur == null ? t('regulatory.textForm.entreeVigueur') : regFmtDate(dateEntreeVigueur!.toIso8601String())))),
       ]),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: statut,
-        decoration: const InputDecoration(labelText: 'Statut', border: OutlineInputBorder()),
-        items: const [DropdownMenuItem(value: 'EN_VIGUEUR', child: Text('En vigueur')), DropdownMenuItem(value: 'MODIFIE', child: Text('Modifié')), DropdownMenuItem(value: 'ABROGE', child: Text('Abrogé'))],
+        decoration: InputDecoration(labelText: t('regulatory.field.statut'), border: const OutlineInputBorder()),
+        items: [DropdownMenuItem(value: 'EN_VIGUEUR', child: Text(t('regulatory.textStatut.EN_VIGUEUR'))), DropdownMenuItem(value: 'MODIFIE', child: Text(t('regulatory.textStatut.MODIFIE'))), DropdownMenuItem(value: 'ABROGE', child: Text(t('regulatory.textStatut.ABROGE')))],
         onChanged: (v) => setState(() => statut = v ?? statut),
       ),
       const SizedBox(height: 12),
-      TextField(controller: sourceOfficielle, decoration: const InputDecoration(labelText: 'Source officielle', border: OutlineInputBorder())),
+      TextField(controller: sourceOfficielle, decoration: InputDecoration(labelText: t('regulatory.textForm.sourceOfficielle'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: lienSource, decoration: const InputDecoration(labelText: 'Lien vers la source', border: OutlineInputBorder())),
+      TextField(controller: lienSource, decoration: InputDecoration(labelText: t('regulatory.textForm.lienSource'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: objet, maxLines: 2, decoration: const InputDecoration(labelText: 'Objet', border: OutlineInputBorder())),
+      TextField(controller: objet, maxLines: 2, decoration: InputDecoration(labelText: t('regulatory.textForm.objet'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: resume, maxLines: 3, decoration: const InputDecoration(labelText: 'Résumé', border: OutlineInputBorder())),
+      TextField(controller: resume, maxLines: 3, decoration: InputDecoration(labelText: t('regulatory.textForm.resume'), border: const OutlineInputBorder())),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Enregistrer')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.save'))),
     ]),
   );
 }
@@ -326,7 +329,7 @@ class _RegulatoryTextDetailPageState extends State<RegulatoryTextDetailPage> {
   @override
   Widget build(BuildContext c) {
     if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (error != null) return Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))])));
+    if (error != null) return Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))])));
     final text = Map.from(analysis!['text']);
     final requirements = List.from(text['requirements'] ?? []);
     return Scaffold(
@@ -341,43 +344,43 @@ class _RegulatoryTextDetailPageState extends State<RegulatoryTextDetailPage> {
           final saved = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementFormPage(textId: widget.textId)));
           if (saved == true) load();
         },
-        icon: const Icon(Icons.add), label: const Text('Nouvelle exigence'),
+        icon: const Icon(Icons.add), label: Text(t('regulatory.newExigence')),
       ),
       body: RefreshIndicator(
         onRefresh: load,
         child: ListView(padding: const EdgeInsets.all(16), children: [
           Wrap(spacing: 8, runSpacing: 8, children: [
-            regChip('Analyse d\'impact : à analyser', QhseColors.blue),
+            regChip(t('regulatory.detail.impactAnalysisChip'), QhseColors.blue),
             if (text['reference'] != null) regChip(text['reference'], QhseColors.textSecondary),
           ]),
           const SizedBox(height: 4),
-          Text('Jamais de conclusion automatique : l\'impact doit être analysé par un humain à partir des éléments ci-dessous.', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: QhseColors.textSecondary)),
+          Text(t('regulatory.detail.neverAutoConclusion'), style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: QhseColors.textSecondary)),
           const SizedBox(height: 12),
           Row(children: [
-            regKpi('Exigences impactées', '${analysis!['exigencesImpactees'] ?? 0}', QhseColors.blue),
+            regKpi(t('regulatory.kpi.exigencesImpactees'), '${analysis!['exigencesImpactees'] ?? 0}', QhseColors.blue),
             const SizedBox(width: 8),
-            regKpi('Sites impactés', '${(analysis!['sitesImpactes'] as List).length}', QhseColors.blue),
+            regKpi(t('regulatory.kpi.sitesImpactes'), '${(analysis!['sitesImpactes'] as List).length}', QhseColors.blue),
           ]),
           const SizedBox(height: 8),
           Row(children: [
-            regKpi('NC ouvertes', '${(analysis!['nonConformitesOuvertes'] as List).length}', QhseColors.red),
+            regKpi(t('regulatory.kpi.ncOuvertes'), '${(analysis!['nonConformitesOuvertes'] as List).length}', QhseColors.red),
             const SizedBox(width: 8),
-            regKpi('Actions ouvertes', '${(analysis!['actionsOuvertes'] as List).length}', QhseColors.amber),
+            regKpi(t('regulatory.kpi.actionsOuvertes'), '${(analysis!['actionsOuvertes'] as List).length}', QhseColors.amber),
           ]),
-          regSectionTitle('Risques liés (${(analysis!['risquesImpactes'] as List).length})'),
+          regSectionTitle(t('regulatory.section.risquesLies', {'count': '${(analysis!['risquesImpactes'] as List).length}'})),
           ...(analysis!['risquesImpactes'] as List).map((r) => ListTile(dense: true, leading: const Icon(Icons.warning_amber), title: Text('${r['code']} — ${r['hazard']}'))),
-          if ((analysis!['risquesImpactes'] as List).isEmpty) regEmpty('Aucun risque lié'),
-          regSectionTitle('Documents liés (${(analysis!['documentsImpactes'] as List).length})'),
+          if ((analysis!['risquesImpactes'] as List).isEmpty) regEmpty(t('regulatory.empty.risques')),
+          regSectionTitle(t('regulatory.section.documentsLies', {'count': '${(analysis!['documentsImpactes'] as List).length}'})),
           ...(analysis!['documentsImpactes'] as List).map((d) => ListTile(dense: true, leading: const Icon(Icons.description), title: Text(d['title'] ?? d['name'] ?? ''))),
-          if ((analysis!['documentsImpactes'] as List).isEmpty) regEmpty('Aucun document lié'),
-          regSectionTitle('Exigences issues de ce texte (${requirements.length})'),
-          if (requirements.isEmpty) regEmpty('Aucune exigence enregistrée pour ce texte')
+          if ((analysis!['documentsImpactes'] as List).isEmpty) regEmpty(t('regulatory.empty.documents')),
+          regSectionTitle(t('regulatory.textDetail.exigencesSection', {'count': '${requirements.length}'})),
+          if (requirements.isEmpty) regEmpty(t('regulatory.textDetail.exigencesEmpty'))
           else ...requirements.map((r) => Card(child: ListTile(
             title: Text(r['libelle'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
             subtitle: Row(children: [
-              regChip(regApplicabiliteLabels[r['applicabilite']] ?? r['applicabilite'] ?? '', regApplicabiliteColor(r['applicabilite'])),
+              regChip(regApplicabiliteLabel(r['applicabilite']?.toString()), regApplicabiliteColor(r['applicabilite'])),
               const SizedBox(width: 6),
-              if (r['statutConformite'] != null) regChip(regStatutConformiteLabels[r['statutConformite']] ?? r['statutConformite'], regConformiteColor(r['statutConformite'])),
+              if (r['statutConformite'] != null) regChip(regStatutConformiteLabel(r['statutConformite']?.toString()), regConformiteColor(r['statutConformite'])),
             ]),
             onTap: () async {
               await Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementDetailPage(requirementId: r['id'])));
@@ -430,38 +433,38 @@ class _RegulatoryRequirementsTabState extends State<RegulatoryRequirementsTab> {
           final saved = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => const RegulatoryRequirementFormPage()));
           if (saved == true) load();
         },
-        icon: const Icon(Icons.add), label: const Text('Nouvelle exigence'),
+        icon: const Icon(Icons.add), label: Text(t('regulatory.newExigence')),
       ),
       body: Column(children: [
         Padding(padding: const EdgeInsets.all(12), child: Row(children: [
           Expanded(child: DropdownButtonFormField<String>(
             value: applicabilite, isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Applicabilité', border: OutlineInputBorder(), isDense: true),
-            items: [const DropdownMenuItem(value: 'TOUS', child: Text('Toutes')), ...regApplicabiliteLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))],
+            decoration: InputDecoration(labelText: t('regulatory.filter.applicabilite'), border: const OutlineInputBorder(), isDense: true),
+            items: [DropdownMenuItem(value: 'TOUS', child: Text(t('regulatory.filter.toutes'))), ...regApplicabiliteValues.map((k) => DropdownMenuItem(value: k, child: Text(regApplicabiliteLabel(k))))],
             onChanged: (v) { applicabilite = v ?? 'TOUS'; load(); },
           )),
           const SizedBox(width: 8),
           Expanded(child: DropdownButtonFormField<String>(
             value: statutConformite, isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Conformité', border: OutlineInputBorder(), isDense: true),
-            items: [const DropdownMenuItem(value: 'TOUS', child: Text('Toutes')), ...regStatutConformiteLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))],
+            decoration: InputDecoration(labelText: t('regulatory.filter.conformite'), border: const OutlineInputBorder(), isDense: true),
+            items: [DropdownMenuItem(value: 'TOUS', child: Text(t('regulatory.filter.toutes'))), ...regStatutConformiteValues.map((k) => DropdownMenuItem(value: k, child: Text(regStatutConformiteLabel(k))))],
             onChanged: (v) { statutConformite = v ?? 'TOUS'; load(); },
           )),
         ])),
         Expanded(child: loading
             ? const Center(child: CircularProgressIndicator())
             : error != null
-                ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))]))
+                ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))]))
                 : RefreshIndicator(onRefresh: load, child: items.isEmpty
-                    ? ListView(children: [regEmpty('Aucune exigence pour ce filtre')])
+                    ? ListView(children: [regEmpty(t('regulatory.requirements.emptyFiltered'))])
                     : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
                         final r = items[i];
                         return Card(child: ListTile(
                           title: Text(r['libelle'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
                           subtitle: Text('${r['text']?['titre'] ?? ''} ${r['site'] != null ? '• ${r['site']['name']}' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis),
                           trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                            regChip(regApplicabiliteLabels[r['applicabilite']] ?? r['applicabilite'] ?? '', regApplicabiliteColor(r['applicabilite'])),
-                            if (r['statutConformite'] != null) Padding(padding: const EdgeInsets.only(top: 4), child: regChip(regStatutConformiteLabels[r['statutConformite']] ?? r['statutConformite'], regConformiteColor(r['statutConformite']))),
+                            regChip(regApplicabiliteLabel(r['applicabilite']?.toString()), regApplicabiliteColor(r['applicabilite'])),
+                            if (r['statutConformite'] != null) Padding(padding: const EdgeInsets.only(top: 4), child: regChip(regStatutConformiteLabel(r['statutConformite']?.toString()), regConformiteColor(r['statutConformite']))),
                           ]),
                           onTap: () async {
                             await Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementDetailPage(requirementId: r['id'])));
@@ -520,8 +523,8 @@ class _RegulatoryRequirementFormPageState extends State<RegulatoryRequirementFor
   }
 
   Future<void> submit() async {
-    if (libelle.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le libellé est obligatoire'))); return; }
-    if (textId == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le texte source est obligatoire'))); return; }
+    if (libelle.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('regulatory.reqForm.libelleRequired')))); return; }
+    if (textId == null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('regulatory.reqForm.texteSourceRequired')))); return; }
     setState(() { busy = true; error = null; });
     final payload = {
       'textId': textId, 'libelle': libelle.text.trim(), 'domainId': domainId, 'siteId': siteId, 'workUnitId': workUnitId,
@@ -538,60 +541,60 @@ class _RegulatoryRequirementFormPageState extends State<RegulatoryRequirementFor
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text(editing ? "Modifier l'exigence" : 'Nouvelle exigence')),
+    appBar: AppBar(title: Text(editing ? t('regulatory.reqForm.editTitle') : t('regulatory.newExigence'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      TextField(controller: libelle, maxLines: 3, decoration: const InputDecoration(labelText: "Libellé de l'exigence *", border: OutlineInputBorder())),
+      TextField(controller: libelle, maxLines: 3, decoration: InputDecoration(labelText: t('regulatory.reqForm.libelle'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: texts.any((t) => t['id'] == textId) ? textId : null, isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Texte source *', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.reqForm.texteSource'), border: const OutlineInputBorder()),
         items: texts.map<DropdownMenuItem<String>>((t) => DropdownMenuItem(value: t['id'] as String, child: Text(t['titre'], overflow: TextOverflow.ellipsis))).toList(),
         onChanged: widget.textId != null ? null : (v) => setState(() => textId = v),
       ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: domains.any((d) => d['id'] == domainId) ? domainId : null,
-        decoration: const InputDecoration(labelText: 'Domaine', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.domaine'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...domains.map((d) => DropdownMenuItem(value: d['id'] as String, child: Text(d['label'])))],
         onChanged: (v) => setState(() => domainId = v),
       ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: criticite,
-        decoration: const InputDecoration(labelText: 'Criticité', border: OutlineInputBorder()),
-        items: [const DropdownMenuItem(value: null, child: Text('—')), ...regCriticiteLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))],
+        decoration: InputDecoration(labelText: t('regulatory.field.criticite'), border: const OutlineInputBorder()),
+        items: [const DropdownMenuItem(value: null, child: Text('—')), ...regCriticiteValues.map((k) => DropdownMenuItem(value: k, child: Text(regCriticiteLabel(k))))],
         onChanged: (v) => setState(() => criticite = v),
       ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: sites.any((s) => s['id'] == siteId) ? siteId : null,
-        decoration: const InputDecoration(labelText: 'Site', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.site'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...sites.map((s) => DropdownMenuItem(value: s['id'] as String, child: Text(s['name'])))],
         onChanged: (v) => setState(() => siteId = v),
       ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: workUnits.any((w) => w['id'] == workUnitId) ? workUnitId : null,
-        decoration: const InputDecoration(labelText: 'Service / unité', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.serviceUnite'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...workUnits.map((w) => DropdownMenuItem(value: w['id'] as String, child: Text(w['name'])))],
         onChanged: (v) => setState(() => workUnitId = v),
       ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: users.any((u) => u['id'] == responsableId) ? responsableId : null,
-        decoration: const InputDecoration(labelText: 'Responsable', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.responsable'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...users.map((u) => DropdownMenuItem(value: u['id'] as String, child: Text(regUserName(u))))],
         onChanged: (v) => setState(() => responsableId = v),
       ),
       const SizedBox(height: 12),
-      TextField(controller: frequence, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fréquence de réévaluation (mois)', border: OutlineInputBorder())),
+      TextField(controller: frequence, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('regulatory.reqForm.frequenceReeval'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: preuveAttendue, decoration: const InputDecoration(labelText: 'Preuve de conformité attendue', border: OutlineInputBorder())),
+      TextField(controller: preuveAttendue, decoration: InputDecoration(labelText: t('regulatory.reqForm.preuveAttendue'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: commentaire, maxLines: 2, decoration: const InputDecoration(labelText: 'Commentaire', border: OutlineInputBorder())),
+      TextField(controller: commentaire, maxLines: 2, decoration: InputDecoration(labelText: t('regulatory.field.commentaire'), border: const OutlineInputBorder())),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Enregistrer')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.save'))),
     ]),
   );
 }
@@ -624,7 +627,7 @@ class _RegulatoryRequirementDetailPageState extends State<RegulatoryRequirementD
     setState(() => busy = true);
     try {
       await api.post('/business/regulatory-requirements/${widget.requirementId}/generate-nc', {});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Non-conformité créée.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('regulatory.detail.ncCreatedMsg'))));
       await load();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -644,8 +647,8 @@ class _RegulatoryRequirementDetailPageState extends State<RegulatoryRequirementD
 
   Future<void> deleteEvidence(String id, String label) async {
     final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
-      title: const Text('Confirmer la suppression'), content: Text('Supprimer la preuve « $label » ?'),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')), TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer'))],
+      title: Text(t('regulatory.confirmDeleteTitle')), content: Text(t('regulatory.detail.deletePreuveConfirm', {'label': label})),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t('regulatory.cancel'))), TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t('regulatory.delete')))],
     ));
     if (ok != true) return;
     try { await api.delete('/business/regulatory-evidences/$id'); load(); }
@@ -655,7 +658,7 @@ class _RegulatoryRequirementDetailPageState extends State<RegulatoryRequirementD
   @override
   Widget build(BuildContext c) {
     if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (error != null) return Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))])));
+    if (error != null) return Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))])));
     final r = req!;
     final evidences = List.from(r['evidences'] ?? []);
     final evaluations = List.from(r['evaluations'] ?? []);
@@ -678,67 +681,67 @@ class _RegulatoryRequirementDetailPageState extends State<RegulatoryRequirementD
           Text('${r['text']?['titre'] ?? ''}${r['domain'] != null ? ' • ${r['domain']['label']}' : ''}${r['site'] != null ? ' • ${r['site']['name']}' : ''}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            regChip(regApplicabiliteLabels[r['applicabilite']] ?? r['applicabilite'] ?? '', regApplicabiliteColor(r['applicabilite'])),
-            if (r['statutConformite'] != null) regChip(regStatutConformiteLabels[r['statutConformite']] ?? r['statutConformite'], regConformiteColor(r['statutConformite'])),
-            regChip(regStatutFileLabels[r['statutFile']] ?? r['statutFile'] ?? '', QhseColors.blue),
-            if (r['criticite'] != null) regChip(regCriticiteLabels[r['criticite']] ?? r['criticite'], QhseColors.amber),
+            regChip(regApplicabiliteLabel(r['applicabilite']?.toString()), regApplicabiliteColor(r['applicabilite'])),
+            if (r['statutConformite'] != null) regChip(regStatutConformiteLabel(r['statutConformite']?.toString()), regConformiteColor(r['statutConformite'])),
+            regChip(regStatutFileLabel(r['statutFile']?.toString()), QhseColors.blue),
+            if (r['criticite'] != null) regChip(regCriticiteLabel(r['criticite']?.toString()), QhseColors.amber),
           ]),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryApplicabiliteFormPage(requirement: r))); if (ok == true) load(); }, child: const Text('Statuer applicabilité')),
-            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryEvaluationFormPage(requirementId: r['id']))); if (ok == true) load(); }, child: const Text('Nouvelle évaluation')),
-            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryEvidenceFormPage(requirementId: r['id']))); if (ok == true) load(); }, child: const Text('Ajouter une preuve')),
-            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryLinkRiskFormPage(requirementId: r['id']))); if (ok == true) load(); }, child: const Text('Lier un risque')),
-            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryGenerateActionFormPage(requirement: r))); if (ok == true) load(); }, child: const Text('Créer une action CAPA')),
-            if (requirementRisks.isNotEmpty) OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryReevalFormPage(requirement: r))); if (ok == true) load(); }, child: const Text('Demander réévaluation du risque')),
-            FilledButton(onPressed: busy ? null : generateNc, style: FilledButton.styleFrom(backgroundColor: QhseColors.red), child: const Text('Créer une NC')),
+            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryApplicabiliteFormPage(requirement: r))); if (ok == true) load(); }, child: Text(t('regulatory.detail.statuerApplicabiliteBtn'))),
+            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryEvaluationFormPage(requirementId: r['id']))); if (ok == true) load(); }, child: Text(t('regulatory.detail.nouvelleEvaluationBtn'))),
+            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryEvidenceFormPage(requirementId: r['id']))); if (ok == true) load(); }, child: Text(t('regulatory.detail.ajouterPreuveBtn'))),
+            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryLinkRiskFormPage(requirementId: r['id']))); if (ok == true) load(); }, child: Text(t('regulatory.detail.lierRisqueBtn'))),
+            OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryGenerateActionFormPage(requirement: r))); if (ok == true) load(); }, child: Text(t('regulatory.detail.creerActionBtn'))),
+            if (requirementRisks.isNotEmpty) OutlinedButton(onPressed: () async { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryReevalFormPage(requirement: r))); if (ok == true) load(); }, child: Text(t('regulatory.detail.demanderReevalBtn'))),
+            FilledButton(onPressed: busy ? null : generateNc, style: FilledButton.styleFrom(backgroundColor: QhseColors.red), child: Text(t('regulatory.detail.creerNcBtn'))),
           ]),
           if (r['justificatifApplicabilite'] != null && '${r['justificatifApplicabilite']}'.isNotEmpty) ...[
-            regSectionTitle('Justification de l\'applicabilité'),
+            regSectionTitle(t('regulatory.detail.justificationTitle')),
             Text(r['justificatifApplicabilite']),
           ],
-          regSectionTitle('Preuve attendue'),
+          regSectionTitle(t('regulatory.detail.preuveAttendueTitle')),
           Text(r['preuveAttendue'] ?? '—'),
-          regSectionTitle('Preuves de conformité (${evidences.length})'),
-          if (evidences.isEmpty) regEmpty('Aucune preuve enregistrée')
+          regSectionTitle(t('regulatory.detail.preuvesSection', {'count': '${evidences.length}'})),
+          if (evidences.isEmpty) regEmpty(t('regulatory.empty.preuves'))
           else ...evidences.map((e) => Card(child: ListTile(
-            title: Text(e['nom'] ?? e['type'] ?? 'Preuve'),
-            subtitle: Text('Expire le ${regFmtDate(e['dateExpiration'])} • ${regUserName(e['responsable'])}'),
-            trailing: regChip(regEvidenceStatutLabels[e['statut']] ?? e['statut'] ?? '', regEvidenceColor(e['statut'])),
+            title: Text(e['nom'] ?? e['type'] ?? t('regulatory.alerts.preuveDefault')),
+            subtitle: Text(t('regulatory.detail.expireLine', {'date': regFmtDate(e['dateExpiration']), 'responsable': regUserName(e['responsable'])})),
+            trailing: regChip(regEvidenceStatutLabel(e['statut']?.toString()), regEvidenceColor(e['statut'])),
             onTap: () async {
               final choice = await showDialog<String>(context: c, builder: (_) => SimpleDialog(children: [
-                SimpleDialogOption(onPressed: () => Navigator.pop(c, 'edit'), child: const Text('Modifier')),
-                SimpleDialogOption(onPressed: () => Navigator.pop(c, 'delete'), child: const Text('Supprimer')),
+                SimpleDialogOption(onPressed: () => Navigator.pop(c, 'edit'), child: Text(t('regulatory.edit'))),
+                SimpleDialogOption(onPressed: () => Navigator.pop(c, 'delete'), child: Text(t('regulatory.delete'))),
               ]));
               if (choice == 'edit') { final ok = await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RegulatoryEvidenceFormPage(requirementId: r['id'], record: e))); if (ok == true) load(); }
-              else if (choice == 'delete') deleteEvidence(e['id'], e['nom'] ?? 'preuve');
+              else if (choice == 'delete') deleteEvidence(e['id'], e['nom'] ?? t('regulatory.alerts.preuveDefault'));
             },
           ))),
-          regSectionTitle('Historique des évaluations (${evaluations.length})'),
-          if (evaluations.isEmpty) regEmpty('Aucune évaluation enregistrée')
+          regSectionTitle(t('regulatory.detail.evaluationsSection', {'count': '${evaluations.length}'})),
+          if (evaluations.isEmpty) regEmpty(t('regulatory.empty.evaluations'))
           else ...evaluations.map((ev) => Card(child: ListTile(
             leading: Icon(Icons.fact_check, color: regConformiteColor(ev['statut'] == 'NON_CONFORME' ? 'NON_CONFORME' : (ev['statut'] == 'PARTIEL' ? 'PARTIEL' : 'CONFORME'))),
-            title: Text(regStatutConformiteLabels[ev['statut']] ?? ev['statut'] ?? ''),
+            title: Text(regStatutConformiteLabel(ev['statut']?.toString())),
             subtitle: Text('${regFmtDate(ev['dateControle'])}${ev['constat'] != null ? ' — ${ev['constat']}' : ''}'),
           ))),
-          regSectionTitle('Risques liés (${requirementRisks.length})'),
-          if (requirementRisks.isEmpty) regEmpty('Aucun risque lié')
+          regSectionTitle(t('regulatory.section.risquesLies', {'count': '${requirementRisks.length}'})),
+          if (requirementRisks.isEmpty) regEmpty(t('regulatory.empty.risques'))
           else ...requirementRisks.map((rr) => Card(child: ListTile(
             title: Text('${rr['risk']['code']} — ${rr['risk']['hazard']}'),
             trailing: IconButton(icon: const Icon(Icons.link_off), onPressed: () => unlinkRisk(rr['id'])),
           ))),
-          regSectionTitle('Documents liés (${requirementDocuments.length})'),
-          if (requirementDocuments.isEmpty) regEmpty('Aucun document lié')
+          regSectionTitle(t('regulatory.section.documentsLies', {'count': '${requirementDocuments.length}'})),
+          if (requirementDocuments.isEmpty) regEmpty(t('regulatory.empty.documents'))
           else ...requirementDocuments.map((rd) => Card(child: ListTile(
             title: Text(rd['document']?['title'] ?? rd['document']?['name'] ?? ''),
             trailing: IconButton(icon: const Icon(Icons.link_off), onPressed: () => unlinkDocument(rd['id'])),
           ))),
-          regSectionTitle('Non-conformités liées (${nonConformities.length})'),
-          if (nonConformities.isEmpty) regEmpty('Aucune non-conformité liée')
+          regSectionTitle(t('regulatory.detail.ncSection', {'count': '${nonConformities.length}'})),
+          if (nonConformities.isEmpty) regEmpty(t('regulatory.empty.nc'))
           else ...nonConformities.map((n) => Card(child: ListTile(leading: const Icon(Icons.report, color: Colors.red), title: Text(n['title'] ?? ''), subtitle: Text('${n['code']} • ${n['status']}')))),
-          regSectionTitle('Actions liées (${actions.length})'),
-          if (actions.isEmpty) regEmpty('Aucune action liée')
-          else ...actions.map((a) => Card(child: ListTile(leading: const Icon(Icons.task_alt), title: Text(a['title'] ?? ''), subtitle: Text('${a['code']} • ${a['status']}${a['dueDate'] != null ? ' • échéance ${regFmtDate(a['dueDate'])}' : ''}')))),
+          regSectionTitle(t('regulatory.detail.actionsSection', {'count': '${actions.length}'})),
+          if (actions.isEmpty) regEmpty(t('regulatory.empty.actions'))
+          else ...actions.map((a) => Card(child: ListTile(leading: const Icon(Icons.task_alt), title: Text(a['title'] ?? ''), subtitle: Text('${a['code']} • ${a['status']}${a['dueDate'] != null ? ' • ${t('regulatory.echeanceInline', {'date': regFmtDate(a['dueDate'])})}' : ''}')))),
         ]),
       ),
     );
@@ -763,7 +766,7 @@ class _RegulatoryApplicabiliteFormPageState extends State<RegulatoryApplicabilit
 
   Future<void> submit() async {
     if (requiresJustification && justificatif.text.trim().isEmpty) {
-      setState(() => error = 'Une justification est obligatoire pour une exigence non applicable ou partiellement applicable.');
+      setState(() => error = t('regulatory.applicForm.justificationRequiredMsg'));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -775,23 +778,23 @@ class _RegulatoryApplicabiliteFormPageState extends State<RegulatoryApplicabilit
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Statuer sur l\'applicabilité')),
+    appBar: AppBar(title: Text(t('regulatory.applicForm.title'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
       DropdownButtonFormField<String>(
         value: applicabilite,
-        decoration: const InputDecoration(labelText: 'Applicabilité', border: OutlineInputBorder()),
-        items: regApplicabiliteLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+        decoration: InputDecoration(labelText: t('regulatory.filter.applicabilite'), border: const OutlineInputBorder()),
+        items: regApplicabiliteValues.map((k) => DropdownMenuItem(value: k, child: Text(regApplicabiliteLabel(k)))).toList(),
         onChanged: (v) => setState(() => applicabilite = v ?? applicabilite),
       ),
       const SizedBox(height: 12),
       TextField(controller: justificatif, maxLines: 4, decoration: InputDecoration(
-        labelText: requiresJustification ? 'Justification *' : 'Justification',
-        hintText: 'Jamais de conclusion automatique : expliquez le raisonnement.',
+        labelText: requiresJustification ? t('regulatory.applicForm.justificationRequired') : t('regulatory.applicForm.justification'),
+        hintText: t('regulatory.applicForm.justificationHint'),
         border: const OutlineInputBorder(),
       )),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Valider')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.valider'))),
     ]),
   );
 }
@@ -838,29 +841,29 @@ class _RegulatoryEvaluationFormPageState extends State<RegulatoryEvaluationFormP
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Nouvelle évaluation de conformité')),
+    appBar: AppBar(title: Text(t('regulatory.evalForm.title'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
       DropdownButtonFormField<String>(
         value: statut,
-        decoration: const InputDecoration(labelText: 'Statut', border: OutlineInputBorder()),
-        items: regStatutConformiteLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+        decoration: InputDecoration(labelText: t('regulatory.field.statut'), border: const OutlineInputBorder()),
+        items: regStatutConformiteValues.map((k) => DropdownMenuItem(value: k, child: Text(regStatutConformiteLabel(k)))).toList(),
         onChanged: (v) => setState(() => statut = v ?? statut),
       ),
       const SizedBox(height: 12),
-      OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text('Date du contrôle : ${regFmtDate(dateControle.toIso8601String())}')),
+      OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(t('regulatory.evalForm.dateControle', {'date': regFmtDate(dateControle.toIso8601String())}))),
       const SizedBox(height: 12),
-      TextField(controller: constat, maxLines: 2, decoration: const InputDecoration(labelText: 'Constat', border: OutlineInputBorder())),
+      TextField(controller: constat, maxLines: 2, decoration: InputDecoration(labelText: t('regulatory.evalForm.constat'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: preuveExaminee, decoration: const InputDecoration(labelText: 'Preuve examinée', border: OutlineInputBorder())),
+      TextField(controller: preuveExaminee, decoration: InputDecoration(labelText: t('regulatory.evalForm.preuveExaminee'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: personneInterrogee, decoration: const InputDecoration(labelText: 'Personne interrogée', border: OutlineInputBorder())),
+      TextField(controller: personneInterrogee, decoration: InputDecoration(labelText: t('regulatory.evalForm.personneInterrogee'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: observation, maxLines: 2, decoration: const InputDecoration(labelText: 'Observation', border: OutlineInputBorder())),
+      TextField(controller: observation, maxLines: 2, decoration: InputDecoration(labelText: t('regulatory.evalForm.observation'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: commentaire, maxLines: 2, decoration: const InputDecoration(labelText: 'Commentaire', border: OutlineInputBorder())),
+      TextField(controller: commentaire, maxLines: 2, decoration: InputDecoration(labelText: t('regulatory.field.commentaire'), border: const OutlineInputBorder())),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Enregistrer l\'évaluation')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.evalForm.submitBtn'))),
     ]),
   );
 }
@@ -918,29 +921,29 @@ class _RegulatoryEvidenceFormPageState extends State<RegulatoryEvidenceFormPage>
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text(editing ? 'Modifier la preuve' : 'Nouvelle preuve de conformité')),
+    appBar: AppBar(title: Text(editing ? t('regulatory.evidenceForm.editTitle') : t('regulatory.evidenceForm.createTitle'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      TextField(controller: type, decoration: const InputDecoration(labelText: 'Type (certificat, registre, permis...)', border: OutlineInputBorder())),
+      TextField(controller: type, decoration: InputDecoration(labelText: t('regulatory.evidenceForm.type'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: nom, decoration: const InputDecoration(labelText: 'Nom / référence', border: OutlineInputBorder())),
+      TextField(controller: nom, decoration: InputDecoration(labelText: t('regulatory.evidenceForm.nom'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
       Row(children: [
-        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text(dateEmission == null ? 'Émission' : regFmtDate(dateEmission!.toIso8601String())))),
+        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text(dateEmission == null ? t('regulatory.evidenceForm.emission') : regFmtDate(dateEmission!.toIso8601String())))),
         const SizedBox(width: 8),
-        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.event_busy), label: Text(dateExpiration == null ? 'Expiration' : regFmtDate(dateExpiration!.toIso8601String())))),
+        Expanded(child: OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.event_busy), label: Text(dateExpiration == null ? t('regulatory.evidenceForm.expiration') : regFmtDate(dateExpiration!.toIso8601String())))),
       ]),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: users.any((u) => u['id'] == responsableId) ? responsableId : null,
-        decoration: const InputDecoration(labelText: 'Responsable', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.responsable'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...users.map((u) => DropdownMenuItem(value: u['id'] as String, child: Text(regUserName(u))))],
         onChanged: (v) => setState(() => responsableId = v),
       ),
       const SizedBox(height: 12),
-      TextField(controller: commentaire, maxLines: 2, decoration: const InputDecoration(labelText: 'Commentaire', border: OutlineInputBorder())),
+      TextField(controller: commentaire, maxLines: 2, decoration: InputDecoration(labelText: t('regulatory.field.commentaire'), border: const OutlineInputBorder())),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Enregistrer')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.save'))),
     ]),
   );
 }
@@ -964,7 +967,7 @@ class _RegulatoryLinkRiskFormPageState extends State<RegulatoryLinkRiskFormPage>
   void initState() { super.initState(); api.get('/business/risks').then((v) { if (mounted) setState(() => risks = List.from(v)); }).catchError((_) {}); }
 
   Future<void> submit() async {
-    if (riskId == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choisissez un risque'))); return; }
+    if (riskId == null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('regulatory.linkRiskForm.chooseRisk')))); return; }
     setState(() { busy = true; error = null; });
     try {
       await api.post('/business/regulatory-requirements/${widget.requirementId}/link-risk', {'riskId': riskId, 'note': note.text.trim().isEmpty ? null : note.text.trim()});
@@ -974,19 +977,19 @@ class _RegulatoryLinkRiskFormPageState extends State<RegulatoryLinkRiskFormPage>
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Lier un risque existant')),
+    appBar: AppBar(title: Text(t('regulatory.linkRiskForm.title'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
       DropdownButtonFormField<String>(
         value: riskId, isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Risque', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.risque'), border: const OutlineInputBorder()),
         items: risks.map<DropdownMenuItem<String>>((r) => DropdownMenuItem(value: r['id'] as String, child: Text('${r['code']} — ${r['hazard']}', overflow: TextOverflow.ellipsis))).toList(),
         onChanged: (v) => setState(() => riskId = v),
       ),
       const SizedBox(height: 12),
-      TextField(controller: note, decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder())),
+      TextField(controller: note, decoration: InputDecoration(labelText: t('regulatory.linkRiskForm.note'), border: const OutlineInputBorder())),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Lier')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.lier'))),
     ]),
   );
 }
@@ -1020,7 +1023,7 @@ class _RegulatoryGenerateActionFormPageState extends State<RegulatoryGenerateAct
   Future<void> submit() async {
     setState(() { busy = true; error = null; });
     final payload = {
-      'title': title.text.trim().isEmpty ? 'Action réglementaire — ${widget.requirement['libelle']}'.substring(0, 60.clamp(0, 'Action réglementaire — ${widget.requirement['libelle']}'.length)) : title.text.trim(),
+      'title': title.text.trim().isEmpty ? t('regulatory.actionForm.titreHint', {'libelle': '${widget.requirement['libelle']}'}).substring(0, 60.clamp(0, t('regulatory.actionForm.titreHint', {'libelle': '${widget.requirement['libelle']}'}).length)) : title.text.trim(),
       'description': description.text.trim().isEmpty ? null : description.text.trim(),
       'priority': priority, 'actionType': 'CORRECTIVE', 'responsibleId': responsibleId, 'dueDate': dueDate?.toIso8601String(),
     };
@@ -1032,23 +1035,23 @@ class _RegulatoryGenerateActionFormPageState extends State<RegulatoryGenerateAct
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Créer une action CAPA')),
+    appBar: AppBar(title: Text(t('regulatory.detail.creerActionBtn'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      TextField(controller: title, decoration: InputDecoration(labelText: 'Titre', hintText: 'Action réglementaire — ${widget.requirement['libelle']}', border: const OutlineInputBorder())),
+      TextField(controller: title, decoration: InputDecoration(labelText: t('regulatory.field.titre'), hintText: t('regulatory.actionForm.titreHint', {'libelle': '${widget.requirement['libelle']}'}), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
-      TextField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
+      TextField(controller: description, maxLines: 2, decoration: InputDecoration(labelText: t('regulatory.field.description'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: users.any((u) => u['id'] == responsibleId) ? responsibleId : null,
-        decoration: const InputDecoration(labelText: 'Responsable', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.responsable'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...users.map((u) => DropdownMenuItem(value: u['id'] as String, child: Text(regUserName(u))))],
         onChanged: (v) => setState(() => responsibleId = v),
       ),
       const SizedBox(height: 12),
-      OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dueDate == null ? 'Échéance' : regFmtDate(dueDate!.toIso8601String()))),
+      OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dueDate == null ? t('regulatory.field.echeance') : regFmtDate(dueDate!.toIso8601String()))),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Créer l\'action')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.actionForm.submitBtn'))),
     ]),
   );
 }
@@ -1086,7 +1089,7 @@ class _RegulatoryReevalFormPageState extends State<RegulatoryReevalFormPage> {
   }
 
   Future<void> submit() async {
-    if (riskId == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choisissez le risque concerné'))); return; }
+    if (riskId == null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('regulatory.reevalForm.chooseRisk')))); return; }
     setState(() { busy = true; error = null; });
     try {
       await api.post('/business/regulatory-requirements/${widget.requirement['id']}/request-risk-reevaluation', {
@@ -1098,30 +1101,30 @@ class _RegulatoryReevalFormPageState extends State<RegulatoryReevalFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Demander une réévaluation du risque')),
+    appBar: AppBar(title: Text(t('regulatory.reevalForm.title'))),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      Text('Jamais une modification directe de la cotation : cette demande crée une tâche à traiter.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: QhseColors.textSecondary)),
+      Text(t('regulatory.reevalForm.hint'), style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: QhseColors.textSecondary)),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: riskId, isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Risque concerné', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.reevalForm.risqueConcerne'), border: const OutlineInputBorder()),
         items: risks.map<DropdownMenuItem<String>>((rr) => DropdownMenuItem(value: rr['riskId'] as String, child: Text('${rr['risk']['code']} — ${rr['risk']['hazard']}', overflow: TextOverflow.ellipsis))).toList(),
         onChanged: (v) => setState(() => riskId = v),
       ),
       const SizedBox(height: 12),
-      TextField(controller: raison, maxLines: 3, decoration: const InputDecoration(labelText: 'Raison de la réévaluation', border: OutlineInputBorder())),
+      TextField(controller: raison, maxLines: 3, decoration: InputDecoration(labelText: t('regulatory.reevalForm.raison'), border: const OutlineInputBorder())),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: users.any((u) => u['id'] == responsableId) ? responsableId : null,
-        decoration: const InputDecoration(labelText: 'Responsable', border: OutlineInputBorder()),
+        decoration: InputDecoration(labelText: t('regulatory.field.responsable'), border: const OutlineInputBorder()),
         items: [const DropdownMenuItem(value: null, child: Text('—')), ...users.map((u) => DropdownMenuItem(value: u['id'] as String, child: Text(regUserName(u))))],
         onChanged: (v) => setState(() => responsableId = v),
       ),
       const SizedBox(height: 12),
-      OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dateLimite == null ? 'Date limite' : regFmtDate(dateLimite!.toIso8601String()))),
+      OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dateLimite == null ? t('regulatory.reevalForm.dateLimite') : regFmtDate(dateLimite!.toIso8601String()))),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
       const SizedBox(height: 20),
-      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : const Text('Envoyer la demande')),
+      FilledButton(onPressed: busy ? null : submit, child: busy ? const CircularProgressIndicator() : Text(t('regulatory.reevalForm.submitBtn'))),
     ]),
   );
 }
@@ -1136,10 +1139,17 @@ class RegulatoryAlertsTab extends StatefulWidget {
   State<RegulatoryAlertsTab> createState() => _RegulatoryAlertsTabState();
 }
 
-const _regAlertThresholds = [
-  ['alerteJ90', '90 jours'], ['alerteJ60', '60 jours'], ['alerteJ30', '30 jours'],
-  ['alerteJ15', '15 jours'], ['alerteJ7', '7 jours'],
-];
+const _regAlertThresholdKeys = ['alerteJ90', 'alerteJ60', 'alerteJ30', 'alerteJ15', 'alerteJ7'];
+String _regAlertThresholdLabel(String k) {
+  switch (k) {
+    case 'alerteJ90': return t('regulatory.alerts.threshold90');
+    case 'alerteJ60': return t('regulatory.alerts.threshold60');
+    case 'alerteJ30': return t('regulatory.alerts.threshold30');
+    case 'alerteJ15': return t('regulatory.alerts.threshold15');
+    case 'alerteJ7': return t('regulatory.alerts.threshold7');
+    default: return k;
+  }
+}
 
 class _RegulatoryAlertsTabState extends State<RegulatoryAlertsTab> {
   final api = Api();
@@ -1173,7 +1183,7 @@ class _RegulatoryAlertsTabState extends State<RegulatoryAlertsTab> {
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
-    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))]));
+    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))]));
     final echeancesEvaluation = List.from(alerts!['echeancesEvaluation'] ?? []);
     final echeancesPreuves = List.from(alerts!['echeancesPreuves'] ?? []);
     final nouvellesExigences = List.from(alerts!['nouvellesExigences'] ?? []);
@@ -1181,42 +1191,42 @@ class _RegulatoryAlertsTabState extends State<RegulatoryAlertsTab> {
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
-        regSectionTitle("Seuils d'alerte"),
+        regSectionTitle(t('regulatory.alerts.thresholdsTitle')),
         Card(child: Padding(padding: const EdgeInsets.all(12), child: Wrap(spacing: 12, runSpacing: 4, children: [
-          for (final t in _regAlertThresholds)
+          for (final k in _regAlertThresholdKeys)
             FilterChip(
-              label: Text(t[1], style: const TextStyle(fontSize: 12)),
-              selected: settings?[t[0]] == true,
-              onSelected: (_) => _toggleSetting(t[0]),
+              label: Text(_regAlertThresholdLabel(k), style: const TextStyle(fontSize: 12)),
+              selected: settings?[k] == true,
+              onSelected: (_) => _toggleSetting(k),
             ),
         ]))),
-        regSectionTitle('Échéances d\'évaluation (${echeancesEvaluation.length})'),
-        if (echeancesEvaluation.isEmpty) regEmpty('Aucune échéance dans les seuils configurés')
+        regSectionTitle(t('regulatory.alerts.echeancesEvalSection', {'count': '${echeancesEvaluation.length}'})),
+        if (echeancesEvaluation.isEmpty) regEmpty(t('regulatory.alerts.echeancesEvalEmpty'))
         else ...echeancesEvaluation.map((a) => Card(child: ListTile(
           leading: Icon(Icons.event_busy, color: regAlertNiveauColor(a['niveau'])),
           title: Text('${a['code']} — ${a['libelle']}', maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text('${a['texte']} • ${a['jours'] < 0 ? '${-a['jours']} j de retard' : 'dans ${a['jours']} j'} • ${regUserName(a['responsable'])}'),
+          subtitle: Text('${a['texte']} • ${a['jours'] < 0 ? t('regulatory.alerts.retardJours', {'value': '${-a['jours']}'}) : t('regulatory.alerts.dansJours', {'value': '${a['jours']}'})} • ${regUserName(a['responsable'])}'),
           onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementDetailPage(requirementId: a['requirementId']))),
         ))),
-        regSectionTitle('Preuves arrivant à expiration (${echeancesPreuves.length})'),
-        if (echeancesPreuves.isEmpty) regEmpty('Aucune preuve à surveiller')
+        regSectionTitle(t('regulatory.alerts.echeancesPreuvesSection', {'count': '${echeancesPreuves.length}'})),
+        if (echeancesPreuves.isEmpty) regEmpty(t('regulatory.alerts.echeancesPreuvesEmpty'))
         else ...echeancesPreuves.map((a) => Card(child: ListTile(
           leading: Icon(Icons.description, color: regAlertNiveauColor(a['niveau'])),
-          title: Text('${a['nom'] ?? 'Preuve'} — ${a['code']}', maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text('${a['libelle']} • ${a['jours'] < 0 ? '${-a['jours']} j de retard' : 'dans ${a['jours']} j'}'),
+          title: Text('${a['nom'] ?? t('regulatory.alerts.preuveDefault')} — ${a['code']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text('${a['libelle']} • ${a['jours'] < 0 ? t('regulatory.alerts.retardJours', {'value': '${-a['jours']}'}) : t('regulatory.alerts.dansJours', {'value': '${a['jours']}'})}'),
           onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementDetailPage(requirementId: a['requirementId']))),
         ))),
-        regSectionTitle('Nouvelles exigences à analyser (${nouvellesExigences.length})'),
-        if (nouvellesExigences.isEmpty) regEmpty('Aucune nouvelle exigence en attente')
+        regSectionTitle(t('regulatory.alerts.nouvellesExigencesSection', {'count': '${nouvellesExigences.length}'})),
+        if (nouvellesExigences.isEmpty) regEmpty(t('regulatory.alerts.nouvellesExigencesEmpty'))
         else ...nouvellesExigences.map((r) => Card(child: ListTile(
           leading: const Icon(Icons.fiber_new),
           title: Text(r['libelle'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(r['text']?['titre'] ?? ''),
           onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementDetailPage(requirementId: r['id']))),
         ))),
-        regSectionTitle('Actions réglementaires en retard (${actionsEnRetard.length})'),
-        if (actionsEnRetard.isEmpty) regEmpty('Aucune action en retard')
-        else ...actionsEnRetard.map((a) => Card(child: ListTile(leading: const Icon(Icons.warning, color: Colors.red), title: Text(a['title'] ?? ''), subtitle: Text('${a['code']} • échéance ${regFmtDate(a['dueDate'])} • ${regUserName(a['responsible'])}')))),
+        regSectionTitle(t('regulatory.alerts.actionsRetardSection', {'count': '${actionsEnRetard.length}'})),
+        if (actionsEnRetard.isEmpty) regEmpty(t('regulatory.alerts.actionsRetardEmpty'))
+        else ...actionsEnRetard.map((a) => Card(child: ListTile(leading: const Icon(Icons.warning, color: Colors.red), title: Text(a['title'] ?? ''), subtitle: Text('${a['code']} • ${t('regulatory.echeanceInline', {'date': regFmtDate(a['dueDate'])})} • ${regUserName(a['responsible'])}')))),
       ]),
     );
   }
@@ -1238,7 +1248,8 @@ class _RegulatoryReevaluationsTabState extends State<RegulatoryReevaluationsTab>
   bool loading = true;
   String? error;
 
-  static const statuts = {'A_PLANIFIER': 'À planifier', 'PLANIFIEE': 'Planifiée', 'REALISEE': 'Réalisée', 'ANNULEE': 'Annulée'};
+  static const statutsValues = ['A_PLANIFIER', 'PLANIFIEE', 'REALISEE', 'ANNULEE'];
+  static String statutLabel(String? k) => k == null ? '—' : (statutsValues.contains(k) ? t('regulatory.reevalStatut.$k') : k);
 
   @override
   void initState() { super.initState(); load(); }
@@ -1258,19 +1269,19 @@ class _RegulatoryReevaluationsTabState extends State<RegulatoryReevaluationsTab>
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
-    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))]));
+    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))]));
     return RefreshIndicator(
       onRefresh: load,
       child: items.isEmpty
-          ? ListView(children: [regEmpty('Aucune demande de réévaluation en cours')])
+          ? ListView(children: [regEmpty(t('regulatory.reevaluations.empty'))])
           : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
               final d = items[i];
               return Card(child: ListTile(
                 title: Text('${d['risk']?['code'] ?? ''} — ${d['risk']?['hazard'] ?? ''}'),
-                subtitle: Text('${d['requirement']?['code'] ?? ''} • ${d['raison'] ?? 'Sans raison précisée'}${d['dateLimite'] != null ? ' • limite ${regFmtDate(d['dateLimite'])}' : ''}'),
+                subtitle: Text('${d['requirement']?['code'] ?? ''} • ${d['raison'] ?? t('regulatory.reevaluations.sansRaison')}${d['dateLimite'] != null ? ' • ${t('regulatory.reevaluations.limiteInline', {'date': regFmtDate(d['dateLimite'])})}' : ''}'),
                 trailing: DropdownButton<String>(
                   value: d['statut'],
-                  items: statuts.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+                  items: statutsValues.map((k) => DropdownMenuItem(value: k, child: Text(statutLabel(k)))).toList(),
                   onChanged: (v) { if (v != null) updateStatut(d['id'], v); },
                 ),
                 onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementDetailPage(requirementId: d['requirementId']))),
@@ -1325,38 +1336,38 @@ class _RegulatoryReportsTabState extends State<RegulatoryReportsTab> {
   @override
   Widget build(BuildContext c) {
     if (loading) return const Center(child: CircularProgressIndicator());
-    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))]));
+    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))]));
     final global = regComplianceRate(items);
-    final byDomain = regGroupCompliance(items, (r) => r['domainId'] as String?, (l) => l.first['domain']?['label'] ?? 'Sans domaine');
-    final bySite = regGroupCompliance(items, (r) => r['siteId'] as String?, (l) => l.first['site']?['name'] ?? 'Sans site');
+    final byDomain = regGroupCompliance(items, (r) => r['domainId'] as String?, (l) => l.first['domain']?['label'] ?? t('regulatory.sansDomaine'));
+    final bySite = regGroupCompliance(items, (r) => r['siteId'] as String?, (l) => l.first['site']?['name'] ?? t('regulatory.sansSite'));
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
         Row(children: [
-          regKpi('Exigences', '${global['total']}', QhseColors.blue),
+          regKpi(t('regulatory.kpi.exigences'), '${global['total']}', QhseColors.blue),
           const SizedBox(width: 8),
-          regKpi('Applicables', '${global['applicables']}', QhseColors.blue),
+          regKpi(t('regulatory.kpi.applicables'), '${global['applicables']}', QhseColors.blue),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          regKpi('Évaluées', '${global['evaluees']}', QhseColors.amber),
+          regKpi(t('regulatory.kpi.evaluees'), '${global['evaluees']}', QhseColors.amber),
           const SizedBox(width: 8),
-          regKpi('Taux de conformité', global['taux'] != null ? '${global['taux']}%' : '—', QhseColors.green),
+          regKpi(t('regulatory.kpi.tauxConformite'), global['taux'] != null ? '${global['taux']}%' : '—', QhseColors.green),
         ]),
-        regSectionTitle('Taux de conformité par domaine'),
-        if (byDomain.isEmpty) regEmpty('Aucune donnée')
+        regSectionTitle(t('regulatory.reports.byDomainTitle')),
+        if (byDomain.isEmpty) regEmpty(t('regulatory.noData'))
         else ...byDomain.map((g) => ListTile(dense: true, title: Text(g['label']), trailing: Text(g['taux'] != null ? '${g['taux']}% (${g['conformes']}/${g['evaluees']})' : '—'))),
-        regSectionTitle('Taux de conformité par site'),
-        if (bySite.isEmpty) regEmpty('Aucune donnée')
+        regSectionTitle(t('regulatory.reports.bySiteTitle')),
+        if (bySite.isEmpty) regEmpty(t('regulatory.noData'))
         else ...bySite.map((g) => ListTile(dense: true, title: Text(g['label']), trailing: Text(g['taux'] != null ? '${g['taux']}% (${g['conformes']}/${g['evaluees']})' : '—'))),
-        regSectionTitle('Matrice de traçabilité (${items.length} exigences)'),
-        Text('Export Excel/CSV disponible sur le tableau de bord web (Rapports).', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: QhseColors.textSecondary)),
+        regSectionTitle(t('regulatory.reports.matriceTitle', {'count': '${items.length}'})),
+        Text(t('regulatory.reports.exportHint'), style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: QhseColors.textSecondary)),
         const SizedBox(height: 8),
         ...items.map((r) => Card(child: ListTile(
           dense: true,
           title: Text('${r['code']} — ${r['libelle']}', maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text('${r['domain']?['label'] ?? '—'} • ${r['site']?['name'] ?? '—'}'),
-          trailing: regChip(regApplicabiliteLabels[r['applicabilite']] ?? r['applicabilite'] ?? '', regApplicabiliteColor(r['applicabilite'])),
+          trailing: regChip(regApplicabiliteLabel(r['applicabilite']?.toString()), regApplicabiliteColor(r['applicabilite'])),
           onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => RegulatoryRequirementDetailPage(requirementId: r['id']))),
         ))),
       ]),
@@ -1398,18 +1409,18 @@ class _RegulatoryDomainsTabState extends State<RegulatoryDomainsTab> {
   @override
   Widget build(BuildContext c) {
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => openForm(), icon: const Icon(Icons.add), label: const Text('Nouveau domaine')),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => openForm(), icon: const Icon(Icons.add), label: Text(t('regulatory.domains.newBtn'))),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null
-              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: const Text('Réessayer'))]))
+              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error!), TextButton(onPressed: load, child: Text(t('regulatory.retry')))]))
               : RefreshIndicator(onRefresh: load, child: items.isEmpty
-                  ? ListView(children: [regEmpty('Aucun domaine défini')])
+                  ? ListView(children: [regEmpty(t('regulatory.domains.empty'))])
                   : ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (_, i) {
                       final d = items[i];
                       return Card(child: ListTile(
                         title: Text('${d['code']} — ${d['label']}'),
-                        trailing: regChip(d['actif'] == true ? 'Actif' : 'Inactif', d['actif'] == true ? QhseColors.green : QhseColors.textSecondary),
+                        trailing: regChip(d['actif'] == true ? t('regulatory.domains.actif') : t('regulatory.domains.inactif'), d['actif'] == true ? QhseColors.green : QhseColors.textSecondary),
                         onTap: () => openForm(record: d),
                       ));
                     })),
@@ -1435,7 +1446,7 @@ class _RegulatoryDomainDialogState extends State<RegulatoryDomainDialog> {
   bool get editing => widget.record != null;
 
   Future<void> submit() async {
-    if (code.text.trim().isEmpty || label.text.trim().isEmpty) { setState(() => error = 'Code et libellé sont obligatoires'); return; }
+    if (code.text.trim().isEmpty || label.text.trim().isEmpty) { setState(() => error = t('regulatory.domains.validationMsg')); return; }
     setState(() { busy = true; error = null; });
     final payload = {'code': code.text.trim(), 'label': label.text.trim(), 'actif': actif};
     try {
@@ -1447,18 +1458,18 @@ class _RegulatoryDomainDialogState extends State<RegulatoryDomainDialog> {
 
   @override
   Widget build(BuildContext c) => AlertDialog(
-    title: Text(editing ? 'Modifier le domaine' : 'Nouveau domaine'),
+    title: Text(editing ? t('regulatory.domains.editTitle') : t('regulatory.domains.newBtn')),
     content: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: code, decoration: const InputDecoration(labelText: 'Code')),
+      TextField(controller: code, decoration: InputDecoration(labelText: t('regulatory.field.code'))),
       const SizedBox(height: 8),
-      TextField(controller: label, decoration: const InputDecoration(labelText: 'Libellé')),
+      TextField(controller: label, decoration: InputDecoration(labelText: t('regulatory.field.libelle'))),
       const SizedBox(height: 8),
-      SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Actif'), value: actif, onChanged: (v) => setState(() => actif = v)),
+      SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(t('regulatory.domains.actif')), value: actif, onChanged: (v) => setState(() => actif = v)),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12))),
     ]),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-      FilledButton(onPressed: busy ? null : submit, child: const Text('Enregistrer')),
+      TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t('regulatory.cancel'))),
+      FilledButton(onPressed: busy ? null : submit, child: Text(t('regulatory.save'))),
     ],
   );
 }
