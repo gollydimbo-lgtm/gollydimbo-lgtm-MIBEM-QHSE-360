@@ -6,6 +6,7 @@ import 'haccp_study_detail_page.dart';
 import 'haccp_monitoring_form_page.dart';
 import 'load_error_view.dart';
 import '../services/sync_queue.dart';
+import '../i18n/i18n.dart';
 
 // Libellés partagés par tout le module HACCP (page, fiche étude, fiche CCP,
 // formulaire de relevé) — centralisés ici pour éviter les divergences entre
@@ -88,9 +89,9 @@ class _HaccpPageState extends State<HaccpPage> {
     length: 4,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('HACCP'),
-        bottom: const TabBar(tabs: [
-          Tab(text: "Vue d'ensemble"), Tab(text: 'Études'), Tab(text: 'PRP'), Tab(text: 'Matrice'),
+        title: Text(t('haccp.pageTitle')),
+        bottom: TabBar(tabs: [
+          Tab(text: t('haccp.tabApercu')), Tab(text: t('haccp.tabEtudes')), Tab(text: t('haccp.tabPrp')), Tab(text: t('haccp.tabMatrice')),
         ]),
       ),
       body: const TabBarView(children: [_OverviewTab(), _StudiesTab(), _PrpTab(), _MatrixTab()]),
@@ -142,8 +143,8 @@ class _OverviewTabState extends State<_OverviewTab> {
       child: ListTile(
         leading: Icon(late_ ? Icons.timer_off_outlined : Icons.event_available, color: late_ ? QhseColors.red : QhseColors.blue),
         title: Text('${ccp['reference'] ?? '—'} — ${ccp['dangerMaitrise'] ?? ccp['parametre'] ?? ''}'),
-        subtitle: Text('Prévu le ${haccpFmtDateTime(m['datePrevue'])}${ccp['limiteCritique'] != null ? ' · limite : ${ccp['limiteCritique']}' : ''}'),
-        trailing: FilledButton(onPressed: () => openRecord(m), child: const Text('Saisir')),
+        subtitle: Text('${t('haccp.prevuLe', {'date': haccpFmtDateTime(m['datePrevue'])})}${ccp['limiteCritique'] != null ? t('haccp.limiteSuffix', {'limite': '${ccp['limiteCritique']}'}) : ''}'),
+        trailing: FilledButton(onPressed: () => openRecord(m), child: Text(t('haccp.saisir'))),
       ),
     );
   }
@@ -157,37 +158,37 @@ class _OverviewTabState extends State<_OverviewTab> {
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.symmetric(vertical: 12), children: [
         KpiBar([
-          KpiStat('Études validées', '${n('etudesActives')}/${n('etudesTotal')}', color: QhseColors.blue, icon: Icons.fact_check_outlined),
-          KpiStat('CCP actifs', '${n('ccp')}', color: QhseColors.red, icon: Icons.gpp_maybe_outlined),
-          KpiStat('CP actifs', '${n('cp')}', color: QhseColors.blue, icon: Icons.shield_outlined),
-          KpiStat('CCP en anomalie', '${n('ccpEnAnomalie')}', color: n('ccpEnAnomalie') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
-          KpiStat('Taux de réalisation', '${dash['tauxRealisation'] ?? 0}%', color: QhseColors.green, icon: Icons.trending_up),
-          KpiStat('Taux de conformité', '${dash['tauxConformite'] ?? 0}%', color: QhseColors.green, icon: Icons.verified_outlined),
-          KpiStat('Contrôles non conformes', '${n('controlesNonConformes')}', color: n('controlesNonConformes') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.report_gmailerrorred),
-          KpiStat('Contrôles en retard', '${n('controlesEnRetard')}', color: n('controlesEnRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.hourglass_bottom),
-          KpiStat('NC ouvertes', '${n('ncOuvertes')}', color: n('ncOuvertes') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
-          KpiStat('Actions ouvertes', '${n('actionsOuvertes')}', color: QhseColors.blue, icon: Icons.playlist_add_check),
-          KpiStat('Actions en retard', '${n('actionsEnRetard')}', color: n('actionsEnRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
-          KpiStat('Dangers identifiés', '${n('dangers')}', color: QhseColors.amber, icon: Icons.bug_report_outlined),
+          KpiStat(t('haccp.kpiEtudesValidees'), '${n('etudesActives')}/${n('etudesTotal')}', color: QhseColors.blue, icon: Icons.fact_check_outlined),
+          KpiStat(t('haccp.kpiCcpActifs'), '${n('ccp')}', color: QhseColors.red, icon: Icons.gpp_maybe_outlined),
+          KpiStat(t('haccp.kpiCpActifs'), '${n('cp')}', color: QhseColors.blue, icon: Icons.shield_outlined),
+          KpiStat(t('haccp.kpiCcpEnAnomalie'), '${n('ccpEnAnomalie')}', color: n('ccpEnAnomalie') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+          KpiStat(t('haccp.kpiTauxRealisation'), '${dash['tauxRealisation'] ?? 0}%', color: QhseColors.green, icon: Icons.trending_up),
+          KpiStat(t('haccp.kpiTauxConformite'), '${dash['tauxConformite'] ?? 0}%', color: QhseColors.green, icon: Icons.verified_outlined),
+          KpiStat(t('haccp.kpiControlesNonConformes'), '${n('controlesNonConformes')}', color: n('controlesNonConformes') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.report_gmailerrorred),
+          KpiStat(t('haccp.kpiControlesEnRetard'), '${n('controlesEnRetard')}', color: n('controlesEnRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.hourglass_bottom),
+          KpiStat(t('haccp.kpiNcOuvertes'), '${n('ncOuvertes')}', color: n('ncOuvertes') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
+          KpiStat(t('haccp.kpiActionsOuvertes'), '${n('actionsOuvertes')}', color: QhseColors.blue, icon: Icons.playlist_add_check),
+          KpiStat(t('haccp.kpiActionsEnRetard'), '${n('actionsEnRetard')}', color: n('actionsEnRetard') > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
+          KpiStat(t('haccp.kpiDangersIdentifies'), '${n('dangers')}', color: QhseColors.amber, icon: Icons.bug_report_outlined),
         ]),
         const SizedBox(height: 18),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text('Contrôles en retard (${overdue.length})', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: overdue.isNotEmpty ? QhseColors.red : null)),
+          child: Text(t('haccp.controlesEnRetardTitle', {'count': '${overdue.length}'}), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: overdue.isNotEmpty ? QhseColors.red : null)),
         ),
         const SizedBox(height: 6),
         if (overdue.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Text('Aucun contrôle en retard', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Text(t('haccp.aucunControleEnRetard'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
         else
           Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Column(children: overdue.map((m) => _recordTile(m, late_: true)).toList())),
         const SizedBox(height: 18),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text('Contrôles du jour (${today.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          child: Text(t('haccp.controlesDuJourTitle', {'count': '${today.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         ),
         const SizedBox(height: 6),
         if (today.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Text('Aucun contrôle prévu aujourd\'hui', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Text(t('haccp.aucunControleAujourdhui'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
         else
           Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Column(children: today.map((m) => _recordTile(m, late_: false)).toList())),
       ]),
@@ -237,25 +238,25 @@ class _StudiesTabState extends State<_StudiesTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: const Text('Nouvelle étude HACCP'),
+        title: Text(t('haccp.nouvelleEtudeTitle')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Nom de l\'étude *')),
+          TextField(controller: name, decoration: InputDecoration(labelText: t('haccp.nomEtude'))),
           const SizedBox(height: 10),
-          TextField(controller: code, decoration: const InputDecoration(labelText: 'Code')),
+          TextField(controller: code, decoration: InputDecoration(labelText: t('haccp.code'))),
           const SizedBox(height: 10),
-          TextField(controller: produit, decoration: const InputDecoration(labelText: 'Produit concerné')),
+          TextField(controller: produit, decoration: InputDecoration(labelText: t('haccp.produitConcerne'))),
           const SizedBox(height: 10),
-          TextField(controller: activite, decoration: const InputDecoration(labelText: 'Activité / ligne')),
+          TextField(controller: activite, decoration: InputDecoration(labelText: t('haccp.activiteLigne'))),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable'), value: responsableId,
+            isExpanded: true, decoration: InputDecoration(labelText: t('haccp.responsable')), value: responsableId,
             items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
             onChanged: (v) => setD(() => responsableId = v),
           ),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          FilledButton(onPressed: name.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: const Text('Créer')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccp.annuler'))),
+          FilledButton(onPressed: name.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: Text(t('haccp.creer'))),
         ],
       )),
     );
@@ -276,7 +277,7 @@ class _StudiesTabState extends State<_StudiesTab> {
       if (e.networkError) {
         await SyncQueue.enqueue('haccpStudy', 'CREATE', payload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : étude HACCP enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('haccp.etudeHorsLigne')), duration: const Duration(seconds: 4)));
           load();
         }
       } else if (mounted) {
@@ -296,7 +297,7 @@ class _StudiesTabState extends State<_StudiesTab> {
         : RefreshIndicator(
             onRefresh: load,
             child: studies.isEmpty
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune étude HACCP')))])
+                ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('haccp.aucuneEtude'))))])
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                     itemCount: studies.length,
@@ -313,22 +314,23 @@ class _StudiesTabState extends State<_StudiesTab> {
                     },
                   ),
           ),
-    floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: const Text('Nouvelle étude')),
+    floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: Text(t('haccp.nouvelleEtudeFab'))),
   );
 }
 
 // --- Onglet 3 : PRP — programmes prérequis / bonnes pratiques d'hygiène ---
-const _prpTypeLabels = {
-  'NETTOYAGE_DESINFECTION': 'Nettoyage / désinfection',
-  'LUTTE_NUISIBLES': 'Lutte contre les nuisibles',
-  'HYGIENE_PERSONNEL': 'Hygiène du personnel',
-  'MAINTENANCE': 'Maintenance des équipements',
-  'APPROVISIONNEMENT_EAU': 'Approvisionnement en eau',
-  'GESTION_DECHETS': 'Gestion des déchets',
-  'FORMATION': 'Formation du personnel',
-  'TRACABILITE': 'Traçabilité / rappel',
-  'AUTRE': 'Autre',
+const _prpTypeKeys = {
+  'NETTOYAGE_DESINFECTION': 'prpNettoyageDesinfection',
+  'LUTTE_NUISIBLES': 'prpLutteNuisibles',
+  'HYGIENE_PERSONNEL': 'prpHygienePersonnel',
+  'MAINTENANCE': 'prpMaintenance',
+  'APPROVISIONNEMENT_EAU': 'prpApprovisionnementEau',
+  'GESTION_DECHETS': 'prpGestionDechets',
+  'FORMATION': 'prpFormation',
+  'TRACABILITE': 'prpTracabilite',
+  'AUTRE': 'prpAutre',
 };
+String _prpTypeLabel(String? k) => k == null ? '—' : t('haccp.${_prpTypeKeys[k] ?? 'prpAutre'}');
 
 class _PrpTab extends StatefulWidget {
   const _PrpTab();
@@ -364,36 +366,36 @@ class _PrpTabState extends State<_PrpTab> {
     final libelle = TextEditingController(text: prp?['libelle'] ?? '');
     final description = TextEditingController(text: prp?['description'] ?? '');
     final frequence = TextEditingController(text: prp?['frequence'] ?? '');
-    String type = prp?['type'] ?? _prpTypeLabels.keys.first;
+    String type = prp?['type'] ?? _prpTypeKeys.keys.first;
     String? responsableId = prp?['responsableId'];
     bool active = prp?['active'] ?? true;
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: Text(prp == null ? 'Nouveau PRP' : 'Modifier le PRP'),
+        title: Text(prp == null ? t('haccp.nouveauPrpTitle') : t('haccp.modifierPrpTitle')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Type'), value: type,
-            items: _prpTypeLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            isExpanded: true, decoration: InputDecoration(labelText: t('haccp.type')), value: type,
+            items: _prpTypeKeys.keys.map((k) => DropdownMenuItem(value: k, child: Text(_prpTypeLabel(k)))).toList(),
             onChanged: (v) => setD(() => type = v ?? type),
           ),
           const SizedBox(height: 10),
-          TextField(controller: libelle, decoration: const InputDecoration(labelText: 'Libellé *')),
+          TextField(controller: libelle, decoration: InputDecoration(labelText: t('haccp.libelle'))),
           const SizedBox(height: 10),
-          TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),
+          TextField(controller: description, maxLines: 3, decoration: InputDecoration(labelText: t('haccp.description'))),
           const SizedBox(height: 10),
-          TextField(controller: frequence, decoration: const InputDecoration(labelText: 'Fréquence (ex : Hebdomadaire)')),
+          TextField(controller: frequence, decoration: InputDecoration(labelText: t('haccp.frequence'))),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable'), value: responsableId,
+            isExpanded: true, decoration: InputDecoration(labelText: t('haccp.responsable')), value: responsableId,
             items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
             onChanged: (v) => setD(() => responsableId = v),
           ),
-          CheckboxListTile(contentPadding: EdgeInsets.zero, value: active, title: const Text('Actif', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => active = v ?? true)),
+          CheckboxListTile(contentPadding: EdgeInsets.zero, value: active, title: Text(t('haccp.actif'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setD(() => active = v ?? true)),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          FilledButton(onPressed: libelle.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: const Text('Enregistrer')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccp.annuler'))),
+          FilledButton(onPressed: libelle.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: Text(t('haccp.enregistrer'))),
         ],
       )),
     );
@@ -418,11 +420,11 @@ class _PrpTabState extends State<_PrpTab> {
 
   Future<void> deletePrp(Map prp) async {
     final ok = await showDialog<bool>(context: context, builder: (dc) => AlertDialog(
-      title: const Text('Supprimer ce PRP ?'),
+      title: Text(t('haccp.supprimerPrpTitle')),
       content: Text('${prp['libelle']}'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-        FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Supprimer')),
+        TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccp.annuler'))),
+        FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('haccp.supprimer'))),
       ],
     ));
     if (ok != true) return;
@@ -439,7 +441,7 @@ class _PrpTabState extends State<_PrpTab> {
         : RefreshIndicator(
             onRefresh: load,
             child: prps.isEmpty
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun PRP enregistré')))])
+                ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('haccp.aucunPrp'))))])
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                     itemCount: prps.length,
@@ -449,7 +451,7 @@ class _PrpTabState extends State<_PrpTab> {
                         child: ListTile(
                           leading: Icon(Icons.cleaning_services_outlined, color: p['active'] == true ? QhseColors.green : QhseColors.textSecondary),
                           title: Text('${p['libelle']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${_prpTypeLabels[p['type']] ?? p['type']}${p['frequence'] != null ? ' · ${p['frequence']}' : ''} · ${userName(p['responsableId'])}'),
+                          subtitle: Text('${_prpTypeLabel(p['type'])}${p['frequence'] != null ? ' · ${p['frequence']}' : ''} · ${userName(p['responsableId'])}'),
                           onTap: () => editPrp(p),
                           trailing: IconButton(icon: const Icon(Icons.delete_outline, size: 20), onPressed: () => deletePrp(p)),
                         ),
@@ -457,7 +459,7 @@ class _PrpTabState extends State<_PrpTab> {
                     },
                   ),
           ),
-    floatingActionButton: FloatingActionButton.extended(onPressed: () => editPrp(), icon: const Icon(Icons.add), label: const Text('Nouveau PRP')),
+    floatingActionButton: FloatingActionButton.extended(onPressed: () => editPrp(), icon: const Icon(Icons.add), label: Text(t('haccp.nouveauPrpFab'))),
   );
 }
 
@@ -488,7 +490,7 @@ class _MatrixTabState extends State<_MatrixTab> {
     if (loading) return const Center(child: CircularProgressIndicator());
     if (error != null) return LoadErrorView(error: error, onRetry: load);
     if (rows.isEmpty) {
-      return RefreshIndicator(onRefresh: load, child: ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune donnée')))]));
+      return RefreshIndicator(onRefresh: load, child: ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('haccp.aucuneDonnee'))))]));
     }
     return RefreshIndicator(
       onRefresh: load,
@@ -496,9 +498,9 @@ class _MatrixTabState extends State<_MatrixTab> {
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
-            columns: const [
-              DataColumn(label: Text('Étude')), DataColumn(label: Text('Étape')), DataColumn(label: Text('Danger')),
-              DataColumn(label: Text('Type')), DataColumn(label: Text('Niveau de risque')), DataColumn(label: Text('CCP/CP')), DataColumn(label: Text('Statut')),
+            columns: [
+              DataColumn(label: Text(t('haccp.colEtude'))), DataColumn(label: Text(t('haccp.colEtape'))), DataColumn(label: Text(t('haccp.colDanger'))),
+              DataColumn(label: Text(t('haccp.colType'))), DataColumn(label: Text(t('haccp.colNiveauRisque'))), DataColumn(label: Text(t('haccp.colCcpCp'))), DataColumn(label: Text(t('haccp.colStatut'))),
             ],
             rows: rows.map((r) => DataRow(cells: [
               DataCell(Text('${r['etudeCode'] ?? ''} — ${r['etude'] ?? ''}')), DataCell(Text('${r['etape'] ?? ''}')), DataCell(Text('${r['danger'] ?? ''}')),
