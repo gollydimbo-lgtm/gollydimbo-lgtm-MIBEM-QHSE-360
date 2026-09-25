@@ -1,18 +1,30 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'load_error_view.dart';
 import '../services/sync_queue.dart';
 
-const Map<String, String> kCanalLabels = {
-  'TELEPHONE': 'Téléphone', 'EMAIL': 'Email', 'SITE_WEB': 'Site web', 'RESEAUX_SOCIAUX': 'Réseaux sociaux',
-  'COURRIER': 'Courrier', 'COMMERCIAL': 'Commercial', 'SAV': 'Service après-vente', 'DIRECTE': 'Réclamation directe', 'AUTRE': 'Autre',
+Map<String, String> get kCanalLabels => {
+  'TELEPHONE': t('reclamationsPages.canalTelephone'), 'EMAIL': t('reclamationsPages.canalEmail'), 'SITE_WEB': t('reclamationsPages.canalSiteWeb'), 'RESEAUX_SOCIAUX': t('reclamationsPages.canalReseauxSociaux'),
+  'COURRIER': t('reclamationsPages.canalCourrier'), 'COMMERCIAL': t('reclamationsPages.canalCommercial'), 'SAV': t('reclamationsPages.canalSav'), 'DIRECTE': t('reclamationsPages.canalDirecte'), 'AUTRE': t('reclamationsPages.canalAutre'),
 };
 const List<String> kCategoriesProbleme = [
   'Défaut produit', 'Non-conformité', 'Produit endommagé', 'Erreur de quantité', 'Erreur de livraison',
   'Retard de livraison', 'Emballage', 'Étiquetage', 'Facturation', 'Service', 'Communication', 'Délai',
   'Support technique', 'Comportement du personnel', 'Hygiène', 'Sécurité', 'Autre',
 ];
+const Map<String, String> _kCategorieProblemeKeys = {
+  'Défaut produit': 'reclamationsPages.catDefautProduit', 'Non-conformité': 'reclamationsPages.catNonConformite',
+  'Produit endommagé': 'reclamationsPages.catProduitEndommage', 'Erreur de quantité': 'reclamationsPages.catErreurQuantite',
+  'Erreur de livraison': 'reclamationsPages.catErreurLivraison', 'Retard de livraison': 'reclamationsPages.catRetardLivraison',
+  'Emballage': 'reclamationsPages.catEmballage', 'Étiquetage': 'reclamationsPages.catEtiquetage',
+  'Facturation': 'reclamationsPages.catFacturation', 'Service': 'reclamationsPages.catService',
+  'Communication': 'reclamationsPages.catCommunication', 'Délai': 'reclamationsPages.catDelai',
+  'Support technique': 'reclamationsPages.catSupportTechnique', 'Comportement du personnel': 'reclamationsPages.catComportementPersonnel',
+  'Hygiène': 'reclamationsPages.catHygiene', 'Sécurité': 'reclamationsPages.catSecurite', 'Autre': 'reclamationsPages.catAutre',
+};
+String categorieProblemeLabel(String c) => t(_kCategorieProblemeKeys[c] ?? '') != '' ? t(_kCategorieProblemeKeys[c]!) : c;
 Color graviteColor(String? g) => {'Critique': QhseColors.red, 'Majeure': QhseColors.red, 'Élevée': QhseColors.red, 'Modérée': QhseColors.amber, 'Faible': QhseColors.textSecondary}[g] ?? QhseColors.textSecondary;
 Color niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber, 'INFORMATION': QhseColors.blue}[n] ?? QhseColors.textSecondary;
 
@@ -34,45 +46,45 @@ Future<void> showReclamationDialog(BuildContext context, Api api, {Map? record, 
   await showDialog(
     context: context,
     builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-      title: Text(record == null ? 'Nouvelle réclamation' : 'Modifier la réclamation'),
+      title: Text(record == null ? t('reclamationsPages.dialogTitreNouvelle') : t('reclamationsPages.dialogTitreModifier')),
       content: SizedBox(
         width: 360,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: client, decoration: const InputDecoration(labelText: 'Client')),
-            TextField(controller: motif, decoration: const InputDecoration(labelText: 'Motif')),
-            TextField(controller: description, decoration: const InputDecoration(labelText: 'Description'), maxLines: 2),
+            TextField(controller: client, decoration: InputDecoration(labelText: t('reclamationsPages.champClient'))),
+            TextField(controller: motif, decoration: InputDecoration(labelText: t('reclamationsPages.champMotif'))),
+            TextField(controller: description, decoration: InputDecoration(labelText: t('reclamationsPages.champDescription')), maxLines: 2),
             DropdownButtonFormField<String>(
               value: canal, isExpanded: true,
               items: kCanalLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-              onChanged: (v) => setD(() => canal = v), decoration: const InputDecoration(labelText: 'Canal de réception'),
+              onChanged: (v) => setD(() => canal = v), decoration: InputDecoration(labelText: t('reclamationsPages.champCanal')),
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text('Date de réception : ${date.day}/${date.month}/${date.year}'),
+              title: Text(t('reclamationsPages.dateReception', {'date': '${date.day}/${date.month}/${date.year}'})),
               trailing: const Icon(Icons.edit_calendar),
               onTap: () async {
                 final d = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2035));
                 if (d != null) setD(() => date = d);
               },
             ),
-            TextField(controller: produitService, decoration: const InputDecoration(labelText: 'Produit / service (optionnel)')),
-            TextField(controller: lotNumber, decoration: const InputDecoration(labelText: 'N° de lot (optionnel)')),
+            TextField(controller: produitService, decoration: InputDecoration(labelText: t('reclamationsPages.champProduitService'))),
+            TextField(controller: lotNumber, decoration: InputDecoration(labelText: t('reclamationsPages.champLotNumber'))),
             DropdownButtonFormField<String>(
               value: categorieProbleme, isExpanded: true,
-              items: kCategoriesProbleme.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (v) => setD(() => categorieProbleme = v), decoration: const InputDecoration(labelText: 'Nature du problème'),
+              items: kCategoriesProbleme.map((c) => DropdownMenuItem(value: c, child: Text(categorieProblemeLabel(c)))).toList(),
+              onChanged: (v) => setD(() => categorieProbleme = v), decoration: InputDecoration(labelText: t('reclamationsPages.champNatureProbleme')),
             ),
             DropdownButtonFormField<String>(
               value: gravite,
-              items: const [DropdownMenuItem(value: 'Faible', child: Text('Faible')), DropdownMenuItem(value: 'Modérée', child: Text('Modérée')), DropdownMenuItem(value: 'Majeure', child: Text('Majeure')), DropdownMenuItem(value: 'Critique', child: Text('Critique'))],
-              onChanged: (v) => setD(() => gravite = v ?? 'Faible'), decoration: const InputDecoration(labelText: 'Gravité'),
+              items: [DropdownMenuItem(value: 'Faible', child: Text(t('reclamationsPages.graviteFaible'))), DropdownMenuItem(value: 'Modérée', child: Text(t('reclamationsPages.graviteModeree'))), DropdownMenuItem(value: 'Majeure', child: Text(t('reclamationsPages.graviteMajeure'))), DropdownMenuItem(value: 'Critique', child: Text(t('reclamationsPages.graviteCritique')))],
+              onChanged: (v) => setD(() => gravite = v ?? 'Faible'), decoration: InputDecoration(labelText: t('reclamationsPages.champGravite')),
             ),
-            TextField(controller: delaiCibleJours, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Délai cible (jours, optionnel)')),
+            TextField(controller: delaiCibleJours, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('reclamationsPages.champDelaiCible'))),
             if (record != null) DropdownButtonFormField<String>(
               value: statut,
-              items: const [DropdownMenuItem(value: 'OPEN', child: Text('Ouverte')), DropdownMenuItem(value: 'CLOSED', child: Text('Clôturée'))],
-              onChanged: (v) => setD(() => statut = v ?? 'OPEN'), decoration: const InputDecoration(labelText: 'Statut'),
+              items: [DropdownMenuItem(value: 'OPEN', child: Text(t('reclamationsPages.statutOuverte'))), DropdownMenuItem(value: 'CLOSED', child: Text(t('reclamationsPages.statutCloturee')))],
+              onChanged: (v) => setD(() => statut = v ?? 'OPEN'), decoration: InputDecoration(labelText: t('reclamationsPages.champStatut')),
             ),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
@@ -84,9 +96,9 @@ Future<void> showReclamationDialog(BuildContext context, Api api, {Map? record, 
             try { await api.delete('/business/reclamations/${record['id']}'); if (context.mounted) Navigator.pop(c); onSaved(); }
             catch (e) { setD(() => formError = '$e'); }
           },
-          child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+          child: Text(t('reclamationsPages.supprimer'), style: const TextStyle(color: QhseColors.red)),
         ),
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('reclamationsPages.annuler'))),
         FilledButton(
           onPressed: saving ? null : () async {
             setD(() => saving = true);
@@ -106,7 +118,7 @@ Future<void> showReclamationDialog(BuildContext context, Api api, {Map? record, 
               if (e.networkError && record == null) {
                 await SyncQueue.enqueue('reclamation', 'CREATE', createPayload);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : réclamation enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('reclamationsPages.messageHorsLigne')), duration: const Duration(seconds: 4)));
                   Navigator.pop(c);
                 }
                 onSaved();
@@ -115,7 +127,7 @@ Future<void> showReclamationDialog(BuildContext context, Api api, {Map? record, 
               }
             } catch (e) { setD(() { saving = false; formError = '$e'; }); }
           },
-          child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
+          child: Text(saving ? t('reclamationsPages.enregistrementEnCours') : t('reclamationsPages.enregistrer')),
         ),
       ],
     )),
@@ -159,16 +171,16 @@ class _ReclamationsHomeState extends State<ReclamationsHome> {
     final performance = Map.from(stats['performance'] ?? {});
     final pareto = List.from(stats['pareto'] ?? []);
     final scoreValue = score['score'];
-    final scoreLevel = scoreValue == null ? null : scoreValue >= 80 ? {'label': 'Excellent', 'color': QhseColors.green} : scoreValue >= 65 ? {'label': 'Bon', 'color': QhseColors.green} : scoreValue >= 50 ? {'label': 'À surveiller', 'color': QhseColors.amber} : {'label': 'Insuffisant', 'color': QhseColors.red};
+    final scoreLevel = scoreValue == null ? null : scoreValue >= 80 ? {'label': t('reclamationsPages.niveauExcellent'), 'color': QhseColors.green} : scoreValue >= 65 ? {'label': t('reclamationsPages.niveauBon'), 'color': QhseColors.green} : scoreValue >= 50 ? {'label': t('reclamationsPages.niveauASurveiller'), 'color': QhseColors.amber} : {'label': t('reclamationsPages.niveauInsuffisant'), 'color': QhseColors.red};
 
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Réclamations clients'),
-          bottom: TabBar(onTap: (i) => setState(() => tabIndex = i), tabs: const [Tab(text: 'Tableau de bord'), Tab(text: 'Registre')]),
+          title: Text(t('reclamationsPages.titre')),
+          bottom: TabBar(onTap: (i) => setState(() => tabIndex = i), tabs: [Tab(text: t('reclamationsPages.ongletTableauBord')), Tab(text: t('reclamationsPages.ongletRegistre'))]),
         ),
-        floatingActionButton: FloatingActionButton.extended(onPressed: () => showReclamationDialog(context, api, onSaved: load), icon: const Icon(Icons.add), label: const Text('Réclamation')),
+        floatingActionButton: FloatingActionButton.extended(onPressed: () => showReclamationDialog(context, api, onSaved: load), icon: const Icon(Icons.add), label: Text(t('reclamationsPages.nouvelleReclamation'))),
         body: loading
             ? const Center(child: CircularProgressIndicator())
             : error != null
@@ -179,7 +191,7 @@ class _ReclamationsHomeState extends State<ReclamationsHome> {
                   onRefresh: load,
                   child: ListView(padding: const EdgeInsets.all(12), children: [
                     Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('Score global de performance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text(t('reclamationsPages.scoreGlobal'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       const SizedBox(height: 8),
                       Row(children: [
                         Text(scoreValue != null ? '$scoreValue/100' : '—', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 32, color: scoreLevel?['color'] as Color? ?? QhseColors.textPrimary)),
@@ -188,18 +200,18 @@ class _ReclamationsHomeState extends State<ReclamationsHome> {
                     ]))),
                     const SizedBox(height: 12),
                     KpiBar([
-                      KpiStat('Réclamations', '${volume['total'] ?? 0}', color: QhseColors.amber, icon: Icons.notifications_outlined),
-                      KpiStat('Ouvertes', '${volume['ouvertes'] ?? 0}', color: QhseColors.blue, icon: Icons.hourglass_empty),
-                      KpiStat('Critiques', '${volume['critiques'] ?? 0}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
-                      KpiStat('En retard', '${volume['enRetard'] ?? 0}', color: (volume['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
+                      KpiStat(t('reclamationsPages.kpiReclamations'), '${volume['total'] ?? 0}', color: QhseColors.amber, icon: Icons.notifications_outlined),
+                      KpiStat(t('reclamationsPages.kpiOuvertes'), '${volume['ouvertes'] ?? 0}', color: QhseColors.blue, icon: Icons.hourglass_empty),
+                      KpiStat(t('reclamationsPages.kpiCritiques'), '${volume['critiques'] ?? 0}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+                      KpiStat(t('reclamationsPages.kpiEnRetard'), '${volume['enRetard'] ?? 0}', color: (volume['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
                     ]),
                     const SizedBox(height: 16),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      const Text('Alertes automatiques', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text(t('reclamationsPages.alertesAutomatiques'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       Text('${alertes.length}', style: TextStyle(color: QhseColors.textSecondary)),
                     ]),
                     const SizedBox(height: 6),
-                    if (alertes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.green)))
+                    if (alertes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('reclamationsPages.aucuneAlerte'), style: TextStyle(color: QhseColors.green)))
                     else ...alertes.map((a) => Card(child: ListTile(
                           title: Text('${a['client']} — ${a['motif']}'),
                           subtitle: Text(List.from(a['motifs'] ?? []).map((m) => m['label']).join(' · '), style: const TextStyle(fontSize: 11)),
@@ -211,20 +223,20 @@ class _ReclamationsHomeState extends State<ReclamationsHome> {
                           onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ReclamationDetailPage(reclamationId: a['id']))).then((_) => load()),
                         ))),
                     const SizedBox(height: 16),
-                    const Text('Performance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(t('reclamationsPages.performance'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     const SizedBox(height: 6),
                     Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
-                      _statRow('Taux de clôture', performance['tauxCloture']),
-                      _statRow('Taux de clôture dans les délais', performance['tauxClotureDelai']),
-                      _statRow('Délai moyen de résolution (j)', performance['delaiMoyenResolution'], suffix: ''),
+                      _statRow(t('reclamationsPages.tauxCloture'), performance['tauxCloture']),
+                      _statRow(t('reclamationsPages.tauxClotureDelai'), performance['tauxClotureDelai']),
+                      _statRow(t('reclamationsPages.delaiMoyenResolution'), performance['delaiMoyenResolution'], suffix: ''),
                     ]))),
                     const SizedBox(height: 16),
-                    const Text('Pareto des causes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(t('reclamationsPages.paretoCauses'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     const SizedBox(height: 6),
-                    if (pareto.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune réclamation classifiée', style: TextStyle(color: QhseColors.textSecondary)))
+                    if (pareto.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('reclamationsPages.aucuneReclamationClassifiee'), style: TextStyle(color: QhseColors.textSecondary)))
                     else ...pareto.map((p) => Card(child: ListTile(
                           title: Text(p['name'] ?? ''),
-                          trailing: Text('${p['value']} (${p['pct']}%, cumul ${p['cumulPct']}%)', style: const TextStyle(fontSize: 11)),
+                          trailing: Text(t('reclamationsPages.paretoDetail', {'value': '${p['value']}', 'pct': '${p['pct']}', 'cumul': '${p['cumulPct']}'}), style: const TextStyle(fontSize: 11)),
                         ))),
                   ]),
                 ),
@@ -234,12 +246,12 @@ class _ReclamationsHomeState extends State<ReclamationsHome> {
                   child: ListView(
                     padding: const EdgeInsets.all(12),
                     children: items.isEmpty
-                        ? const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune réclamation enregistrée')))]
+                        ? [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('reclamationsPages.aucuneReclamationEnregistree'))))]
                         : items.map((r) => Card(child: ListTile(
                               title: Text('${r['client']} — ${r['motif']}'),
                               subtitle: Text('${r['produitService'] ?? ''} • ${(r['date'] ?? '').toString().substring(0, 10)}'),
                               leading: Icon(Icons.circle, size: 12, color: graviteColor(r['gravite'])),
-                              trailing: Text(r['statut'] == 'OPEN' ? 'Ouverte' : 'Clôturée', style: TextStyle(fontSize: 11, color: r['statut'] == 'OPEN' ? QhseColors.amber : QhseColors.green)),
+                              trailing: Text(r['statut'] == 'OPEN' ? t('reclamationsPages.statutOuverte') : t('reclamationsPages.statutCloturee'), style: TextStyle(fontSize: 11, color: r['statut'] == 'OPEN' ? QhseColors.amber : QhseColors.green)),
                               onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ReclamationDetailPage(reclamationId: r['id']))).then((_) => load()),
                               onLongPress: () => showReclamationDialog(context, api, record: r, onSaved: load),
                             ))).toList(),
@@ -311,7 +323,7 @@ class _ReclamationDetailPageState extends State<ReclamationDetailPage> {
       for (final k in costCtrls.keys) { payload[k] = costCtrls[k]!.text.isEmpty ? null : double.tryParse(costCtrls[k]!.text); }
       await api.patch('/business/reclamations/${widget.reclamationId}', payload);
       await load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enregistré')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('reclamationsPages.enregistreSnackbar'))));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -319,16 +331,16 @@ class _ReclamationDetailPageState extends State<ReclamationDetailPage> {
   }
 
   Future<void> addAction() async {
-    final title = TextEditingController(text: "Action — réclamation ${r?['client']}");
+    final title = TextEditingController(text: t('reclamationsPages.actionTitrePrefixe', {'client': '${r?['client']}'}));
     String? formError;
     bool savingAction = false;
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Nouvelle action corrective'),
-        content: TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
+        title: Text(t('reclamationsPages.nouvelleActionCorrective')),
+        content: TextField(controller: title, decoration: InputDecoration(labelText: t('reclamationsPages.champTitre'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('reclamationsPages.annuler'))),
           FilledButton(onPressed: savingAction ? null : () async {
             setD(() => savingAction = true);
             try {
@@ -336,7 +348,7 @@ class _ReclamationDetailPageState extends State<ReclamationDetailPage> {
               if (context.mounted) Navigator.pop(c);
               load();
             } catch (e) { setD(() { savingAction = false; formError = '$e'; }); }
-          }, child: Text(savingAction ? '…' : 'Créer')),
+          }, child: Text(savingAction ? '…' : t('reclamationsPages.creer'))),
         ],
       )),
     );
@@ -351,14 +363,14 @@ class _ReclamationDetailPageState extends State<ReclamationDetailPage> {
     return Scaffold(
       appBar: AppBar(title: Text(r!['client'] ?? '')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: ListTile(title: Text(r!['motif'] ?? ''), subtitle: Text('${r!['produitService'] ?? ''} • ${r!['statut'] == 'OPEN' ? 'Ouverte' : 'Clôturée'}'), trailing: Text('Coût total\n${costTotal.toStringAsFixed(0)} FCFA', textAlign: TextAlign.right, style: const TextStyle(fontSize: 11)))),
+        Card(child: ListTile(title: Text(r!['motif'] ?? ''), subtitle: Text('${r!['produitService'] ?? ''} • ${r!['statut'] == 'OPEN' ? t('reclamationsPages.statutOuverte') : t('reclamationsPages.statutCloturee')}'), trailing: Text(t('reclamationsPages.coutTotal', {'value': costTotal.toStringAsFixed(0)}), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11)))),
         const SizedBox(height: 16),
 
-        const Text('SLA et délais', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(t('reclamationsPages.slaEtDelais'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 6),
         ...[
-          ['dateAccuseReception', 'Accusé de réception'], ['datePremiereReponse', 'Première réponse'],
-          ['dateResolutionReelle', 'Résolution réelle'], ['dateCloture', 'Clôture'],
+          ['dateAccuseReception', t('reclamationsPages.slaAccuseReception')], ['datePremiereReponse', t('reclamationsPages.slaPremiereReponse')],
+          ['dateResolutionReelle', t('reclamationsPages.slaResolutionReelle')], ['dateCloture', t('reclamationsPages.slaCloture')],
         ].map((f) => ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(f[1]),
@@ -368,41 +380,41 @@ class _ReclamationDetailPageState extends State<ReclamationDetailPage> {
             )),
 
         const SizedBox(height: 12),
-        const Text('Action curative', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(t('reclamationsPages.actionCurativeTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 6),
-        TextFormField(initialValue: form['actionCurative'], decoration: const InputDecoration(labelText: 'Action réalisée'), onChanged: (v) => form['actionCurative'] = v),
+        TextFormField(initialValue: form['actionCurative'], decoration: InputDecoration(labelText: t('reclamationsPages.champActionRealisee')), onChanged: (v) => form['actionCurative'] = v),
         DropdownButtonFormField<String>(
           value: form['actionCurativeResponsableId'], isExpanded: true,
           items: users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}'))).toList(),
           onChanged: (v) => setState(() => form['actionCurativeResponsableId'] = v),
-          decoration: const InputDecoration(labelText: 'Responsable'),
+          decoration: InputDecoration(labelText: t('reclamationsPages.champResponsable')),
         ),
 
         const SizedBox(height: 12),
-        const Text('Analyse des causes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(t('reclamationsPages.analyseDesCauses'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 6),
-        TextFormField(initialValue: form['causeRacine'], decoration: const InputDecoration(labelText: 'Cause racine retenue'), onChanged: (v) => form['causeRacine'] = v),
+        TextFormField(initialValue: form['causeRacine'], decoration: InputDecoration(labelText: t('reclamationsPages.champCauseRacine')), onChanged: (v) => form['causeRacine'] = v),
 
         const SizedBox(height: 12),
-        const Text('Efficacité et satisfaction', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(t('reclamationsPages.efficaciteEtSatisfaction'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           value: form['efficacite'],
-          items: const [DropdownMenuItem(value: 'EFFICACE', child: Text('Efficace')), DropdownMenuItem(value: 'PARTIELLEMENT_EFFICACE', child: Text('Partiellement efficace')), DropdownMenuItem(value: 'INEFFICACE', child: Text('Inefficace'))],
-          onChanged: (v) => setState(() => form['efficacite'] = v), decoration: const InputDecoration(labelText: "Efficacité de l'action"),
+          items: [DropdownMenuItem(value: 'EFFICACE', child: Text(t('reclamationsPages.efficaciteEfficace'))), DropdownMenuItem(value: 'PARTIELLEMENT_EFFICACE', child: Text(t('reclamationsPages.efficacitePartiellement'))), DropdownMenuItem(value: 'INEFFICACE', child: Text(t('reclamationsPages.efficaciteInefficace')))],
+          onChanged: (v) => setState(() => form['efficacite'] = v), decoration: InputDecoration(labelText: t('reclamationsPages.champEfficaciteAction')),
         ),
         DropdownButtonFormField<String>(
           value: form['satisfaction'],
-          items: const [DropdownMenuItem(value: 'SATISFAIT', child: Text('Satisfait')), DropdownMenuItem(value: 'PARTIELLEMENT_SATISFAIT', child: Text('Partiellement satisfait')), DropdownMenuItem(value: 'INSATISFAIT', child: Text('Insatisfait'))],
-          onChanged: (v) => setState(() => form['satisfaction'] = v), decoration: const InputDecoration(labelText: 'Satisfaction client'),
+          items: [DropdownMenuItem(value: 'SATISFAIT', child: Text(t('reclamationsPages.satisfactionSatisfait'))), DropdownMenuItem(value: 'PARTIELLEMENT_SATISFAIT', child: Text(t('reclamationsPages.satisfactionPartiellement'))), DropdownMenuItem(value: 'INSATISFAIT', child: Text(t('reclamationsPages.satisfactionInsatisfait')))],
+          onChanged: (v) => setState(() => form['satisfaction'] = v), decoration: InputDecoration(labelText: t('reclamationsPages.champSatisfactionClient')),
         ),
 
         const SizedBox(height: 12),
-        const Text('Coûts détaillés', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(t('reclamationsPages.coutsDetailles'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 6),
         ...[
-          ['coutRemboursement', 'Remboursement'], ['coutRemplacement', 'Remplacement'], ['coutTransport', 'Transport'],
-          ['coutMainOeuvre', 'Main d\'œuvre'], ['coutAutres', 'Autres'],
+          ['coutRemboursement', t('reclamationsPages.coutRemboursement')], ['coutRemplacement', t('reclamationsPages.coutRemplacement')], ['coutTransport', t('reclamationsPages.coutTransport')],
+          ['coutMainOeuvre', t('reclamationsPages.coutMainOeuvre')], ['coutAutres', t('reclamationsPages.coutAutres')],
         ].map((f) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: TextField(controller: costCtrls[f[0]], keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: f[1]), onChanged: (_) => setState(() {})),
@@ -410,14 +422,14 @@ class _ReclamationDetailPageState extends State<ReclamationDetailPage> {
 
         const SizedBox(height: 12),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Plan d\'actions correctives', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          TextButton(onPressed: addAction, child: const Text('+ Action')),
+          Text(t('reclamationsPages.planActionsCorrectives'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          TextButton(onPressed: addAction, child: Text(t('reclamationsPages.plusAction'))),
         ]),
-        if (List.from(r!['actions'] ?? []).isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune action liée', style: TextStyle(color: QhseColors.textSecondary)))
+        if (List.from(r!['actions'] ?? []).isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('reclamationsPages.aucuneActionLiee'), style: TextStyle(color: QhseColors.textSecondary)))
         else ...List.from(r!['actions'] ?? []).map((a) => Card(child: ListTile(dense: true, title: Text(a['title'] ?? ''), trailing: Text(a['status'] ?? '', style: const TextStyle(fontSize: 11))))),
 
         const SizedBox(height: 20),
-        FilledButton(onPressed: saving ? null : save, child: Text(saving ? 'Enregistrement…' : 'Enregistrer')),
+        FilledButton(onPressed: saving ? null : save, child: Text(saving ? t('reclamationsPages.enregistrementEnCours') : t('reclamationsPages.enregistrer'))),
       ]),
     );
   }
