@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 const kRoles = ['ADMINISTRATEUR', 'RESPONSABLE_QHSE', 'ASSISTANT_QHSE', 'CONTROLEUR_QUALITE', 'CHEF_PRODUCTION', 'OPERATEUR', 'AUDITEUR', 'CONSULTATION'];
-const kRoleLabels = {
-  'ADMINISTRATEUR': 'Administrateur (accès complet)', 'RESPONSABLE_QHSE': 'Responsable QHSE', 'ASSISTANT_QHSE': 'Assistant QHSE',
-  'CONTROLEUR_QUALITE': 'Contrôleur qualité', 'CHEF_PRODUCTION': 'Chef de production', 'OPERATEUR': 'Opérateur (terrain)',
-  'AUDITEUR': 'Auditeur', 'CONSULTATION': 'Consultation seule',
+Map<String, String> get kRoleLabels => {
+  'ADMINISTRATEUR': t('usersPage.roleAdministrateur'), 'RESPONSABLE_QHSE': t('usersPage.roleResponsableQhse'), 'ASSISTANT_QHSE': t('usersPage.roleAssistantQhse'),
+  'CONTROLEUR_QUALITE': t('usersPage.roleControleurQualite'), 'CHEF_PRODUCTION': t('usersPage.roleChefProduction'), 'OPERATEUR': t('usersPage.roleOperateur'),
+  'AUDITEUR': t('usersPage.roleAuditeur'), 'CONSULTATION': t('usersPage.roleConsultation'),
 };
 
 class UsersPage extends StatefulWidget {
@@ -42,11 +43,11 @@ class _UsersPageState extends State<UsersPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: Text('Supprimer définitivement « $label » ? Cette action est irréversible.'),
+        title: Text(t('usersPage.confirmerSuppression')),
+        content: Text(t('usersPage.confirmerSuppressionTexte', {'label': label})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Supprimer', style: TextStyle(color: QhseColors.red))),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('usersPage.annuler'))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text(t('usersPage.supprimer'), style: const TextStyle(color: QhseColors.red))),
         ],
       ),
     );
@@ -75,25 +76,25 @@ class _UsersPageState extends State<UsersPage> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Nouvel utilisateur'),
+        title: Text(t('usersPage.nouvelUtilisateur')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: firstName, decoration: const InputDecoration(labelText: 'Prénom')),
-            TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Nom')),
-            TextField(controller: email, decoration: const InputDecoration(labelText: 'Email'), keyboardType: TextInputType.emailAddress),
-            TextField(controller: password, decoration: const InputDecoration(labelText: 'Mot de passe temporaire (8 caractères min.)')),
+            TextField(controller: firstName, decoration: InputDecoration(labelText: t('usersPage.prenom'))),
+            TextField(controller: lastName, decoration: InputDecoration(labelText: t('usersPage.nom'))),
+            TextField(controller: email, decoration: InputDecoration(labelText: t('usersPage.email')), keyboardType: TextInputType.emailAddress),
+            TextField(controller: password, decoration: InputDecoration(labelText: t('usersPage.motDePasseTemporaire'))),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: role, isExpanded: true,
               items: kRoles.map((r) => DropdownMenuItem(value: r, child: Text(kRoleLabels[r] ?? r))).toList(),
               onChanged: (v) => setD(() => role = v ?? role),
-              decoration: const InputDecoration(labelText: 'Rôle (définit l\'accès)'),
+              decoration: InputDecoration(labelText: t('usersPage.roleDefinitAcces')),
             ),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('usersPage.annuler'))),
           FilledButton(
             onPressed: () async {
               try {
@@ -107,7 +108,7 @@ class _UsersPageState extends State<UsersPage> {
                 setD(() => formError = '$e');
               }
             },
-            child: const Text('Créer'),
+            child: Text(t('usersPage.creer')),
           ),
         ],
       )),
@@ -120,24 +121,24 @@ class _UsersPageState extends State<UsersPage> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text('Réinitialiser — ${u['firstName']} ${u['lastName']}'),
+        title: Text(t('usersPage.reinitialiserTitre', {'firstName': '${u['firstName']}', 'lastName': '${u['lastName']}'})),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: password, decoration: const InputDecoration(labelText: 'Nouveau mot de passe (8 caractères min.)')),
+          TextField(controller: password, decoration: InputDecoration(labelText: t('usersPage.nouveauMotDePasse'))),
           if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('usersPage.annuler'))),
           FilledButton(
             onPressed: () async {
               try {
                 await api.patch('/users/${u['id']}/reset-password', {'newPassword': password.text});
                 if (context.mounted) Navigator.pop(c);
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mot de passe réinitialisé.')));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('usersPage.motDePasseReinitialise'))));
               } catch (e) {
                 setD(() => formError = '$e');
               }
             },
-            child: const Text('Réinitialiser'),
+            child: Text(t('usersPage.reinitialiser')),
           ),
         ],
       )),
@@ -147,8 +148,8 @@ class _UsersPageState extends State<UsersPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Utilisateurs'), actions: [
-        IconButton(icon: const Icon(Icons.person_add_alt_1), tooltip: 'Nouvel utilisateur', onPressed: _openCreateDialog),
+      appBar: AppBar(title: Text(t('usersPage.titre')), actions: [
+        IconButton(icon: const Icon(Icons.person_add_alt_1), tooltip: t('usersPage.nouvelUtilisateur'), onPressed: _openCreateDialog),
       ]),
       body: error != null
           ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(error!, style: const TextStyle(color: QhseColors.red))))
@@ -173,7 +174,7 @@ class _UsersPageState extends State<UsersPage> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(color: (active ? QhseColors.green : QhseColors.red).withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-                                child: Text(active ? 'Conforme' : 'Non conforme', style: TextStyle(color: active ? QhseColors.green : QhseColors.red, fontSize: 11, fontWeight: FontWeight.w600)),
+                                child: Text(active ? t('usersPage.statutActif') : t('usersPage.statutInactif'), style: TextStyle(color: active ? QhseColors.green : QhseColors.red, fontSize: 11, fontWeight: FontWeight.w600)),
                               ),
                             ]),
                             const SizedBox(height: 4),
@@ -181,10 +182,10 @@ class _UsersPageState extends State<UsersPage> {
                             Text(roles, style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
                             const SizedBox(height: 8),
                             Wrap(spacing: 12, children: [
-                              InkWell(onTap: () => _openResetPasswordDialog(u), child: const Text('Réinitialiser mdp', style: TextStyle(color: QhseColors.blue, fontSize: 12))),
-                              InkWell(onTap: () => _toggleStatus(u), child: Text(active ? 'Désactiver' : 'Activer', style: TextStyle(color: active ? QhseColors.red : QhseColors.green, fontSize: 12))),
+                              InkWell(onTap: () => _openResetPasswordDialog(u), child: Text(t('usersPage.reinitialiserMdp'), style: const TextStyle(color: QhseColors.blue, fontSize: 12))),
+                              InkWell(onTap: () => _toggleStatus(u), child: Text(active ? t('usersPage.desactiver') : t('usersPage.activer'), style: TextStyle(color: active ? QhseColors.red : QhseColors.green, fontSize: 12))),
                               if (!isSelf)
-                                InkWell(onTap: () => _confirmAndDelete('${u['firstName']} ${u['lastName']}', '/users/${u['id']}'), child: const Text('Supprimer', style: TextStyle(color: QhseColors.red, fontSize: 12))),
+                                InkWell(onTap: () => _confirmAndDelete('${u['firstName']} ${u['lastName']}', '/users/${u['id']}'), child: Text(t('usersPage.supprimer'), style: const TextStyle(color: QhseColors.red, fontSize: 12))),
                             ]),
                           ]),
                         ),
