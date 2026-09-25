@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 // Statuts du cycle de vie documentaire (GED) — mêmes libellés/couleurs que
 // document_detail_page.dart (dupliqué volontairement : privé à chaque
 // fichier en Dart, pas de conflit de nom possible entre libraries).
-const _docStatusLabels = {
-  'DRAFT': 'Brouillon',
-  'REVIEW': 'En vérification',
-  'APPROVED': 'En attente de publication',
-  'ACTIVE': 'En vigueur',
-  'SUPERSEDED': 'Obsolète — NE PAS UTILISER',
-  'ARCHIVED': 'Archivé',
+Map<String, String> get _docStatusLabels => {
+  'DRAFT': t('documentLinkWidget.statutBrouillon'),
+  'REVIEW': t('documentLinkWidget.statutEnVerification'),
+  'APPROVED': t('documentLinkWidget.statutEnAttentePublication'),
+  'ACTIVE': t('documentLinkWidget.statutEnVigueur'),
+  'SUPERSEDED': t('documentLinkWidget.statutObsolete'),
+  'ARCHIVED': t('documentLinkWidget.statutArchive'),
 };
 
 Color _docStatusColor(String? s) => {
@@ -84,11 +85,11 @@ class _DocumentLinksSectionState extends State<DocumentLinksSection> {
     final picked = await showDialog<Map>(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Associer un document'),
+        title: Text(t('documentLinkWidget.associerUnDocument')),
         content: SizedBox(width: 420, child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
             controller: search,
-            decoration: const InputDecoration(labelText: 'Rechercher (code, titre)', prefixIcon: Icon(Icons.search)),
+            decoration: InputDecoration(labelText: t('documentLinkWidget.rechercherCodeTitre'), prefixIcon: const Icon(Icons.search)),
             onChanged: (v) => setD(() {
               final q = v.trim().toLowerCase();
               filtered = q.isEmpty ? all : all.where((d) => '${d['code']} ${d['title']}'.toLowerCase().contains(q)).toList();
@@ -98,7 +99,7 @@ class _DocumentLinksSectionState extends State<DocumentLinksSection> {
           SizedBox(
             height: 320,
             child: filtered.isEmpty
-                ? const Center(child: Text('Aucun document'))
+                ? Center(child: Text(t('documentLinkWidget.aucunDocument')))
                 : ListView.builder(
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
@@ -116,7 +117,7 @@ class _DocumentLinksSectionState extends State<DocumentLinksSection> {
                   ),
           ),
         ])),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Fermer'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(t('documentLinkWidget.fermer')))],
       )),
     );
     if (picked == null) return;
@@ -133,11 +134,11 @@ class _DocumentLinksSectionState extends State<DocumentLinksSection> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Demander une révision — ${doc['code'] ?? ''}'),
-        content: TextField(controller: motif, maxLines: 3, decoration: const InputDecoration(labelText: 'Motif de la demande')),
+        title: Text(t('documentLinkWidget.demanderRevisionTitre', {'code': '${doc['code'] ?? ''}'})),
+        content: TextField(controller: motif, maxLines: 3, decoration: InputDecoration(labelText: t('documentLinkWidget.motifDeLaDemande'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Envoyer')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('documentLinkWidget.annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('documentLinkWidget.envoyer'))),
         ],
       ),
     );
@@ -146,7 +147,7 @@ class _DocumentLinksSectionState extends State<DocumentLinksSection> {
       await api.post('/documents/${doc['id']}/request-revision', {
         'sourceModule': widget.sourceModule, 'sourceEntityId': widget.sourceEntityId, 'motif': motif.text.trim(),
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Demande de révision envoyée')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('documentLinkWidget.demandeRevisionEnvoyee'))));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -157,13 +158,13 @@ class _DocumentLinksSectionState extends State<DocumentLinksSection> {
     padding: const EdgeInsets.only(bottom: 16),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Documents associés (${links.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        TextButton.icon(onPressed: associating ? null : associate, icon: const Icon(Icons.add, size: 16), label: Text(associating ? '…' : 'Associer un document')),
+        Text(t('documentLinkWidget.titre', {'count': '${links.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        TextButton.icon(onPressed: associating ? null : associate, icon: const Icon(Icons.add, size: 16), label: Text(associating ? '…' : t('documentLinkWidget.associerUnDocument'))),
       ]),
       if (loading)
         const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator())
       else if (links.isEmpty)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucun document associé', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('documentLinkWidget.aucunDocumentAssocie'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
       else
         ...links.map((l) {
           final doc = l['document'] ?? {};
@@ -173,7 +174,7 @@ class _DocumentLinksSectionState extends State<DocumentLinksSection> {
             subtitle: Text('${l['relationType'] ?? 'ASSOCIE'}', style: const TextStyle(fontSize: 11)),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               DocumentStatusChip(status: doc['status']),
-              IconButton(icon: const Icon(Icons.rule_folder_outlined, size: 18), tooltip: 'Demander une révision', onPressed: () => requestRevision(doc)),
+              IconButton(icon: const Icon(Icons.rule_folder_outlined, size: 18), tooltip: t('documentLinkWidget.demanderUneRevision'), onPressed: () => requestRevision(doc)),
             ]),
           ));
         }),
