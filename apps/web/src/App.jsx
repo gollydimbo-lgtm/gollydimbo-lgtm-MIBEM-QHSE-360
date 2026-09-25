@@ -7326,6 +7326,7 @@ function SecuriteHygienePage() {
 }
 
 function EnvironnementPage() {
+  const { t } = useI18n();
   const C = useTheme();
   const records = useCollection('/business/environment');
   const aspects = useCollection('/business/environnement-aspects');
@@ -7367,18 +7368,18 @@ function EnvironnementPage() {
   const aspectsSignificatifs = aspectList.filter((a) => a.significatif && a.statut === 'ACTIVE').length;
   const nonConformes = list.filter((r) => r.conforme === false).length;
   const criticiteColor = (c) => (c >= 12 ? C.red : c >= 6 ? C.amber : C.green);
-  const situationLabel = { NORMALE: 'Normale', ANORMALE: 'Anormale', URGENCE: "Situation d'urgence" };
+  const situationLabel = { NORMALE: t('environnement.situationNormale'), ANORMALE: t('environnement.situationAnormale'), URGENCE: t('environnement.situationUrgence') };
   const niveauColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber };
-  const dv = (v, suffix = '') => (v == null ? 'Aucune donnée disponible' : `${v}${suffix}`);
-  const scoreLevel = dash.score == null ? null : dash.score >= 80 ? { label: 'Bon', color: C.green } : dash.score >= 60 ? { label: 'À améliorer', color: C.amber } : { label: 'Critique', color: C.red };
-  const veilleStatutLabel = { A_TRAITER: 'À traiter', EN_COURS: 'En cours', INTEGREE: 'Intégrée', CONFORME: 'Conforme', PARTIELLEMENT_CONFORME: 'Partiellement conforme', NON_CONFORME: 'Non conforme', NON_APPLICABLE: 'Non applicable', A_VERIFIER: 'À vérifier' };
+  const dv = (v, suffix = '') => (v == null ? t('environnement.aucuneDonnee') : `${v}${suffix}`);
+  const scoreLevel = dash.score == null ? null : dash.score >= 80 ? { label: t('environnement.scoreBon'), color: C.green } : dash.score >= 60 ? { label: t('environnement.scoreAmeliorer'), color: C.amber } : { label: t('environnement.scoreCritique'), color: C.red };
+  const veilleStatutLabel = { A_TRAITER: t('environnement.veilleATraiter'), EN_COURS: t('environnement.veilleEnCours'), INTEGREE: t('environnement.veilleIntegree'), CONFORME: t('environnement.veilleConforme'), PARTIELLEMENT_CONFORME: t('environnement.veillePartiellementConforme'), NON_CONFORME: t('environnement.veilleNonConforme'), NON_APPLICABLE: t('environnement.veilleNonApplicable'), A_VERIFIER: t('environnement.veilleAVerifier') };
   const veilleStatutColor = { CONFORME: C.green, INTEGREE: C.green, PARTIELLEMENT_CONFORME: C.amber, NON_CONFORME: C.red, NON_APPLICABLE: C.textMuted, A_VERIFIER: C.amber, A_TRAITER: C.amber, EN_COURS: C.blue };
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredReleves = search.trim() ? sorted.filter((r) => norm([r.categorie, r.type, r.site].join(' ')).includes(norm(search))) : sorted;
   function relevesExportRows() {
     return [
-      ['Catégorie', 'Type', 'Valeur', 'Unité', 'Site', 'Date', 'Conforme'],
-      ...filteredReleves.map((r) => [r.categorie || '', r.type, r.value ?? '', r.unit || '', r.site || '', new Date(r.recordedAt).toLocaleDateString('fr-FR'), r.conforme == null ? '' : (r.conforme ? 'Conforme' : 'Non conforme')]),
+      [t('environnement.colCategorie'), t('environnement.colType'), t('environnement.colValeur'), t('environnement.colUnite'), t('environnement.colSite'), t('environnement.colDate'), t('environnement.colConforme')],
+      ...filteredReleves.map((r) => [r.categorie || '', r.type, r.value ?? '', r.unit || '', r.site || '', new Date(r.recordedAt).toLocaleDateString('fr-FR'), r.conforme == null ? '' : (r.conforme ? t('environnement.conforme') : t('environnement.nonConforme'))]),
     ];
   }
   function exportRelevesExcel() { downloadWorkbook([['Relevés environnementaux', relevesExportRows()]], `Releves-environnement-${new Date().toISOString().slice(0, 10)}.xlsx`); }
@@ -7392,7 +7393,7 @@ function EnvironnementPage() {
       {(showProduitForm || selectedProduit) && <ProduitChimiqueForm record={selectedProduit} onClose={() => { setShowProduitForm(false); setSelectedProduit(null); }} onCreated={produitsQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['releves', 'Relevés'], ['aspects', 'Aspects & Impacts'], ['conformite', 'Conformité réglementaire'], ['chimiques', 'Produits chimiques'], ['indicateurs', 'Indicateurs']].map(([id, label]) => (
+        {[['apercu', t('environnement.tabApercu')], ['releves', t('environnement.tabReleves')], ['aspects', t('environnement.tabAspects')], ['conformite', t('environnement.tabConformite')], ['chimiques', t('environnement.tabChimiques')], ['indicateurs', t('environnement.tabIndicateurs')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -7400,9 +7401,9 @@ function EnvironnementPage() {
       {tab === 'apercu' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Score environnemental global" subtitle="Moyenne pondérée — pondérations partagées avec les autres indices de l'application.">
+          <Panel title={t('environnement.scoreTitle')} subtitle={t('environnement.scoreSubtitle')}>
             {dash.score == null
-              ? <p className="text-sm py-4" style={{ color: C.textMuted }}>Aucune donnée disponible pour calculer le score</p>
+              ? <p className="text-sm py-4" style={{ color: C.textMuted }}>{t('environnement.aucuneDonneeScore')}</p>
               : <div className="flex items-center gap-6">
                   <div>
                     <p className="text-5xl font-bold" style={{ color: scoreLevel?.color || C.text }}>{dash.score}<span className="text-lg" style={{ color: C.textMuted }}>/100</span></p>
@@ -7412,7 +7413,7 @@ function EnvironnementPage() {
                     {(dash.scoreDetail || []).map((d) => (
                       <div key={d.key} className="p-2 rounded-lg text-center" style={{ backgroundColor: C.cardAlt }}>
                         <p className="text-[10px]" style={{ color: C.textMuted }}>{d.nom}</p>
-                        <p className="text-sm font-bold" style={{ color: C.text }}>{d.valeur != null ? `${d.valeur}%` : 'Aucune donnée'}</p>
+                        <p className="text-sm font-bold" style={{ color: C.text }}>{d.valeur != null ? `${d.valeur}%` : t('environnement.aucuneDonnee')}</p>
                       </div>
                     ))}
                   </div>
@@ -7420,18 +7421,18 @@ function EnvironnementPage() {
           </Panel>
 
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Taux de conformité" value={dv(dash.tauxConformite, '%')} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Déchets (somme des relevés)" value={dv(dash.dechets)} color={C.amber} icon={Leaf} />
-            <KpiCard label="Eau (somme des relevés)" value={dv(dash.eau)} color={C.blue} icon={Activity} />
-            <KpiCard label="Énergie (somme des relevés)" value={dv(dash.energie)} color={C.amber} icon={Activity} />
-            <KpiCard label="GES / Carbone (somme des relevés)" value={dv(dash.ges)} color={C.textMuted} icon={Leaf} />
-            <KpiCard label="Taux de valorisation des déchets" value={dv(dash.tauxValorisationDechets, '%')} color={C.green} icon={Leaf} />
-            <KpiCard label="Conformité réglementaire" value={dv(dash.tauxConformiteReglementaire, '%')} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Aspects significatifs" value={dash.aspectsSignificatifs ?? 0} color={dash.aspectsSignificatifs > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Actions en retard" value={dash.actionsEnRetard ?? 0} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiTauxConformite')} value={dv(dash.tauxConformite, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('environnement.kpiDechets')} value={dv(dash.dechets)} color={C.amber} icon={Leaf} />
+            <KpiCard label={t('environnement.kpiEau')} value={dv(dash.eau)} color={C.blue} icon={Activity} />
+            <KpiCard label={t('environnement.kpiEnergie')} value={dv(dash.energie)} color={C.amber} icon={Activity} />
+            <KpiCard label={t('environnement.kpiGes')} value={dv(dash.ges)} color={C.textMuted} icon={Leaf} />
+            <KpiCard label={t('environnement.kpiTauxValorisation')} value={dv(dash.tauxValorisationDechets, '%')} color={C.green} icon={Leaf} />
+            <KpiCard label={t('environnement.kpiConformiteReglementaire')} value={dv(dash.tauxConformiteReglementaire, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('environnement.kpiAspectsSignificatifs')} value={dash.aspectsSignificatifs ?? 0} color={dash.aspectsSignificatifs > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiActionsEnRetard')} value={dash.actionsEnRetard ?? 0} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
           </div>
 
-          <Panel title="Alertes environnementales" subtitle={`${alertes.length} point(s) nécessitant attention`}>
+          <Panel title={t('environnement.alertesTitle')} subtitle={t('environnement.alertesSubtitle', { count: String(alertes.length) })}>
             {alertes.length
               ? <div className="space-y-2">{alertes.map((a, i) => (
                   <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -7439,10 +7440,10 @@ function EnvironnementPage() {
                     <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${niveauColor[a.niveau]}22`, color: niveauColor[a.niveau] }}>{a.niveau}</span>
                   </div>
                 ))}</div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('environnement.aucuneAlerte')}</p>}
           </Panel>
 
-          <Panel title="Tendances mensuelles par catégorie" subtitle="Calculées uniquement sur les mois où des relevés existent réellement.">
+          <Panel title={t('environnement.tendancesTitle')} subtitle={t('environnement.tendancesSubtitle')}>
             {tendances.length
               ? <div className="space-y-6">
                   {tendances.map((t) => (
@@ -7460,7 +7461,7 @@ function EnvironnementPage() {
                     </div>
                   ))}
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune donnée disponible pour tracer une tendance</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('environnement.aucuneTendance')}</p>}
           </Panel>
         </div>
       )}
@@ -7469,31 +7470,31 @@ function EnvironnementPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau relevé</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('environnement.nouveauReleve')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Relevés enregistrés" value={list.length} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="Catégories suivies" value={byCategorie.length} color={C.green} icon={Leaf} />
-            <KpiCard label="Non conformes" value={nonConformes} color={nonConformes > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Dernier relevé" value={sorted[0] ? new Date(sorted[0].recordedAt).toLocaleDateString('fr-FR') : '—'} color={C.amber} icon={Activity} />
+            <KpiCard label={t('environnement.kpiReleves')} value={list.length} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('environnement.kpiCategoriesSuivies')} value={byCategorie.length} color={C.green} icon={Leaf} />
+            <KpiCard label={t('environnement.kpiNonConformes')} value={nonConformes} color={nonConformes > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiDernierReleve')} value={sorted[0] ? new Date(sorted[0].recordedAt).toLocaleDateString('fr-FR') : '—'} color={C.amber} icon={Activity} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Répartition par catégorie">
-              {byCategorie.length ? <DonutChart data={byCategorie} colors={[C.red, C.amber, C.blue, C.green, '#8B5CF6', C.textMuted, '#EC4899', '#14B8A6', '#6366F1', '#F97316', '#84CC16']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune catégorie renseignée</p>}
+            <Panel title={t('environnement.parCategorieTitle')}>
+              {byCategorie.length ? <DonutChart data={byCategorie} colors={[C.red, C.amber, C.blue, C.green, '#8B5CF6', C.textMuted, '#EC4899', '#14B8A6', '#6366F1', '#F97316', '#84CC16']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('environnement.aucuneCategorie')}</p>}
             </Panel>
-            <Panel title="Détail par catégorie"><HorizontalBars data={byCategorie} labelKey="name" valueKey="value" color={C.blue} /></Panel>
+            <Panel title={t('environnement.detailParCategorieTitle')}><HorizontalBars data={byCategorie} labelKey="name" valueKey="value" color={C.blue} /></Panel>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un relevé (catégorie, type, site...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={exportRelevesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
-            <button onClick={exportRelevesCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('environnement.rechercherRelevePlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportRelevesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('environnement.excel')}</button>
+            <button onClick={exportRelevesCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('environnement.csv')}</button>
           </div>
-          <Panel title={search.trim() ? `Résultats de recherche (${filteredReleves.length})` : 'Registre des relevés environnementaux'}>
+          <Panel title={search.trim() ? t('environnement.resultatsRecherche', { count: String(filteredReleves.length) }) : t('environnement.registreRelevesTitle')}>
             {filteredReleves.length
-              ? <DataTable columns={['Catégorie', 'Type', 'Valeur', 'Unité', 'Site', 'Date', 'Conforme']}
+              ? <DataTable columns={[t('environnement.colCategorie'), t('environnement.colType'), t('environnement.colValeur'), t('environnement.colUnite'), t('environnement.colSite'), t('environnement.colDate'), t('environnement.colConforme')]}
                   rows={filteredReleves.map((r) => [r.categorie || '—', r.type, r.value ?? '—', r.unit || '—', r.site || '—', new Date(r.recordedAt).toLocaleDateString('fr-FR'), r.conforme == null ? '—' : <StatusChip statut={r.conforme ? 'Conforme' : 'Non conforme'} />])}
                   onRowClick={(i) => setSelected(filteredReleves[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun relevé enregistré pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('environnement.aucunResultatRecherche') : t('environnement.aucunReleve')}</p>}
           </Panel>
         </div>
       )}
@@ -7502,26 +7503,26 @@ function EnvironnementPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowAspectForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel aspect</button>
+            <button onClick={() => setShowAspectForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('environnement.nouvelAspect')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Aspects identifiés" value={aspectList.length} color={C.blue} icon={Leaf} />
-            <KpiCard label="Significatifs" value={aspectsSignificatifs} color={aspectsSignificatifs > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiAspectsIdentifies')} value={aspectList.length} color={C.blue} icon={Leaf} />
+            <KpiCard label={t('environnement.kpiSignificatifs')} value={aspectsSignificatifs} color={aspectsSignificatifs > 0 ? C.red : C.green} icon={AlertTriangle} />
           </div>
-          <Panel title="Registre des aspects & impacts environnementaux" subtitle="Criticité = Fréquence × Gravité × Probabilité ÷ Maîtrise — significatif à partir de 12.">
+          <Panel title={t('environnement.aspectsRegistreTitle')} subtitle={t('environnement.aspectsRegistreSubtitle')}>
             {aspectList.length
-              ? <DataTable columns={['Aspect', 'Milieu', 'Situation', 'Criticité', 'Significatif', 'Statut', 'Risque']}
+              ? <DataTable columns={[t('environnement.colAspect'), t('environnement.colMilieu'), t('environnement.colSituation'), t('environnement.colCriticite'), t('environnement.colSignificatif'), t('environnement.colStatut'), t('environnement.colRisque')]}
                   rows={aspectList.map((a) => [
                     a.aspect, a.milieu || '—', situationLabel[a.situation] || a.situation,
                     <span style={{ color: criticiteColor(a.criticite), fontWeight: 600 }}>{a.criticite}</span>,
-                    a.significatif ? <span style={{ color: C.red }}>Oui</span> : 'Non',
+                    a.significatif ? <span style={{ color: C.red }}>{t('environnement.oui')}</span> : t('environnement.non'),
                     <StatusChip statut={a.statut === 'ACTIVE' ? 'Actif' : a.statut === 'MAITRISE' ? 'Maîtrisé' : 'Clôturé'} />,
-                    a.riskId ? <span style={{ color: C.green }}>Créé</span>
-                      : a.significatif ? <button onClick={(e) => { e.stopPropagation(); generateRiskFromAspect(a.id); }} disabled={generatingRiskAspectId === a.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{generatingRiskAspectId === a.id ? '…' : 'Générer un risque'}</button>
+                    a.riskId ? <span style={{ color: C.green }}>{t('environnement.risqueCree')}</span>
+                      : a.significatif ? <button onClick={(e) => { e.stopPropagation(); generateRiskFromAspect(a.id); }} disabled={generatingRiskAspectId === a.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{generatingRiskAspectId === a.id ? '…' : t('environnement.genererRisque')}</button>
                       : '—',
                   ])}
                   onRowClick={(i) => setSelectedAspect(aspectList[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun aspect environnemental identifié pour le moment</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('environnement.aucunAspect')}</p>}
           </Panel>
         </div>
       )}
@@ -7530,19 +7531,19 @@ function EnvironnementPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowVeilleForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle exigence</button>
+            <button onClick={() => setShowVeilleForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('environnement.nouvelleExigence')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Exigences suivies" value={veilleEnv.length} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="Non conformes" value={veilleEnv.filter((v) => v.statut === 'NON_CONFORME').length} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="À vérifier" value={veilleEnv.filter((v) => v.statut === 'A_VERIFIER').length} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiExigencesSuivies')} value={veilleEnv.length} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('environnement.kpiNonConformes')} value={veilleEnv.filter((v) => v.statut === 'NON_CONFORME').length} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiAVerifier')} value={veilleEnv.filter((v) => v.statut === 'A_VERIFIER').length} color={C.amber} icon={AlertTriangle} />
           </div>
-          <Panel title="Registre de conformité réglementaire environnementale">
+          <Panel title={t('environnement.conformiteRegistreTitle')}>
             {veilleEnv.length
-              ? <DataTable columns={['Texte', "Date d'application", 'Responsable', 'Statut']}
+              ? <DataTable columns={[t('environnement.colTexte'), t('environnement.colDateApplication'), t('environnement.colResponsable'), t('environnement.colStatut')]}
                   rows={veilleEnv.map((v) => [v.texte.slice(0, 60), v.dateApplication ? new Date(v.dateApplication).toLocaleDateString('fr-FR') : '—', v.responsable ? `${v.responsable.firstName} ${v.responsable.lastName}` : '—', <span style={{ color: veilleStatutColor[v.statut] || C.textMuted, fontWeight: 600 }}>{veilleStatutLabel[v.statut] || v.statut}</span>])}
                   onRowClick={(i) => setSelectedVeille(veilleEnv[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune exigence réglementaire environnementale enregistrée pour le moment</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('environnement.aucuneExigence')}</p>}
           </Panel>
         </div>
       )}
@@ -7551,30 +7552,30 @@ function EnvironnementPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowProduitForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau produit</button>
+            <button onClick={() => setShowProduitForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('environnement.nouveauProduit')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Produits suivis" value={produits.length} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="FDS manquantes" value={produits.filter((p) => !p.fdsDisponible).length} color={C.amber} icon={AlertTriangle} />
-            <KpiCard label="Expirés" value={produits.filter((p) => p.dateExpiration && new Date(p.dateExpiration) < now2).length} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="Sans rétention (dangereux)" value={produits.filter((p) => p.dangerEnvironnemental && !p.retention).length} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiProduitsSuivis')} value={produits.length} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('environnement.kpiFdsManquantes')} value={produits.filter((p) => !p.fdsDisponible).length} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiExpires')} value={produits.filter((p) => p.dateExpiration && new Date(p.dateExpiration) < now2).length} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('environnement.kpiSansRetention')} value={produits.filter((p) => p.dangerEnvironnemental && !p.retention).length} color={C.red} icon={AlertTriangle} />
           </div>
-          <Panel title="Registre des produits chimiques">
+          <Panel title={t('environnement.chimiquesRegistreTitle')}>
             {produits.length
-              ? <DataTable columns={['Nom', 'Classification', 'Stock', 'FDS', 'Rétention', 'Expiration']}
+              ? <DataTable columns={[t('environnement.colNom'), t('environnement.colClassification'), t('environnement.colStock'), t('environnement.colFds'), t('environnement.colRetention'), t('environnement.colExpiration')]}
                   rows={produits.map((p) => [
                     p.nom, p.classification || '—', p.quantiteStockee != null ? `${p.quantiteStockee}${p.unite || ''}` : '—',
-                    p.fdsDisponible ? <StatusChip statut="Disponible" /> : <span style={{ color: C.amber }}>Manquante</span>,
-                    p.retention ? 'Oui' : <span style={{ color: p.dangerEnvironnemental ? C.red : C.textMuted }}>Non</span>,
+                    p.fdsDisponible ? <StatusChip statut="Disponible" /> : <span style={{ color: C.amber }}>{t('environnement.manquante')}</span>,
+                    p.retention ? t('environnement.oui') : <span style={{ color: p.dangerEnvironnemental ? C.red : C.textMuted }}>{t('environnement.non')}</span>,
                     p.dateExpiration ? <span style={{ color: new Date(p.dateExpiration) < now2 ? C.red : C.text }}>{new Date(p.dateExpiration).toLocaleDateString('fr-FR')}</span> : '—',
                   ])}
                   onRowClick={(i) => setSelectedProduit(produits[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun produit chimique enregistré pour le moment</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('environnement.aucunProduit')}</p>}
           </Panel>
         </div>
       )}
 
-      {tab === 'indicateurs' && <IndicateurDomainPanel domaine="ENVIRONNEMENT" titre="Indicateurs environnementaux" />}
+      {tab === 'indicateurs' && <IndicateurDomainPanel domaine="ENVIRONNEMENT" titre={t('environnement.indicateursTitre')} />}
     </div>
   );
 }
