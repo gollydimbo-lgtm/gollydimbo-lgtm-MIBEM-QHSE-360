@@ -8321,6 +8321,7 @@ function AuditorProfileForm({ auditeur, onClose, onCreated }) {
 }
 
 function AuditsPage() {
+  const { t } = useI18n();
   const C = useTheme();
   const audits = useCollection('/business/audits');
   const dashboardQ = useCollection('/business/audit-dashboard');
@@ -8354,10 +8355,10 @@ function AuditsPage() {
   const [searchResults, setSearchResults] = useState(null);
   useEffect(() => {
     if (!search.trim()) { setSearchResults(null); return; }
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api.get(`/business/audits-search?q=${encodeURIComponent(search.trim())}`).then(setSearchResults).catch(() => setSearchResults([]));
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [search]);
   if (audits.loading || dashboardQ.loading) return <LoadingPanel />;
   if (audits.error) return <ErrorPanel message={audits.error} onRetry={audits.reload} />;
@@ -8373,7 +8374,7 @@ function AuditsPage() {
   // Export harmonisé (audit priorité 7, finding #17).
   function auditsExportRows(rows) {
     return [
-      ['Titre', 'Type', 'Référentiel', 'Date', 'Statut', 'Score', 'Constats'],
+      [t('audits.colTitre'), t('audits.colType'), t('audits.colReferentiel'), t('audits.colDate'), t('audits.colStatut'), t('audits.colScore'), t('audits.colConstats')],
       ...rows.map((a) => [a.title, a.type?.label || '', a.referential?.label || '', new Date(a.auditDate).toLocaleDateString('fr-FR'), a.status, a.score != null ? `${a.score}%` : '', (a.auditFindings || []).length]),
     ];
   }
@@ -8424,7 +8425,7 @@ function AuditsPage() {
       {editingAuditeur && <AuditorProfileForm auditeur={editingAuditeur} onClose={() => setEditingAuditeur(null)} onCreated={auditeursQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['mes-audits', 'Mes audits'], ['calendrier', 'Calendrier'], ['programme', "Programme d'audit"], ['auditeurs', 'Auditeurs'], ['analyses', 'Analyses'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+        {[['apercu', t('audits.tabApercu')], ['mes-audits', t('audits.tabMesAudits')], ['calendrier', t('audits.tabCalendrier')], ['programme', t('audits.tabProgramme')], ['auditeurs', t('audits.tabAuditeurs')], ['analyses', t('audits.tabAnalyses')], ['parametrage', t('audits.tabParametrage')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -8433,30 +8434,30 @@ function AuditsPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Planifier un audit</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('audits.planifierAudit')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Audits au programme" value={dv(dash.total)} color={C.blue} icon={ClipboardCheck} />
-            <KpiCard label="Planifiés" value={dv(dash.planifies)} color={C.amber} icon={Activity} />
-            <KpiCard label="En cours" value={dv(dash.enCours)} color={C.blue} icon={Activity} />
-            <KpiCard label="Réalisés" value={dv(dash.realises)} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="Clôturés" value={dv(dash.clotures)} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="À venir" value={dv(dash.aVenir)} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="Reportés / Annulés" value={`${dv(dash.reportes)} / ${dv(dash.annules)}`} color={C.textMuted} icon={FileWarning} />
-            <KpiCard label="Taux de réalisation du programme" value={dv(dash.tauxRealisationProgramme, '%')} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Taux de conformité" value={dv(dash.tauxConformite, '%')} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="Taux de non-conformité" value={dv(dash.tauxNonConformite, '%')} color={dash.tauxNonConformite > 20 ? C.red : C.amber} icon={AlertTriangle} />
-            <KpiCard label="Score moyen" value={dv(dash.scoreMoyen, '%')} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('audits.kpiAuditsProgramme')} value={dv(dash.total)} color={C.blue} icon={ClipboardCheck} />
+            <KpiCard label={t('audits.kpiPlanifies')} value={dv(dash.planifies)} color={C.amber} icon={Activity} />
+            <KpiCard label={t('audits.kpiEnCours')} value={dv(dash.enCours)} color={C.blue} icon={Activity} />
+            <KpiCard label={t('audits.kpiRealises')} value={dv(dash.realises)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('audits.kpiClotures')} value={dv(dash.clotures)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('audits.kpiEnRetard')} value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('audits.kpiAVenir')} value={dv(dash.aVenir)} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('audits.kpiReportesAnnules')} value={`${dv(dash.reportes)} / ${dv(dash.annules)}`} color={C.textMuted} icon={FileWarning} />
+            <KpiCard label={t('audits.kpiTauxRealisationProgramme')} value={dv(dash.tauxRealisationProgramme, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('audits.kpiTauxConformite')} value={dv(dash.tauxConformite, '%')} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('audits.kpiTauxNonConformite')} value={dv(dash.tauxNonConformite, '%')} color={dash.tauxNonConformite > 20 ? C.red : C.amber} icon={AlertTriangle} />
+            <KpiCard label={t('audits.kpiScoreMoyen')} value={dv(dash.scoreMoyen, '%')} color={C.blue} icon={ClipboardList} />
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Constats" value={dv(dash.nombreConstats)} color={C.blue} icon={FileWarning} />
-            <KpiCard label="NC majeures" value={dv(dash.ncMajeures)} color={dash.ncMajeures > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="NC mineures" value={dv(dash.ncMineures)} color={C.amber} icon={AlertTriangle} />
-            <KpiCard label="Pistes d'amélioration" value={dv(dash.pistesAmelioration)} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="Points conformes" value={dv(dash.pointsConformes)} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="Constats ouverts" value={dv(dash.constatsOuverts)} color={dash.constatsOuverts > 0 ? C.amber : C.green} icon={FileWarning} />
-            <KpiCard label="Délai moyen de clôture (jours)" value={dv(dash.delaiMoyenClotureConstats)} color={C.blue} icon={Activity} />
+            <KpiCard label={t('audits.kpiConstats')} value={dv(dash.nombreConstats)} color={C.blue} icon={FileWarning} />
+            <KpiCard label={t('audits.kpiNcMajeures')} value={dv(dash.ncMajeures)} color={dash.ncMajeures > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('audits.kpiNcMineures')} value={dv(dash.ncMineures)} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label={t('audits.kpiPistesAmelioration')} value={dv(dash.pistesAmelioration)} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('audits.kpiPointsConformes')} value={dv(dash.pointsConformes)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('audits.kpiConstatsOuverts')} value={dv(dash.constatsOuverts)} color={dash.constatsOuverts > 0 ? C.amber : C.green} icon={FileWarning} />
+            <KpiCard label={t('audits.kpiDelaiMoyenCloture')} value={dv(dash.delaiMoyenClotureConstats)} color={C.blue} icon={Activity} />
           </div>
         </div>
       )}
@@ -8465,19 +8466,19 @@ function AuditsPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Planifier un audit</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('audits.planifierAudit')}</button>
           </div>
-          <p className="text-xs" style={{ color: C.textMuted }}>Cliquez une ligne pour consulter et gérer ses constats.</p>
+          <p className="text-xs" style={{ color: C.textMuted }}>{t('audits.cliquezLigne')}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un audit (titre, périmètre, type, référentiel, auditeur...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={() => exportAuditsExcel(sorted)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
-            <button onClick={() => exportAuditsCsv(sorted)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('audits.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={() => exportAuditsExcel(sorted)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('audits.excel')}</button>
+            <button onClick={() => exportAuditsCsv(sorted)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('audits.csv')}</button>
           </div>
-          <Panel title={searchResults ? `Résultats de recherche (${sorted.length})` : "Programme d'audits"}>
+          <Panel title={searchResults ? t('audits.resultatsRecherche', { count: String(sorted.length) }) : t('audits.programmeAuditsTitle')}>
             {sorted.length
-              ? <DataTable columns={['Titre', 'Type', 'Référentiel', 'Date', 'Statut', 'Score', 'Constats']} rows={sorted.map((a) => [a.title, a.type?.label || '—', a.referential?.label || '—', new Date(a.auditDate).toLocaleDateString('fr-FR'), <StatusChip statut={AUDIT_STATUS_LABELS[a.status] || a.status} />, a.score != null ? `${a.score}%` : '—', (a.auditFindings || []).length])}
+              ? <DataTable columns={[t('audits.colTitre'), t('audits.colType'), t('audits.colReferentiel'), t('audits.colDate'), t('audits.colStatut'), t('audits.colScore'), t('audits.colConstats')]} rows={sorted.map((a) => [a.title, a.type?.label || '—', a.referential?.label || '—', new Date(a.auditDate).toLocaleDateString('fr-FR'), <StatusChip statut={AUDIT_STATUS_LABELS[a.status] || a.status} />, a.score != null ? `${a.score}%` : '—', (a.auditFindings || []).length])}
                   onRowClick={(i) => setViewing(sorted[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucun audit programmé pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? t('audits.aucunResultatRecherche') : t('audits.aucunAuditProgramme')}</p>}
           </Panel>
         </div>
       )}
@@ -8494,7 +8495,7 @@ function AuditsPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold w-14" style={{ color: C.text }}>{ev.date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
                           <span className="text-sm" style={{ color: C.text }}>{ev.label}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: ev.type === 'audit' ? `${C.blue}22` : `${C.amber}22`, color: ev.type === 'audit' ? C.blue : C.amber }}>{ev.type === 'audit' ? 'Audit' : 'Programme'}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: ev.type === 'audit' ? `${C.blue}22` : `${C.amber}22`, color: ev.type === 'audit' ? C.blue : C.amber }}>{ev.type === 'audit' ? t('audits.typeAudit') : t('audits.typeProgramme')}</span>
                         </div>
                         <StatusChip statut={ev.statut} />
                       </div>
@@ -8502,7 +8503,7 @@ function AuditsPage() {
                   </div>
                 </Panel>
               ))
-            : <Panel title="Calendrier"><p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun audit ni ligne de programme datée</p></Panel>}
+            : <Panel title={t('audits.calendrierTitle')}><p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.aucunEvenementCalendrier')}</p></Panel>}
         </div>
       )}
 
@@ -8510,19 +8511,19 @@ function AuditsPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowProgramForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ligne de programme</button>
+            <button onClick={() => setShowProgramForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('audits.ligneProgramme')}</button>
           </div>
-          <Panel title="Programme annuel / périodique">
+          <Panel title={t('audits.programmeAnnuelTitle')}>
             {programs.length
-              ? <DataTable columns={['Titre', 'Année', 'Type', 'Unité de travail', 'Date prévue', 'Statut', 'Audit']}
+              ? <DataTable columns={[t('audits.colTitre'), t('audits.colAnnee'), t('audits.colType'), t('audits.colUniteTravail'), t('audits.colDatePrevue'), t('audits.colStatut'), t('audits.colAudit')]}
                   rows={programs.map((p) => [
                     p.title, p.year, p.type?.label || '—', p.workUnit?.name || '—',
                     p.datePrevue ? new Date(p.datePrevue).toLocaleDateString('fr-FR') : '—',
                     <StatusChip statut={p.statut} />,
-                    p.auditId ? 'Généré' : <button onClick={(e) => { e.stopPropagation(); generateAuditFromProgram(p.id); }} disabled={generatingProgramId === p.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{generatingProgramId === p.id ? '…' : "Générer l'audit"}</button>,
+                    p.auditId ? t('audits.genere') : <button onClick={(e) => { e.stopPropagation(); generateAuditFromProgram(p.id); }} disabled={generatingProgramId === p.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: `${C.blue}22`, color: C.blue }}>{generatingProgramId === p.id ? '…' : t('audits.genererAudit')}</button>,
                   ])}
                   onRowClick={(i) => setEditingProgram(programs[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne de programme pour le moment</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.aucuneLigneProgramme')}</p>}
           </Panel>
         </div>
       )}
@@ -8530,16 +8531,16 @@ function AuditsPage() {
       {tab === 'auditeurs' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Auditeurs">
+          <Panel title={t('audits.auditeursTitle')}>
             {auditeurs.length
-              ? <DataTable columns={['Auditeur', 'Compétence', 'Habilitation', 'Disponible', 'Audits réalisés', 'Audits en cours', 'Performance moyenne']}
+              ? <DataTable columns={[t('audits.colAuditeur'), t('audits.colCompetence'), t('audits.colHabilitation'), t('audits.colDisponible'), t('audits.colAuditsRealises'), t('audits.colAuditsEnCours'), t('audits.colPerformanceMoyenne')]}
                   rows={auditeurs.map((a) => [
                     `${a.firstName} ${a.lastName}`, a.profile?.competence || '—', a.profile?.habilitation || '—',
-                    a.profile ? (a.profile.disponible ? 'Oui' : 'Non') : '—',
+                    a.profile ? (a.profile.disponible ? t('audits.oui') : t('audits.non')) : '—',
                     a.nombreAuditsRealises, a.nombreAuditsEnCours, a.performanceMoyenne != null ? `${a.performanceMoyenne}%` : '—',
                   ])}
                   onRowClick={(i) => setEditingAuditeur(auditeurs[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun auditeur pour le moment — apparaît dès qu'un utilisateur est désigné auditeur sur un audit</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.aucunAuditeur')}</p>}
           </Panel>
         </div>
       )}
@@ -8547,7 +8548,7 @@ function AuditsPage() {
       {tab === 'analyses' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Évolution sur 12 mois">
+          <Panel title={t('audits.evolution12MoisTitle')}>
             {trends.length
               ? <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={trends}>
@@ -8556,68 +8557,68 @@ function AuditsPage() {
                     <YAxis yAxisId="left" tick={{ fontSize: 11, fill: C.textMuted }} />
                     <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: C.textMuted }} />
                     <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
-                    <Line yAxisId="left" type="monotone" dataKey="realises" name="Audits réalisés" stroke={C.blue} strokeWidth={2} />
-                    <Line yAxisId="right" type="monotone" dataKey="tauxConformiteMoyen" name="Taux de conformité (%)" stroke={C.green} strokeWidth={2} />
+                    <Line yAxisId="left" type="monotone" dataKey="realises" name={t('audits.legendAuditsRealises')} stroke={C.blue} strokeWidth={2} />
+                    <Line yAxisId="right" type="monotone" dataKey="tauxConformiteMoyen" name={t('audits.legendTauxConformite')} stroke={C.green} strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
-              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas encore assez de données</p>}
+              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('audits.pasAssezDeDonnees')}</p>}
           </Panel>
 
-          <Panel title="Non-conformités récurrentes" subtitle="Écarts identiques constatés au moins deux fois">
+          <Panel title={t('audits.ncRecurrentesTitle')} subtitle={t('audits.ncRecurrentesSubtitle')}>
             {ncRecurrentes.length
               ? <div className="space-y-2">
                   {ncRecurrentes.map((nc, i) => (
                     <div key={i} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
                       <div className="flex items-center justify-between">
                         <p className="text-sm" style={{ color: C.text }}>{nc.description}</p>
-                        <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{nc.occurrences}× constaté</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{t('audits.foisConstate', { count: String(nc.occurrences) })}</span>
                       </div>
-                      <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>{nc.processus} · dernière occurrence le {new Date(nc.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                      <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>{t('audits.derniereOccurrence', { processus: nc.processus, date: new Date(nc.derniereOccurrence).toLocaleDateString('fr-FR') })}</p>
                     </div>
                   ))}
-                  <p className="text-xs pt-1" style={{ color: C.textMuted }}>Envisager une action corrective systémique / révision du processus pour ces écarts récurrents.</p>
+                  <p className="text-xs pt-1" style={{ color: C.textMuted }}>{t('audits.envisagerActionSystemique')}</p>
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité récurrente détectée</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.aucuneNcRecurrente')}</p>}
           </Panel>
 
-          <Panel title="Comparer deux périodes">
+          <Panel title={t('audits.comparerPeriodesTitle')}>
             <div className="grid grid-cols-4 gap-2 mb-3">
-              <FormField label="Début période 1"><input type="date" value={comparaisonForm.debut1} onChange={(e) => setComparaisonForm({ ...comparaisonForm, debut1: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-              <FormField label="Fin période 1"><input type="date" value={comparaisonForm.fin1} onChange={(e) => setComparaisonForm({ ...comparaisonForm, fin1: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-              <FormField label="Début période 2"><input type="date" value={comparaisonForm.debut2} onChange={(e) => setComparaisonForm({ ...comparaisonForm, debut2: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-              <FormField label="Fin période 2"><input type="date" value={comparaisonForm.fin2} onChange={(e) => setComparaisonForm({ ...comparaisonForm, fin2: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label={t('audits.debutPeriode1')}><input type="date" value={comparaisonForm.debut1} onChange={(e) => setComparaisonForm({ ...comparaisonForm, debut1: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label={t('audits.finPeriode1')}><input type="date" value={comparaisonForm.fin1} onChange={(e) => setComparaisonForm({ ...comparaisonForm, fin1: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label={t('audits.debutPeriode2')}><input type="date" value={comparaisonForm.debut2} onChange={(e) => setComparaisonForm({ ...comparaisonForm, debut2: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+              <FormField label={t('audits.finPeriode2')}><input type="date" value={comparaisonForm.fin2} onChange={(e) => setComparaisonForm({ ...comparaisonForm, fin2: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
             </div>
-            <button onClick={runComparaison} disabled={comparaisonLoading} className="px-4 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff' }}>{comparaisonLoading ? '…' : 'Comparer'}</button>
+            <button onClick={runComparaison} disabled={comparaisonLoading} className="px-4 py-2 rounded-lg text-xs font-medium mb-3" style={{ backgroundColor: C.blue, color: '#fff' }}>{comparaisonLoading ? '…' : t('audits.comparer')}</button>
             {comparaison && (
-              <DataTable columns={['Indicateur', 'Période 1', 'Période 2']} rows={[
-                ["Nombre d'audits", comparaison.periode1.nombreAudits, comparaison.periode2.nombreAudits],
-                ['Taux de conformité moyen', comparaison.periode1.tauxConformiteMoyen ?? '—', comparaison.periode2.tauxConformiteMoyen ?? '—'],
-                ['Score moyen', comparaison.periode1.scoreMoyen ?? '—', comparaison.periode2.scoreMoyen ?? '—'],
-                ['NC majeures', comparaison.periode1.ncMajeures, comparaison.periode2.ncMajeures],
-                ['NC mineures', comparaison.periode1.ncMineures, comparaison.periode2.ncMineures],
+              <DataTable columns={[t('audits.colIndicateur'), t('audits.colPeriode1'), t('audits.colPeriode2')]} rows={[
+                [t('audits.statNombreAudits'), comparaison.periode1.nombreAudits, comparaison.periode2.nombreAudits],
+                [t('audits.statTauxConformiteMoyen'), comparaison.periode1.tauxConformiteMoyen ?? '—', comparaison.periode2.tauxConformiteMoyen ?? '—'],
+                [t('audits.statScoreMoyen'), comparaison.periode1.scoreMoyen ?? '—', comparaison.periode2.scoreMoyen ?? '—'],
+                [t('audits.statNcMajeures'), comparaison.periode1.ncMajeures, comparaison.periode2.ncMajeures],
+                [t('audits.statNcMineures'), comparaison.periode1.ncMineures, comparaison.periode2.ncMineures],
               ]} />
             )}
           </Panel>
 
-          <Panel title="Synthèse Direction" right={<div className="flex gap-2">{synthese && <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button>}<button onClick={generateSynthese} disabled={syntheseLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{syntheseLoading ? '…' : 'Générer'}</button></div>}>
+          <Panel title={t('audits.syntheseDirectionTitle')} right={<div className="flex gap-2">{synthese && <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('audits.imprimerPdf')}</button>}<button onClick={generateSynthese} disabled={syntheseLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{syntheseLoading ? '…' : t('audits.generer')}</button></div>}>
             {synthese
               ? <div className="space-y-3">
-                  <p className="text-xs" style={{ color: C.textMuted }}>Générée le {new Date(synthese.genereLe).toLocaleDateString('fr-FR')}</p>
-                  <DataTable columns={['Indicateur', 'Valeur']} rows={[
-                    ["Audits réalisés", synthese.dashboard.realises], ['Taux de réalisation du programme', synthese.dashboard.tauxRealisationProgramme != null ? `${synthese.dashboard.tauxRealisationProgramme}%` : '—'],
-                    ['Score moyen', synthese.dashboard.scoreMoyen ?? '—'], ['Taux de conformité', synthese.dashboard.tauxConformite != null ? `${synthese.dashboard.tauxConformite}%` : '—'],
-                    ['NC majeures', synthese.dashboard.ncMajeures], ['NC mineures', synthese.dashboard.ncMineures], ['Actions en retard', synthese.dashboard.actionsEnRetard ?? '—'],
+                  <p className="text-xs" style={{ color: C.textMuted }}>{t('audits.genereeLe', { date: new Date(synthese.genereLe).toLocaleDateString('fr-FR') })}</p>
+                  <DataTable columns={[t('audits.colIndicateur'), t('audits.colValeur')]} rows={[
+                    [t('audits.statAuditsRealises'), synthese.dashboard.realises], [t('audits.statTauxRealisationProgramme'), synthese.dashboard.tauxRealisationProgramme != null ? `${synthese.dashboard.tauxRealisationProgramme}%` : '—'],
+                    [t('audits.statScoreMoyen'), synthese.dashboard.scoreMoyen ?? '—'], [t('audits.statTauxConformite'), synthese.dashboard.tauxConformite != null ? `${synthese.dashboard.tauxConformite}%` : '—'],
+                    [t('audits.statNcMajeures'), synthese.dashboard.ncMajeures], [t('audits.statNcMineures'), synthese.dashboard.ncMineures], [t('audits.statActionsEnRetard'), synthese.dashboard.actionsEnRetard ?? '—'],
                   ]} />
-                  <p className="text-xs font-semibold" style={{ color: C.text }}>Processus les plus performants</p>
-                  <DataTable columns={['Processus', 'Taux de conformité moyen']} rows={synthese.processusLesPlusPerformants.map((p) => [p.processus, p.tauxConformiteMoyen != null ? `${p.tauxConformiteMoyen}%` : '—'])} />
-                  <p className="text-xs font-semibold" style={{ color: C.text }}>Processus les plus problématiques</p>
-                  <DataTable columns={['Processus', 'Taux de conformité moyen']} rows={synthese.processusLesPlusProblematiques.map((p) => [p.processus, p.tauxConformiteMoyen != null ? `${p.tauxConformiteMoyen}%` : '—'])} />
+                  <p className="text-xs font-semibold" style={{ color: C.text }}>{t('audits.processusPerformantsTitle')}</p>
+                  <DataTable columns={[t('audits.colProcessus'), t('audits.colTauxConformiteMoyen')]} rows={synthese.processusLesPlusPerformants.map((p) => [p.processus, p.tauxConformiteMoyen != null ? `${p.tauxConformiteMoyen}%` : '—'])} />
+                  <p className="text-xs font-semibold" style={{ color: C.text }}>{t('audits.processusProblematiquesTitle')}</p>
+                  <DataTable columns={[t('audits.colProcessus'), t('audits.colTauxConformiteMoyen')]} rows={synthese.processusLesPlusProblematiques.map((p) => [p.processus, p.tauxConformiteMoyen != null ? `${p.tauxConformiteMoyen}%` : '—'])} />
                   {synthese.principalesCausesRecurrentes.length > 0 && <>
-                    <p className="text-xs font-semibold" style={{ color: C.text }}>Principales causes récurrentes</p>
-                    <DataTable columns={['Description', 'Occurrences']} rows={synthese.principalesCausesRecurrentes.map((c) => [c.description, c.occurrences])} />
+                    <p className="text-xs font-semibold" style={{ color: C.text }}>{t('audits.causesRecurrentesTitle')}</p>
+                    <DataTable columns={[t('audits.colDescription'), t('audits.colOccurrences')]} rows={synthese.principalesCausesRecurrentes.map((c) => [c.description, c.occurrences])} />
                   </>}
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Clique sur "Générer" pour produire la synthèse</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.cliquePourGenerer')}</p>}
           </Panel>
         </div>
       )}
@@ -8625,21 +8626,21 @@ function AuditsPage() {
       {tab === 'parametrage' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Types d'audit" right={<button onClick={() => setShowTypeForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+            <Panel title={t('audits.typesAuditTitle')} right={<button onClick={() => setShowTypeForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('audits.ajouter')}</button>}>
               {types.length
-                ? <DataTable columns={['Code', 'Libellé']} rows={types.map((t) => [t.code, t.label])} onRowClick={(i) => setEditingType(types[i])} />
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun type défini — la liste reste entièrement libre</p>}
+                ? <DataTable columns={[t('audits.colCode'), t('audits.colLibelle')]} rows={types.map((ty) => [ty.code, ty.label])} onRowClick={(i) => setEditingType(types[i])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.aucunTypeDefini')}</p>}
             </Panel>
-            <Panel title="Référentiels" right={<button onClick={() => setShowReferentialForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+            <Panel title={t('audits.referentielsTitle')} right={<button onClick={() => setShowReferentialForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('audits.ajouter')}</button>}>
               {referentials.length
-                ? <DataTable columns={['Code', 'Libellé']} rows={referentials.map((r) => [r.code, r.label])} onRowClick={(i) => setEditingReferential(referentials[i])} />
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun référentiel défini</p>}
+                ? <DataTable columns={[t('audits.colCode'), t('audits.colLibelle')]} rows={referentials.map((r) => [r.code, r.label])} onRowClick={(i) => setEditingReferential(referentials[i])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.aucunReferentiel')}</p>}
             </Panel>
           </div>
-          <Panel title="Check-lists" right={<button onClick={() => setShowChecklistForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle check-list</button>}>
+          <Panel title={t('audits.checklistsTitle')} right={<button onClick={() => setShowChecklistForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('audits.nouvelleChecklist')}</button>}>
             {checklists.length
-              ? <DataTable columns={['Titre', 'Type', 'Référentiel', 'Questions']} rows={checklists.map((c) => [c.title, c.type?.label || '—', c.referential?.label || '—', (c.items || []).length])} onRowClick={(i) => setEditingChecklist(checklists[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune check-list créée — utilisées ensuite pour noter automatiquement les audits</p>}
+              ? <DataTable columns={[t('audits.colTitre'), t('audits.colType'), t('audits.colReferentiel'), t('audits.colQuestions')]} rows={checklists.map((c) => [c.title, c.type?.label || '—', c.referential?.label || '—', (c.items || []).length])} onRowClick={(i) => setEditingChecklist(checklists[i])} />
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('audits.aucuneChecklist')}</p>}
           </Panel>
         </div>
       )}
