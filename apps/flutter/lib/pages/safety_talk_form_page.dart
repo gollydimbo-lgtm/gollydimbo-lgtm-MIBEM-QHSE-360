@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import '../services/sync_queue.dart';
+import '../i18n/i18n.dart';
 import 'safety_talk_page.dart';
 
 /// Formulaire de création / édition manuelle d'une fiche complète de quart
@@ -108,8 +109,8 @@ class _SafetyTalkFormPageState extends State<SafetyTalkFormPage> {
     final d = await showDatePicker(context: context, initialDate: scheduledAt ?? DateTime.now(), firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 730)));
     if (d == null) return;
     if (!mounted) return;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(scheduledAt ?? DateTime.now()));
-    setState(() => scheduledAt = DateTime(d.year, d.month, d.day, t?.hour ?? 8, t?.minute ?? 0));
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(scheduledAt ?? DateTime.now()));
+    setState(() => scheduledAt = DateTime(d.year, d.month, d.day, time?.hour ?? 8, time?.minute ?? 0));
   }
 
   Future<void> pickFromLibrary() async {
@@ -122,19 +123,19 @@ class _SafetyTalkFormPageState extends State<SafetyTalkFormPage> {
     final chosen = await showDialog<Map>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Bibliothèque de thèmes'),
+        title: Text(t('safetyTalkForm.bibliothequeDeThemes')),
         content: SizedBox(
           width: 460, height: 480,
           child: ListView(children: categories.map<Widget>((cat) => ExpansionTile(
                 title: Text('${cat['categorie']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                children: List<Widget>.from((cat['themes'] as List).map((t) => ListTile(
+                children: List<Widget>.from((cat['themes'] as List).map((th) => ListTile(
                       dense: true,
-                      title: Text('${t['titre']}', style: const TextStyle(fontSize: 13)),
-                      onTap: () => Navigator.pop(c, Map.from(t)),
+                      title: Text('${th['titre']}', style: const TextStyle(fontSize: 13)),
+                      onTap: () => Navigator.pop(c, Map.from(th)),
                     ))),
               )).toList()),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(t('safetyTalkForm.annuler')))],
       ),
     );
     if (chosen == null) return;
@@ -154,7 +155,7 @@ class _SafetyTalkFormPageState extends State<SafetyTalkFormPage> {
 
   Future<void> submit() async {
     if (title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyTalkForm.titreObligatoire'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -186,7 +187,7 @@ class _SafetyTalkFormPageState extends State<SafetyTalkFormPage> {
       if (e.networkError && !editing) {
         await SyncQueue.enqueue('safetyTalk', 'CREATE', payload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : causerie enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyTalkForm.enregistreeHorsLigne')), duration: const Duration(seconds: 4)));
           Navigator.pop(context);
         }
         return;
@@ -207,79 +208,79 @@ class _SafetyTalkFormPageState extends State<SafetyTalkFormPage> {
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(
-      title: Text(editing ? 'Modifier la fiche' : 'Nouvelle fiche'),
-      actions: [IconButton(icon: const Icon(Icons.auto_stories), tooltip: 'Bibliothèque de thèmes', onPressed: pickFromLibrary)],
+      title: Text(editing ? t('safetyTalkForm.modifierLaFiche') : t('safetyTalkForm.nouvelleFiche')),
+      actions: [IconButton(icon: const Icon(Icons.auto_stories), tooltip: t('safetyTalkForm.bibliothequeDeThemes'), onPressed: pickFromLibrary)],
     ),
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
-            OutlinedButton.icon(onPressed: pickFromLibrary, icon: const Icon(Icons.auto_stories), label: const Text('Choisir un thème dans la bibliothèque')),
+            OutlinedButton.icon(onPressed: pickFromLibrary, icon: const Icon(Icons.auto_stories), label: Text(t('safetyTalkForm.choisirUnTheme'))),
             const SizedBox(height: 16),
-            const Text('Identification', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(t('safetyTalkForm.identification'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 8),
-            _field(title, 'Titre *'),
-            _field(theme, 'Thème'),
-            _field(summary, 'Résumé', maxLines: 3),
-            OutlinedButton.icon(onPressed: pickWeekStart, icon: const Icon(Icons.calendar_today, size: 16), label: Text(weekStart != null ? 'Semaine du ${weekStart!.toIso8601String().substring(0, 10)}' : 'Semaine (défaut : semaine en cours)')),
+            _field(title, t('safetyTalkForm.titre')),
+            _field(theme, t('safetyTalkForm.theme')),
+            _field(summary, t('safetyTalkForm.resume'), maxLines: 3),
+            OutlinedButton.icon(onPressed: pickWeekStart, icon: const Icon(Icons.calendar_today, size: 16), label: Text(weekStart != null ? t('safetyTalkForm.semaineDu', {'date': weekStart!.toIso8601String().substring(0, 10)}) : t('safetyTalkForm.semaineDefaut'))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: priorite, isExpanded: true, decoration: const InputDecoration(labelText: 'Priorité'),
+              value: priorite, isExpanded: true, decoration: InputDecoration(labelText: t('safetyTalkForm.priorite')),
               items: prioriteLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
               onChanged: (v) => setState(() => priorite = v ?? 'MOYENNE'),
             ),
             const SizedBox(height: 20),
-            const Text('Contenu de la séance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(t('safetyTalkForm.contenuDeLaSeance'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 8),
-            _field(objectif, 'Objectif', maxLines: 2),
-            _field(contexte, 'Contexte', maxLines: 3),
-            _field(risquesConcernes, 'Risques concernés', maxLines: 2),
-            _field(personnesExposees, 'Personnes exposées', maxLines: 2),
-            _field(messagePrincipal, 'Message principal', maxLines: 2),
-            _field(pointsEssentiels, 'Points essentiels', maxLines: 4),
-            _field(bonnesPratiques, 'Bonnes pratiques', maxLines: 4),
-            _field(mauvaisesPratiques, 'Mauvaises pratiques', maxLines: 4),
-            _field(questions, 'Questions à poser', maxLines: 3),
-            _field(exemplesTerrain, 'Exemples terrain', maxLines: 3),
-            _field(mesuresPrevention, 'Mesures de prévention', maxLines: 3),
-            _field(conduiteATenir, 'Conduite à tenir', maxLines: 3),
-            _field(conclusion, 'Conclusion', maxLines: 2),
-            _field(engagementAttendu, 'Engagement attendu', maxLines: 2),
-            _field(quizQuestions, 'Quiz — une question par ligne', maxLines: 4),
+            _field(objectif, t('safetyTalkForm.objectif'), maxLines: 2),
+            _field(contexte, t('safetyTalkForm.contexte'), maxLines: 3),
+            _field(risquesConcernes, t('safetyTalkForm.risquesConcernes'), maxLines: 2),
+            _field(personnesExposees, t('safetyTalkForm.personnesExposees'), maxLines: 2),
+            _field(messagePrincipal, t('safetyTalkForm.messagePrincipal'), maxLines: 2),
+            _field(pointsEssentiels, t('safetyTalkForm.pointsEssentiels'), maxLines: 4),
+            _field(bonnesPratiques, t('safetyTalkForm.bonnesPratiques'), maxLines: 4),
+            _field(mauvaisesPratiques, t('safetyTalkForm.mauvaisesPratiques'), maxLines: 4),
+            _field(questions, t('safetyTalkForm.questionsAPoser'), maxLines: 3),
+            _field(exemplesTerrain, t('safetyTalkForm.exemplesTerrain'), maxLines: 3),
+            _field(mesuresPrevention, t('safetyTalkForm.mesuresDePrevention'), maxLines: 3),
+            _field(conduiteATenir, t('safetyTalkForm.conduiteATenir'), maxLines: 3),
+            _field(conclusion, t('safetyTalkForm.conclusion'), maxLines: 2),
+            _field(engagementAttendu, t('safetyTalkForm.engagementAttendu'), maxLines: 2),
+            _field(quizQuestions, t('safetyTalkForm.quizUneQuestionParLigne'), maxLines: 4),
             const SizedBox(height: 20),
-            const Text('Organisation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(t('safetyTalkForm.organisation'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 8),
             Row(children: [
-              Expanded(child: _field(siteId, 'Site')),
+              Expanded(child: _field(siteId, t('safetyTalkForm.site'))),
               const SizedBox(width: 8),
-              Expanded(child: _field(service, 'Service')),
+              Expanded(child: _field(service, t('safetyTalkForm.service'))),
             ]),
             Row(children: [
-              Expanded(child: _field(zone, 'Zone')),
+              Expanded(child: _field(zone, t('safetyTalkForm.zone'))),
               const SizedBox(width: 8),
-              Expanded(child: _field(equipe, 'Équipe')),
+              Expanded(child: _field(equipe, t('safetyTalkForm.equipe'))),
             ]),
             DropdownButtonFormField<String>(
-              value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail'),
+              value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('safetyTalkForm.uniteDeTravail')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
               onChanged: (v) => setState(() => workUnitId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: responsableAnimationId, isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable animation'),
+              value: responsableAnimationId, isExpanded: true, decoration: InputDecoration(labelText: t('safetyTalkForm.responsableAnimation')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => responsableAnimationId = v),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(onPressed: pickScheduledAt, icon: const Icon(Icons.event), label: Text(scheduledAt != null ? 'Planifiée : ${scheduledAt!.toIso8601String().substring(0, 16).replaceFirst('T', ' ')}' : 'Date/heure planifiée')),
+            OutlinedButton.icon(onPressed: pickScheduledAt, icon: const Icon(Icons.event), label: Text(scheduledAt != null ? t('safetyTalkForm.planifieeLe', {'date': scheduledAt!.toIso8601String().substring(0, 16).replaceFirst('T', ' ')}) : t('safetyTalkForm.dateHeurePlanifiee'))),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: _field(duree, 'Durée (minutes)')),
+              Expanded(child: _field(duree, t('safetyTalkForm.dureeMinutes'))),
               const SizedBox(width: 8),
-              Expanded(child: _field(frequence, 'Fréquence (ex : Hebdomadaire)')),
+              Expanded(child: _field(frequence, t('safetyTalkForm.frequenceExemple'))),
             ]),
             if (error != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
             const SizedBox(height: 12),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : 'Enregistrer'))),
+            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? t('safetyTalkForm.envoiEnCours') : t('safetyTalkForm.enregistrer')))),
           ]),
   );
 }
