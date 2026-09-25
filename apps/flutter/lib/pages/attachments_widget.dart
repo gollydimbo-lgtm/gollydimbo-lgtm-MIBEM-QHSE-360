@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'attachment_helpers.dart';
 
 String _attachmentUrl(String baseUrl, String path) {
@@ -67,13 +68,13 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
     padding: const EdgeInsets.only(bottom: 16),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Pièces jointes / photos (${links.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        TextButton.icon(onPressed: addPhoto, icon: const Icon(Icons.add_a_photo_outlined, size: 16), label: const Text('Ajouter')),
+        Text(t('attachmentsWidget.titre', {'count': '${links.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        TextButton.icon(onPressed: addPhoto, icon: const Icon(Icons.add_a_photo_outlined, size: 16), label: Text(t('attachmentsWidget.ajouter'))),
       ]),
       if (loading)
         const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator())
       else if (links.isEmpty)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune pièce jointe', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('attachmentsWidget.aucunePieceJointe'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
       else
         SizedBox(
           height: 90,
@@ -101,7 +102,7 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
             },
           ),
         ),
-      if (links.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Appui long pour retirer une pièce jointe', style: TextStyle(color: QhseColors.textSecondary, fontSize: 10))),
+      if (links.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(t('attachmentsWidget.appuiLongPourRetirer'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 10))),
     ]),
   );
 }
