@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 String _genCode(String prefix) => '$prefix-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
@@ -60,11 +61,11 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: Text('Supprimer définitivement « ${widget.titleOf(item)} » ? Cette action est irréversible.'),
+        title: Text(t('referentielPages.confirmerSuppression')),
+        content: Text(t('referentielPages.confirmerSuppressionTexte', {'label': widget.titleOf(item)})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Supprimer', style: TextStyle(color: QhseColors.red))),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('referentielPages.annuler'))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text(t('referentielPages.supprimer'), style: const TextStyle(color: QhseColors.red))),
         ],
       ),
     );
@@ -87,7 +88,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(editing ? 'Modifier' : 'Nouveau'),
+        title: Text(editing ? t('referentielPages.modifier') : t('referentielPages.nouveau')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             for (final f in widget.fields) Padding(
@@ -98,7 +99,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('referentielPages.annuler'))),
           FilledButton(
             onPressed: () async {
               final payload = <String, dynamic>{};
@@ -121,7 +122,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
                 setD(() => formError = '$e');
               }
             },
-            child: Text(editing ? 'Enregistrer' : 'Créer'),
+            child: Text(editing ? t('referentielPages.enregistrer') : t('referentielPages.creer')),
           ),
         ],
       )),
@@ -151,7 +152,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
           },
           child: InputDecorator(
             decoration: InputDecoration(labelText: f.label),
-            child: Text(current != null ? '${current.day}/${current.month}/${current.year}' : 'Choisir une date'),
+            child: Text(current != null ? '${current.day}/${current.month}/${current.year}' : t('referentielPages.choisirUneDate')),
           ),
         );
       case 'multiline':
@@ -179,7 +180,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.title), actions: [
-        IconButton(icon: const Icon(Icons.add), tooltip: 'Nouveau', onPressed: () => _openForm()),
+        IconButton(icon: const Icon(Icons.add), tooltip: t('referentielPages.nouveau'), onPressed: () => _openForm()),
       ]),
       body: error != null
           ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(error!, style: const TextStyle(color: QhseColors.red))))
@@ -191,7 +192,7 @@ class _SimpleCrudPageState extends State<SimpleCrudPage> {
                     if (widget.kpiBuilder != null) Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(widget.kpiBuilder!(items!))),
                     Expanded(
                       child: items!.isEmpty
-                          ? ListView(children:  [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun élément pour le moment', style: TextStyle(color: QhseColors.textSecondary))))])
+                          ? ListView(children:  [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('referentielPages.aucunElement'), style: TextStyle(color: QhseColors.textSecondary))))])
                           : ListView.builder(
                               padding: const EdgeInsets.all(12),
                               itemCount: items!.length,
@@ -232,20 +233,20 @@ class RegulatoryLegacyCataloguePage extends StatelessWidget {
   const RegulatoryLegacyCataloguePage({super.key});
   @override
   Widget build(BuildContext context) => SimpleCrudPage(
-        title: 'Veille réglementaire', endpoint: '/business/veille-reglementaire', codePrefix: 'VEI',
-        fields: const [
-          FieldSpec('texte', 'Texte réglementaire', type: 'multiline', required: true),
-          FieldSpec('domaine', 'Domaine'),
-          FieldSpec('dateApplication', "Date d'application", type: 'date'),
-          FieldSpec('statut', 'Statut', type: 'select', options: ['A_TRAITER', 'EN_COURS', 'INTEGREE'], defaultValue: 'A_TRAITER'),
+        title: t('referentielPages.veilleReglementaireTitre'), endpoint: '/business/veille-reglementaire', codePrefix: 'VEI',
+        fields: [
+          FieldSpec('texte', t('referentielPages.texteReglementaire'), type: 'multiline', required: true),
+          FieldSpec('domaine', t('referentielPages.domaine')),
+          FieldSpec('dateApplication', t('referentielPages.dateApplication'), type: 'date'),
+          FieldSpec('statut', t('referentielPages.statut'), type: 'select', options: const ['A_TRAITER', 'EN_COURS', 'INTEGREE'], defaultValue: 'A_TRAITER'),
         ],
         titleOf: (i) => i['texte'] ?? '—', subtitleOf: (i) => i['domaine'] ?? '',
-        chipLabel: (i) => i['statut'] == 'A_TRAITER' ? 'À traiter' : i['statut'] == 'EN_COURS' ? 'En cours' : 'Intégrée',
+        chipLabel: (i) => i['statut'] == 'A_TRAITER' ? t('referentielPages.statutATraiter') : i['statut'] == 'EN_COURS' ? t('referentielPages.statutEnCours') : t('referentielPages.statutIntegree'),
         chipColor: (i) => i['statut'] == 'A_TRAITER' ? QhseColors.red : i['statut'] == 'EN_COURS' ? QhseColors.blue : QhseColors.green,
         kpiBuilder: (items) => [
-          KpiStat('Textes suivis', '${items.length}', color: QhseColors.blue, icon: Icons.search_outlined),
-          KpiStat('À traiter', '${items.where((i) => i['statut'] == 'A_TRAITER').length}', color: QhseColors.red, icon: Icons.priority_high),
-          KpiStat('Intégrés', '${items.where((i) => i['statut'] == 'INTEGREE').length}', color: QhseColors.green, icon: Icons.check_circle_outline),
+          KpiStat(t('referentielPages.kpiTextesSuivis'), '${items.length}', color: QhseColors.blue, icon: Icons.search_outlined),
+          KpiStat(t('referentielPages.kpiATraiter'), '${items.where((i) => i['statut'] == 'A_TRAITER').length}', color: QhseColors.red, icon: Icons.priority_high),
+          KpiStat(t('referentielPages.kpiIntegres'), '${items.where((i) => i['statut'] == 'INTEGREE').length}', color: QhseColors.green, icon: Icons.check_circle_outline),
         ],
       );
 }
