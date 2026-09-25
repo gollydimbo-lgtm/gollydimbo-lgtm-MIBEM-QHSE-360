@@ -12,25 +12,28 @@ import 'capa_link_widget.dart';
 import 'document_link_widget.dart';
 import 'load_error_view.dart';
 import 'validation_history_widgets.dart';
+import '../i18n/i18n.dart';
 
 // Export CSV du registre (finding #30/#17 de l'audit — export manquant
 // côté mobile pour les Audits, déjà présent côté web).
 String _auditCsvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
 
 const _auditStatusLabels = {
-  'DRAFT': 'Brouillon', 'PLANNED': 'Planifié', 'TO_PREPARE': 'À préparer', 'PREPARING': 'Préparation en cours',
-  'READY': 'Prêt', 'IN_PROGRESS': 'En cours', 'COMPLETED': 'Réalisé', 'REPORT_PENDING': 'Rapport à finaliser',
-  'VALIDATION_PENDING': 'En attente de validation', 'VALIDATED': 'Validé', 'CLOSED': 'Clôturé',
-  'POSTPONED': 'Reporté', 'CANCELLED': 'Annulé',
+  'DRAFT': 'auditsPageFlt.statut.draft', 'PLANNED': 'auditsPageFlt.statut.planned', 'TO_PREPARE': 'auditsPageFlt.statut.toPrepare', 'PREPARING': 'auditsPageFlt.statut.preparing',
+  'READY': 'auditsPageFlt.statut.ready', 'IN_PROGRESS': 'auditsPageFlt.statut.inProgress', 'COMPLETED': 'auditsPageFlt.statut.completed', 'REPORT_PENDING': 'auditsPageFlt.statut.reportPending',
+  'VALIDATION_PENDING': 'auditsPageFlt.statut.validationPending', 'VALIDATED': 'auditsPageFlt.statut.validated', 'CLOSED': 'auditsPageFlt.statut.closed',
+  'POSTPONED': 'auditsPageFlt.statut.postponed', 'CANCELLED': 'auditsPageFlt.statut.cancelled',
 };
+String _statusLabel(dynamic s) => s != null && _auditStatusLabels[s] != null ? t(_auditStatusLabels[s]!) : (s?.toString() ?? '');
 const _classificationLabels = {
-  'CONFORME': 'Conformité', 'POINT_FORT': 'Point fort / bonne pratique', 'PISTE_AMELIORATION': "Piste d'amélioration",
-  'OBSERVATION': 'Observation', 'NC_MINEURE': 'Non-conformité mineure', 'NC_MAJEURE': 'Non-conformité majeure',
+  'CONFORME': 'auditsPageFlt.classification.conforme', 'POINT_FORT': 'auditsPageFlt.classification.pointFort', 'PISTE_AMELIORATION': 'auditsPageFlt.classification.pisteAmelioration',
+  'OBSERVATION': 'auditsPageFlt.classification.observation', 'NC_MINEURE': 'auditsPageFlt.classification.ncMineure', 'NC_MAJEURE': 'auditsPageFlt.classification.ncMajeure',
 };
+String _classificationLabel(dynamic k) => k != null && _classificationLabels[k] != null ? t(_classificationLabels[k]!) : (k?.toString() ?? t('auditsPageFlt.classification.standard'));
 const _resultatLabels = {
-  'NON_EVALUE': 'Non évalué', 'CONFORME': 'Conforme', 'NON_CONFORME': 'Non conforme',
-  'PARTIELLEMENT_CONFORME': 'Partiellement conforme', 'NON_APPLICABLE': 'Non applicable', 'OBSERVATION': 'Observation',
-  'PISTE_AMELIORATION': "Piste d'amélioration", 'BONNE_PRATIQUE': 'Bonne pratique', 'A_VERIFIER': 'À vérifier',
+  'NON_EVALUE': 'auditsPageFlt.resultat.nonEvalue', 'CONFORME': 'auditsPageFlt.resultat.conforme', 'NON_CONFORME': 'auditsPageFlt.resultat.nonConforme',
+  'PARTIELLEMENT_CONFORME': 'auditsPageFlt.resultat.partiellementConforme', 'NON_APPLICABLE': 'auditsPageFlt.resultat.nonApplicable', 'OBSERVATION': 'auditsPageFlt.resultat.observation',
+  'PISTE_AMELIORATION': 'auditsPageFlt.resultat.pisteAmelioration', 'BONNE_PRATIQUE': 'auditsPageFlt.resultat.bonnePratique', 'A_VERIFIER': 'auditsPageFlt.resultat.aVerifier',
 };
 
 // --- Écran principal : tableau de bord + registre des audits ---
@@ -65,7 +68,7 @@ class _AuditsPageState extends State<AuditsPage> {
       for (final a in items) {
         buffer.writeln([
           a['code'], a['title'], a['type']?['label'] ?? '', _date(a['auditDate']),
-          _auditStatusLabels[a['status']] ?? a['status'] ?? '', a['score'] != null ? '${a['score']}%' : '',
+          _statusLabel(a['status']), a['score'] != null ? '${a['score']}%' : '',
         ].map((v) => _auditCsvEscape('$v')).join(','));
       }
       final dir = await getTemporaryDirectory();
@@ -102,18 +105,18 @@ class _AuditsPageState extends State<AuditsPage> {
     length: 3,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Audits QHSE'),
+        title: Text(t('auditsPageFlt.titre')),
         actions: [
-          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: 'Exporter le registre', onPressed: exporting ? null : exportCsv),
-          IconButton(icon: const Icon(Icons.people_outline), tooltip: 'Auditeurs', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditeursPage()))),
-          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Paramétrage', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditParametragePage())).then((_) => load())),
+          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: t('auditsPageFlt.exporterTooltip'), onPressed: exporting ? null : exportCsv),
+          IconButton(icon: const Icon(Icons.people_outline), tooltip: t('auditsPageFlt.auditeursTooltip'), onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditeursPage()))),
+          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: t('auditsPageFlt.parametrageTooltip'), onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditParametragePage())).then((_) => load())),
         ],
-        bottom: const TabBar(tabs: [Tab(text: "Vue d'ensemble"), Tab(text: 'Registre'), Tab(text: 'Analyses')]),
+        bottom: TabBar(tabs: [Tab(text: t('auditsPageFlt.ongletApercu')), Tab(text: t('auditsPageFlt.ongletRegistre')), Tab(text: t('auditsPageFlt.ongletAnalyses'))]),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AuditFormPage())).then((_) => load()),
         icon: const Icon(Icons.add),
-        label: const Text('Planifier'),
+        label: Text(t('auditsPageFlt.planifierBtn')),
       ),
       body: loading ? const Center(child: CircularProgressIndicator()) : error != null ? LoadErrorView(error: error, onRetry: load) : TabBarView(children: [_buildApercu(c), _buildRegistre(c), _buildAnalyses(c)]),
     ),
@@ -123,17 +126,17 @@ class _AuditsPageState extends State<AuditsPage> {
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(12), children: [
       KpiBar([
-        KpiStat('Au programme', '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.assignment_turned_in_outlined),
-        KpiStat('En cours', '${dashboard['enCours'] ?? 0}', color: QhseColors.blue, icon: Icons.schedule),
-        KpiStat('Réalisés', '${dashboard['realises'] ?? 0}', color: QhseColors.green, icon: Icons.check_circle_outline),
-        KpiStat('En retard', '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+        KpiStat(t('auditsPageFlt.kpiAuProgramme'), '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.assignment_turned_in_outlined),
+        KpiStat(t('auditsPageFlt.kpiEnCours'), '${dashboard['enCours'] ?? 0}', color: QhseColors.blue, icon: Icons.schedule),
+        KpiStat(t('auditsPageFlt.kpiRealises'), '${dashboard['realises'] ?? 0}', color: QhseColors.green, icon: Icons.check_circle_outline),
+        KpiStat(t('auditsPageFlt.kpiEnRetard'), '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
       ]),
       const SizedBox(height: 8),
       KpiBar([
-        KpiStat('Taux de conformité', '${dashboard['tauxConformite'] ?? '—'}%', color: QhseColors.green, icon: Icons.shield_outlined),
-        KpiStat('Score moyen', '${dashboard['scoreMoyen'] ?? '—'}', color: QhseColors.blue, icon: Icons.assessment_outlined),
-        KpiStat('NC majeures', '${dashboard['ncMajeures'] ?? 0}', color: (dashboard['ncMajeures'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
-        KpiStat('Constats ouverts', '${dashboard['constatsOuverts'] ?? 0}', color: (dashboard['constatsOuverts'] ?? 0) > 0 ? QhseColors.amber : QhseColors.green, icon: Icons.fact_check_outlined),
+        KpiStat(t('auditsPageFlt.kpiTauxConformite'), '${dashboard['tauxConformite'] ?? '—'}%', color: QhseColors.green, icon: Icons.shield_outlined),
+        KpiStat(t('auditsPageFlt.kpiScoreMoyen'), '${dashboard['scoreMoyen'] ?? '—'}', color: QhseColors.blue, icon: Icons.assessment_outlined),
+        KpiStat(t('auditsPageFlt.kpiNcMajeures'), '${dashboard['ncMajeures'] ?? 0}', color: (dashboard['ncMajeures'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
+        KpiStat(t('auditsPageFlt.kpiConstatsOuverts'), '${dashboard['constatsOuverts'] ?? 0}', color: (dashboard['constatsOuverts'] ?? 0) > 0 ? QhseColors.amber : QhseColors.green, icon: Icons.fact_check_outlined),
       ]),
     ]),
   );
@@ -150,13 +153,13 @@ class _AuditsPageState extends State<AuditsPage> {
       Padding(
         padding: const EdgeInsets.all(12),
         child: TextField(
-          decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 18), hintText: 'Rechercher un audit (code, titre, type...)', isDense: true, border: OutlineInputBorder()),
+          decoration: InputDecoration(prefixIcon: const Icon(Icons.search, size: 18), hintText: t('auditsPageFlt.rechercheHint'), isDense: true, border: const OutlineInputBorder()),
           onChanged: (v) => setState(() => search = v),
         ),
       ),
       Expanded(
         child: _filteredAudits.isEmpty
-            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? 'Aucun audit planifié' : 'Aucun résultat pour cette recherche')))])
+            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? t('auditsPageFlt.aucunAuditPlanifie') : t('auditsPageFlt.aucunResultatRecherche'))))])
             : ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: _filteredAudits.length,
@@ -165,7 +168,7 @@ class _AuditsPageState extends State<AuditsPage> {
                   return Card(child: ListTile(
                     leading: const Icon(Icons.assignment_turned_in, size: 32),
                     title: Text('${a['code']} — ${a['title']}'),
-                    subtitle: Text('${_auditStatusLabels[a['status']] ?? a['status']} · ${_date(a['auditDate'])}${a['type'] != null ? ' · ${a['type']['label']}' : ''}'),
+                    subtitle: Text('${_statusLabel(a['status'])} · ${_date(a['auditDate'])}${a['type'] != null ? ' · ${a['type']['label']}' : ''}'),
                     trailing: a['score'] != null ? Text('${a['score']}%', style: const TextStyle(fontWeight: FontWeight.bold)) : null,
                     onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => AuditDetailPage(auditId: a['id']))).then((_) => load()),
                   ));
@@ -180,40 +183,40 @@ class _AuditsPageState extends State<AuditsPage> {
   Widget _buildAnalyses(BuildContext c) => RefreshIndicator(
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(12), children: [
-      Text('Tendance (12 derniers mois)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      Text(t('auditsPageFlt.tendanceTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
       const SizedBox(height: 8),
-      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary))) : _AuditTrendChart(trends: trends)),
+      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text(t('auditsPageFlt.pasAssezDeDonnees'), style: TextStyle(color: QhseColors.textSecondary))) : _AuditTrendChart(trends: trends)),
       const SizedBox(height: 20),
-      Text('Non-conformités récurrentes détectées (${ncRecurrentes.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      Text(t('auditsPageFlt.ncRecurrentesTitre', {'count': '${ncRecurrentes.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
       const SizedBox(height: 8),
       if (ncRecurrentes.isEmpty)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune récurrence détectée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('auditsPageFlt.aucuneRecurrence'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
       else
         ...ncRecurrentes.map((r) => Card(child: ListTile(
               dense: true,
               title: Text('${r['description'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
-              subtitle: Text('${r['processus']} · ${r['occurrences']} occurrences'),
+              subtitle: Text('${r['processus']} · ${t('auditsPageFlt.occurrences', {'count': '${r['occurrences']}'})}'),
               trailing: Icon(Icons.repeat, color: QhseColors.amber),
             ))),
       const SizedBox(height: 20),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Synthèse Direction', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        TextButton.icon(onPressed: loadSynthese, icon: const Icon(Icons.summarize_outlined, size: 16), label: const Text('Générer')),
+        Text(t('auditsPageFlt.syntheseDirectionTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        TextButton.icon(onPressed: loadSynthese, icon: const Icon(Icons.summarize_outlined, size: 16), label: Text(t('auditsPageFlt.genererBtn'))),
       ]),
       if (synthese != null) ...[
         const SizedBox(height: 8),
         Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Généré le ${_date(synthese!['genereLe'])}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+          Text(t('auditsPageFlt.genereLe', {'date': _date(synthese!['genereLe'])}), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
           const SizedBox(height: 10),
-          Text('Processus les plus performants', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(t('auditsPageFlt.processusPlusPerformants'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ...List.from(synthese!['processusLesPlusPerformants'] ?? []).map((p) => Text('• ${p['processus']} — ${p['tauxConformiteMoyen'] ?? '—'}%', style: const TextStyle(fontSize: 12))),
           const SizedBox(height: 10),
-          Text('Processus les plus problématiques', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(t('auditsPageFlt.processusPlusProblematiques'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ...List.from(synthese!['processusLesPlusProblematiques'] ?? []).map((p) => Text('• ${p['processus']} — ${p['tauxConformiteMoyen'] ?? '—'}%', style: const TextStyle(fontSize: 12))),
         ]))),
       ],
       const SizedBox(height: 20),
-      Text('Comparaison de périodes', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      Text(t('auditsPageFlt.comparaisonPeriodesTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
       const SizedBox(height: 8),
       const _AuditComparaisonPanel(),
     ]),
@@ -278,30 +281,30 @@ class _AuditComparaisonPanelState extends State<_AuditComparaisonPanel> {
 
   @override
   Widget build(BuildContext c) => Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Période 1', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Text(t('auditsPageFlt.periode1'), style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
         Row(children: [
-          Expanded(child: OutlinedButton(onPressed: () => pick((d) => debut1 = d), child: Text('Début : ${_f(debut1)}'))),
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => debut1 = d), child: Text(t('auditsPageFlt.debutLabel', {'date': _f(debut1)})))),
           const SizedBox(width: 8),
-          Expanded(child: OutlinedButton(onPressed: () => pick((d) => fin1 = d), child: Text('Fin : ${_f(fin1)}'))),
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => fin1 = d), child: Text(t('auditsPageFlt.finLabel', {'date': _f(fin1)})))),
         ]),
         const SizedBox(height: 10),
-        Text('Période 2', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Text(t('auditsPageFlt.periode2'), style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
         Row(children: [
-          Expanded(child: OutlinedButton(onPressed: () => pick((d) => debut2 = d), child: Text('Début : ${_f(debut2)}'))),
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => debut2 = d), child: Text(t('auditsPageFlt.debutLabel', {'date': _f(debut2)})))),
           const SizedBox(width: 8),
-          Expanded(child: OutlinedButton(onPressed: () => pick((d) => fin2 = d), child: Text('Fin : ${_f(fin2)}'))),
+          Expanded(child: OutlinedButton(onPressed: () => pick((d) => fin2 = d), child: Text(t('auditsPageFlt.finLabel', {'date': _f(fin2)})))),
         ]),
         const SizedBox(height: 10),
-        SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : compare, child: Text(busy ? '…' : 'Comparer'))),
+        SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : compare, child: Text(busy ? '…' : t('auditsPageFlt.comparerBtn')))),
         if (result != null) ...[
           const SizedBox(height: 12),
           Table(children: [
-            TableRow(children: [const Text(''), const Text('Période 1', style: TextStyle(fontWeight: FontWeight.bold)), const Text('Période 2', style: TextStyle(fontWeight: FontWeight.bold))]),
-            TableRow(children: [const Text('Audits'), Text('${result!['periode1']['nombreAudits']}'), Text('${result!['periode2']['nombreAudits']}')]),
-            TableRow(children: [const Text('Taux conformité'), Text('${result!['periode1']['tauxConformiteMoyen'] ?? '—'}%'), Text('${result!['periode2']['tauxConformiteMoyen'] ?? '—'}%')]),
-            TableRow(children: [const Text('Score moyen'), Text('${result!['periode1']['scoreMoyen'] ?? '—'}'), Text('${result!['periode2']['scoreMoyen'] ?? '—'}')]),
-            TableRow(children: [const Text('NC majeures'), Text('${result!['periode1']['ncMajeures']}'), Text('${result!['periode2']['ncMajeures']}')]),
-            TableRow(children: [const Text('NC mineures'), Text('${result!['periode1']['ncMineures']}'), Text('${result!['periode2']['ncMineures']}')]),
+            TableRow(children: [const Text(''), Text(t('auditsPageFlt.periode1'), style: const TextStyle(fontWeight: FontWeight.bold)), Text(t('auditsPageFlt.periode2'), style: const TextStyle(fontWeight: FontWeight.bold))]),
+            TableRow(children: [Text(t('auditsPageFlt.rowAudits')), Text('${result!['periode1']['nombreAudits']}'), Text('${result!['periode2']['nombreAudits']}')]),
+            TableRow(children: [Text(t('auditsPageFlt.rowTauxConformite')), Text('${result!['periode1']['tauxConformiteMoyen'] ?? '—'}%'), Text('${result!['periode2']['tauxConformiteMoyen'] ?? '—'}%')]),
+            TableRow(children: [Text(t('auditsPageFlt.rowScoreMoyen')), Text('${result!['periode1']['scoreMoyen'] ?? '—'}'), Text('${result!['periode2']['scoreMoyen'] ?? '—'}')]),
+            TableRow(children: [Text(t('auditsPageFlt.rowNcMajeures')), Text('${result!['periode1']['ncMajeures']}'), Text('${result!['periode2']['ncMajeures']}')]),
+            TableRow(children: [Text(t('auditsPageFlt.rowNcMineures')), Text('${result!['periode1']['ncMineures']}'), Text('${result!['periode2']['ncMineures']}')]),
           ]),
         ],
       ])));
@@ -316,9 +319,10 @@ class AuditDetailPage extends StatefulWidget {
 }
 
 const _signatureRoleLabels = {
-  'AUDITEUR': 'Auditeur', 'RESPONSABLE_AUDITE': 'Responsable audité',
-  'RESPONSABLE_QHSE': 'Responsable QHSE', 'VALIDATEUR': 'Validateur',
+  'AUDITEUR': 'auditsPageFlt.role.auditeur', 'RESPONSABLE_AUDITE': 'auditsPageFlt.role.responsableAudite',
+  'RESPONSABLE_QHSE': 'auditsPageFlt.role.responsableQhse', 'VALIDATEUR': 'auditsPageFlt.role.validateur',
 };
+String _roleLabel(dynamic r) => r != null && _signatureRoleLabels[r] != null ? t(_signatureRoleLabels[r]!) : (r?.toString() ?? '');
 
 class _AuditDetailPageState extends State<AuditDetailPage> {
   final api = Api();
@@ -357,8 +361,8 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Audit')), body: const Center(child: CircularProgressIndicator()));
-    if (error != null || audit == null) return Scaffold(appBar: AppBar(title: const Text('Audit')), body: Center(child: Text(error ?? 'Introuvable')));
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('auditsPageFlt.auditTitreGenerique'))), body: const Center(child: CircularProgressIndicator()));
+    if (error != null || audit == null) return Scaffold(appBar: AppBar(title: Text(t('auditsPageFlt.auditTitreGenerique'))), body: Center(child: Text(error ?? t('auditsPageFlt.introuvable'))));
     final a = audit!;
     final checklist = a['checklist'];
     final responses = List.from(a['responses'] ?? []);
@@ -373,32 +377,32 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
       body: RefreshIndicator(
         onRefresh: load,
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          Text('${_auditStatusLabels[a['status']] ?? a['status']} · ${a['auditDate'].toString().substring(0, 10)}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
+          Text('${_statusLabel(a['status'])} · ${a['auditDate'].toString().substring(0, 10)}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)),
           if (a['independenceWarning'] == true)
             Container(margin: const EdgeInsets.only(top: 8), padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: QhseColors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
-              child: Text("⚠ Vérifier l'indépendance de l'auditeur — il pilote ou supplée le processus audité.", style: TextStyle(color: QhseColors.amber, fontSize: 12))),
+              child: Text(t('auditsPageFlt.avertissementIndependance'), style: TextStyle(color: QhseColors.amber, fontSize: 12))),
           if (a['scoreObtenu'] != null || a['tauxConformite'] != null) ...[
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: _scoreCard('Score', a['scoreObtenu'] != null ? '${a['scoreObtenu']} / ${a['scoreMax']}' : '—')),
+              Expanded(child: _scoreCard(t('auditsPageFlt.scoreLabel'), a['scoreObtenu'] != null ? '${a['scoreObtenu']} / ${a['scoreMax']}' : '—')),
               const SizedBox(width: 8),
-              Expanded(child: _scoreCard('Taux de conformité', a['tauxConformite'] != null ? '${a['tauxConformite']}%' : '—')),
+              Expanded(child: _scoreCard(t('auditsPageFlt.kpiTauxConformite'), a['tauxConformite'] != null ? '${a['tauxConformite']}%' : '—')),
             ]),
           ],
 
           if (checklist != null) ...[
             const SizedBox(height: 20),
-            Text('Check-list — ${checklist['title']} (${(checklist['items'] as List).length} questions)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(t('auditsPageFlt.checklistTitre', {'titre': '${checklist['title']}', 'count': '${(checklist['items'] as List).length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
             ...List.from(checklist['items']).map((it) {
               final resp = responses.firstWhere((r) => r['checklistItemId'] == it['id'], orElse: () => null);
               return Card(child: Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('${it['numero'] != null ? '${it['numero']}. ' : ''}${it['question']}', style: const TextStyle(fontSize: 13)),
-                if (it['critereAttendu'] != null) Text('Critère attendu : ${it['critereAttendu']}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                if (it['critereAttendu'] != null) Text(t('auditsPageFlt.critereAttenduLabel', {'critere': '${it['critereAttendu']}'}), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
                 const SizedBox(height: 6),
                 DropdownButton<String>(
                   value: resp?['resultat'] ?? 'NON_EVALUE', isDense: true, isExpanded: true,
-                  items: _resultatLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 12)))).toList(),
+                  items: _resultatLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(t(e.value), style: const TextStyle(fontSize: 12)))).toList(),
                   onChanged: (v) => saveResponse(it['id'], {'resultat': v, 'score': resp?['score'], 'commentaire': resp?['commentaire']}),
                 ),
               ])));
@@ -407,55 +411,55 @@ class _AuditDetailPageState extends State<AuditDetailPage> {
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Constats (${findings.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            TextButton.icon(onPressed: () => showAddFindingDialog(context, api, auditId: a['id'], onSaved: load), icon: const Icon(Icons.add, size: 16), label: const Text('Constat')),
+            Text(t('auditsPageFlt.constatsTitre', {'count': '${findings.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton.icon(onPressed: () => showAddFindingDialog(context, api, auditId: a['id'], onSaved: load), icon: const Icon(Icons.add, size: 16), label: Text(t('auditsPageFlt.constatBtn'))),
           ]),
           if (findings.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucun constat enregistré', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('auditsPageFlt.aucunConstat'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...findings.map((f) => Card(child: Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(f['description'] ?? '', style: const TextStyle(fontSize: 13)),
                   const SizedBox(height: 4),
-                  Text('${_classificationLabels[f['classification']] ?? f['classification'] ?? 'Standard'}${f['criticite'] != null ? ' · ${f['criticite']}' : ''}${f['nonConformityId'] != null ? ' · NC générée' : ''}${f['riskId'] != null ? ' · Risque généré' : ''}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                  Text('${_classificationLabel(f['classification'])}${f['criticite'] != null ? ' · ${f['criticite']}' : ''}${f['nonConformityId'] != null ? ' · ${t('auditsPageFlt.ncGeneree')}' : ''}${f['riskId'] != null ? ' · ${t('auditsPageFlt.risqueGenere')}' : ''}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
                   const SizedBox(height: 6),
                   Wrap(spacing: 6, children: [
-                    if (f['nonConformityId'] == null) _actionChip(context, 'NC', QhseColors.red, () async { await api.post('/business/audit-findings/${f['id']}/generate-nc', {}); load(); }),
-                    if (f['riskId'] == null) _actionChip(context, 'Risque', QhseColors.amber, () async { await api.post('/business/audit-findings/${f['id']}/generate-risk', {}); load(); }),
-                    _actionChip(context, 'Action', QhseColors.blue, () async { await api.post('/business/audit-findings/${f['id']}/generate-action', {}); load(); }),
+                    if (f['nonConformityId'] == null) _actionChip(context, t('auditsPageFlt.chipNc'), QhseColors.red, () async { await api.post('/business/audit-findings/${f['id']}/generate-nc', {}); load(); }),
+                    if (f['riskId'] == null) _actionChip(context, t('auditsPageFlt.chipRisque'), QhseColors.amber, () async { await api.post('/business/audit-findings/${f['id']}/generate-risk', {}); load(); }),
+                    _actionChip(context, t('auditsPageFlt.chipAction'), QhseColors.blue, () async { await api.post('/business/audit-findings/${f['id']}/generate-action', {}); load(); }),
                   ]),
                 ])))),
 
           const SizedBox(height: 20),
-          Text('Signatures', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('auditsPageFlt.signaturesTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (final entry in _signatureRoleLabels.entries)
               if (!signatures.any((s) => s['role'] == entry.key))
                 ActionChip(
-                  label: Text('+ ${entry.value}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                  label: Text('+ ${t(entry.value)}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
                   backgroundColor: QhseColors.cardAlt,
                   onPressed: () => addSignatureRole(entry.key),
                 ),
           ]),
           const SizedBox(height: 6),
           if (signatures.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune signature demandée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('auditsPageFlt.aucuneSignature'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...signatures.map((s) => Card(child: ListTile(
                   dense: true,
-                  title: Text(_signatureRoleLabels[s['role']] ?? s['role'] ?? ''),
+                  title: Text(_roleLabel(s['role'])),
                   subtitle: s['statut'] == 'SIGNE'
-                      ? Text('Signé par ${s['signataire']?['firstName'] ?? ''} ${s['signataire']?['lastName'] ?? ''} le ${s['signedAt'].toString().substring(0, 10)}', style: TextStyle(color: QhseColors.green, fontSize: 11))
+                      ? Text(t('auditsPageFlt.signePar', {'nom': '${s['signataire']?['firstName'] ?? ''} ${s['signataire']?['lastName'] ?? ''}', 'date': s['signedAt'].toString().substring(0, 10)}), style: TextStyle(color: QhseColors.green, fontSize: 11))
                       : DropdownButton<String>(
                           isDense: true,
-                          hint: Text('Signer en tant que…', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                          hint: Text(t('auditsPageFlt.signerEnTantQue'), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
                           items: users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}', style: const TextStyle(fontSize: 12)))).toList(),
                           onChanged: (v) { if (v != null) signAs(s['id'], v); },
                         ),
                 ))),
 
           const SizedBox(height: 20),
-          CapaLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id'], prefill: {'title': 'Suite audit — ${a['title']}', 'source': 'AUDIT'}),
+          CapaLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id'], prefill: {'title': t('auditsPageFlt.suiteAuditPrefill', {'titre': '${a['title']}'}), 'source': 'AUDIT'}),
           const SizedBox(height: 12),
           HistorySection(module: 'AUDIT', entityId: a['id']),
           DocumentLinksSection(sourceModule: 'AUDIT', sourceEntityId: a['id']),
@@ -485,33 +489,33 @@ Future<void> showAddFindingDialog(BuildContext context, Api api, {required Strin
   bool saving = false;
   String? error;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: const Text('Nouveau constat'),
+    title: Text(t('auditsPageFlt.nouveauConstatTitre')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),
+      TextField(controller: description, maxLines: 3, decoration: InputDecoration(labelText: t('auditsPageFlt.descriptionLabel'))),
       DropdownButtonFormField<String>(
-        value: classification.isEmpty ? null : classification, isExpanded: true, decoration: const InputDecoration(labelText: 'Classification'),
-        items: _classificationLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+        value: classification.isEmpty ? null : classification, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.classificationLabel')),
+        items: _classificationLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(t(e.value)))).toList(),
         onChanged: (v) => setD(() => classification = v ?? ''),
       ),
       DropdownButtonFormField<String>(
-        value: criticite.isEmpty ? null : criticite, isExpanded: true, decoration: const InputDecoration(labelText: 'Criticité'),
-        items: const [DropdownMenuItem(value: 'FAIBLE', child: Text('Faible')), DropdownMenuItem(value: 'MODEREE', child: Text('Modérée')), DropdownMenuItem(value: 'ELEVEE', child: Text('Élevée')), DropdownMenuItem(value: 'CRITIQUE', child: Text('Critique'))],
+        value: criticite.isEmpty ? null : criticite, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.criticiteLabel')),
+        items: [DropdownMenuItem(value: 'FAIBLE', child: Text(t('auditsPageFlt.criticiteFaible'))), DropdownMenuItem(value: 'MODEREE', child: Text(t('auditsPageFlt.criticiteModeree'))), DropdownMenuItem(value: 'ELEVEE', child: Text(t('auditsPageFlt.criticiteElevee'))), DropdownMenuItem(value: 'CRITIQUE', child: Text(t('auditsPageFlt.criticiteCritique')))],
         onChanged: (v) => setD(() => criticite = v ?? ''),
       ),
-      CheckboxListTile(contentPadding: EdgeInsets.zero, value: critical, title: const Text('Constat critique', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => critical = v ?? false)),
+      CheckboxListTile(contentPadding: EdgeInsets.zero, value: critical, title: Text(t('auditsPageFlt.constatCritiqueLabel'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setD(() => critical = v ?? false)),
       if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('auditsPageFlt.annulerBtn'))),
       FilledButton(onPressed: saving ? null : () async {
-        if (description.text.trim().isEmpty) { setD(() => error = 'La description est obligatoire'); return; }
+        if (description.text.trim().isEmpty) { setD(() => error = t('auditsPageFlt.descriptionObligatoire')); return; }
         setD(() => saving = true);
         try {
           await api.post('/business/audits/$auditId/findings', {'description': description.text.trim(), 'classification': classification.isEmpty ? null : classification, 'criticite': criticite.isEmpty ? null : criticite, 'critical': critical});
           if (context.mounted) Navigator.pop(c);
           onSaved();
         } catch (e) { setD(() { saving = false; error = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Ajouter')),
+      }, child: Text(saving ? '…' : t('auditsPageFlt.ajouterBtn'))),
     ],
   )));
 }
@@ -572,7 +576,7 @@ class _AuditFormPageState extends State<AuditFormPage> {
 
   Future<void> submit() async {
     if (title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('auditsPageFlt.titreObligatoire'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -594,7 +598,7 @@ class _AuditFormPageState extends State<AuditFormPage> {
       if (e.networkError && !editing) {
         await SyncQueue.enqueue('audit', 'CREATE', {'code': genCode('AUD'), ...payload});
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : audit enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('auditsPageFlt.horsLigneMessage')), duration: const Duration(seconds: 4)));
           Navigator.pop(context);
         }
       } else {
@@ -610,70 +614,70 @@ class _AuditFormPageState extends State<AuditFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text(editing ? "Modifier l'audit" : 'Planifier un audit')),
+    appBar: AppBar(title: Text(editing ? t('auditsPageFlt.modifierAuditTitre') : t('auditsPageFlt.planifierAuditTitre'))),
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
+            TextField(controller: title, decoration: InputDecoration(labelText: t('auditsPageFlt.titreLabel'))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: typeId, isExpanded: true, decoration: const InputDecoration(labelText: "Type d'audit"),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...types.map<DropdownMenuItem<String>>((t) => DropdownMenuItem<String>(value: t['id'] as String, child: Text(t['label'] ?? '')))],
+              value: typeId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.typeAuditLabel')),
+              items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...types.map<DropdownMenuItem<String>>((tp) => DropdownMenuItem<String>(value: tp['id'] as String, child: Text(tp['label'] ?? '')))],
               onChanged: (v) => setState(() => typeId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: referentialId, isExpanded: true, decoration: const InputDecoration(labelText: 'Référentiel'),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...referentials.map<DropdownMenuItem<String>>((r) => DropdownMenuItem<String>(value: r['id'] as String, child: Text(r['label'] ?? '')))],
+              value: referentialId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.referentielLabel')),
+              items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...referentials.map<DropdownMenuItem<String>>((r) => DropdownMenuItem<String>(value: r['id'] as String, child: Text(r['label'] ?? '')))],
               onChanged: (v) => setState(() => referentialId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: checklistId, isExpanded: true, decoration: const InputDecoration(labelText: 'Check-list appliquée'),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...checklists.map<DropdownMenuItem<String>>((cl) => DropdownMenuItem<String>(value: cl['id'] as String, child: Text(cl['title'] ?? '')))],
+              value: checklistId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.checklistAppliqueeLabel')),
+              items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...checklists.map<DropdownMenuItem<String>>((cl) => DropdownMenuItem<String>(value: cl['id'] as String, child: Text(cl['title'] ?? '')))],
               onChanged: (v) => setState(() => checklistId = v),
             ),
             const SizedBox(height: 12),
-            TextField(controller: reference, decoration: const InputDecoration(labelText: 'Référence')),
+            TextField(controller: reference, decoration: InputDecoration(labelText: t('auditsPageFlt.referenceLabel'))),
             const SizedBox(height: 12),
-            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text('Date : ${auditDate.toIso8601String().substring(0, 10)}')),
+            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(t('auditsPageFlt.dateLabel', {'date': auditDate.toIso8601String().substring(0, 10)}))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail / zone'),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
+              value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.uniteTravailLabel')),
+              items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
               onChanged: (v) => setState(() => workUnitId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: processusId, isExpanded: true, decoration: const InputDecoration(labelText: 'Processus'),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...processus.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(value: p['id'] as String, child: Text(p['nom'] ?? '')))],
+              value: processusId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.processusLabel')),
+              items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...processus.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(value: p['id'] as String, child: Text(p['nom'] ?? '')))],
               onChanged: (v) => setState(() => processusId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: auditorId, isExpanded: true, decoration: const InputDecoration(labelText: 'Auditeur'),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
+              value: auditorId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.auditeurLabel')),
+              items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => auditorId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: responsableAuditeId, isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable audité'),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
+              value: responsableAuditeId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.responsableAuditeLabel')),
+              items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => responsableAuditeId = v),
             ),
             const SizedBox(height: 12),
-            TextField(controller: objectif, decoration: const InputDecoration(labelText: 'Objectif')),
+            TextField(controller: objectif, decoration: InputDecoration(labelText: t('auditsPageFlt.objectifLabel'))),
             if (editing) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: status, isExpanded: true, decoration: const InputDecoration(labelText: 'Statut'),
-                items: _auditStatusLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+                value: status, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.statutLabel')),
+                items: _auditStatusLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(t(e.value)))).toList(),
                 onChanged: (v) => setState(() => status = v ?? 'PLANNED'),
               ),
             ],
             if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : editing ? 'Enregistrer' : 'Planifier'))),
+            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? t('auditsPageFlt.envoiEnCours') : editing ? t('auditsPageFlt.enregistrerBtn') : t('auditsPageFlt.planifierBtn')))),
           ]),
   );
 }
@@ -710,14 +714,14 @@ class _AuditeursPageState extends State<AuditeursPage> {
     await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
       title: Text('${u['firstName']} ${u['lastName']}'),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: competence, decoration: const InputDecoration(labelText: 'Compétence / domaines')),
-        TextField(controller: formation, decoration: const InputDecoration(labelText: 'Formation')),
-        TextField(controller: experience, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Années d'expérience")),
-        TextField(controller: habilitation, decoration: const InputDecoration(labelText: 'Habilitation')),
-        CheckboxListTile(contentPadding: EdgeInsets.zero, value: disponible, title: const Text('Disponible', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => disponible = v ?? true)),
+        TextField(controller: competence, decoration: InputDecoration(labelText: t('auditsPageFlt.competenceLabel'))),
+        TextField(controller: formation, decoration: InputDecoration(labelText: t('auditsPageFlt.formationLabel'))),
+        TextField(controller: experience, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('auditsPageFlt.experienceLabel'))),
+        TextField(controller: habilitation, decoration: InputDecoration(labelText: t('auditsPageFlt.habilitationLabel'))),
+        CheckboxListTile(contentPadding: EdgeInsets.zero, value: disponible, title: Text(t('auditsPageFlt.disponibleLabel'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setD(() => disponible = v ?? true)),
       ])),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('auditsPageFlt.annulerBtn'))),
         FilledButton(onPressed: () async {
           try {
             await api.patch('/business/auditeurs/${u['id']}/profile', {
@@ -730,14 +734,14 @@ class _AuditeursPageState extends State<AuditeursPage> {
             if (c.mounted) Navigator.pop(c);
             load();
           } catch (e) { if (c.mounted) ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text('$e'))); }
-        }, child: const Text('Enregistrer')),
+        }, child: Text(t('auditsPageFlt.enregistrerBtn'))),
       ],
     )));
   }
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Auditeurs')),
+    appBar: AppBar(title: Text(t('auditsPageFlt.auditeursTitre'))),
     body: loading
         ? const Center(child: CircularProgressIndicator())
         : error != null
@@ -745,7 +749,7 @@ class _AuditeursPageState extends State<AuditeursPage> {
         : RefreshIndicator(
             onRefresh: load,
             child: items.isEmpty
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun auditeur identifié')))])
+                ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('auditsPageFlt.aucunAuditeur'))))])
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: items.length,
@@ -755,7 +759,7 @@ class _AuditeursPageState extends State<AuditeursPage> {
                       return Card(child: ListTile(
                         leading: CircleAvatar(child: Text('${u['firstName']?[0] ?? '?'}')),
                         title: Text('${u['firstName']} ${u['lastName']}'),
-                        subtitle: Text('${u['nombreAuditsRealises']} réalisés · ${u['nombreAuditsEnCours']} en cours${u['performanceMoyenne'] != null ? ' · score moyen ${u['performanceMoyenne']}' : ''}${profile != null && profile['disponible'] == false ? ' · indisponible' : ''}'),
+                        subtitle: Text(t('auditsPageFlt.auditeurSubtitle', {'realises': '${u['nombreAuditsRealises']}', 'enCours': '${u['nombreAuditsEnCours']}'}) + (u['performanceMoyenne'] != null ? ' · ${t('auditsPageFlt.scoreMoyenInline', {'valeur': '${u['performanceMoyenne']}'})}' : '') + (profile != null && profile['disponible'] == false ? ' · ${t('auditsPageFlt.indisponible')}' : '')),
                         trailing: IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => editProfile(u)),
                       ));
                     },
@@ -776,7 +780,7 @@ class _AuditParametragePageState extends State<AuditParametragePage> {
   Widget build(BuildContext c) => DefaultTabController(
     length: 4,
     child: Scaffold(
-      appBar: AppBar(title: const Text('Paramétrage audits'), bottom: const TabBar(isScrollable: true, tabs: [Tab(text: 'Types'), Tab(text: 'Référentiels'), Tab(text: 'Check-lists'), Tab(text: 'Programme')])),
+      appBar: AppBar(title: Text(t('auditsPageFlt.parametrageTitre')), bottom: TabBar(isScrollable: true, tabs: [Tab(text: t('auditsPageFlt.ongletTypes')), Tab(text: t('auditsPageFlt.ongletReferentiels')), Tab(text: t('auditsPageFlt.ongletChecklists')), Tab(text: t('auditsPageFlt.ongletProgramme'))])),
       body: const TabBarView(children: [_AuditTypesTab(), _AuditReferentialsTab(), _AuditChecklistsTab(), _AuditProgramTab()]),
     ),
   );
@@ -806,16 +810,16 @@ class _AuditTypesTabState extends State<_AuditTypesTab> {
   Future<void> addDialog() async {
     final label = TextEditingController();
     await showDialog(context: context, builder: (c) => AlertDialog(
-      title: const Text("Nouveau type d'audit"),
-      content: TextField(controller: label, decoration: const InputDecoration(labelText: 'Libellé')),
+      title: Text(t('auditsPageFlt.nouveauTypeTitre')),
+      content: TextField(controller: label, decoration: InputDecoration(labelText: t('auditsPageFlt.libelleLabel'))),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('auditsPageFlt.annulerBtn'))),
         FilledButton(onPressed: () async {
           if (label.text.trim().isEmpty) return;
           await api.post('/business/audit-types', {'code': genCode('ATY'), 'label': label.text.trim()});
           if (c.mounted) Navigator.pop(c);
           load();
-        }, child: const Text('Ajouter')),
+        }, child: Text(t('auditsPageFlt.ajouterBtn'))),
       ],
     ));
   }
@@ -833,11 +837,11 @@ class _AuditTypesTabState extends State<_AuditTypesTab> {
               padding: const EdgeInsets.all(12),
               itemCount: items.length,
               itemBuilder: (_, i) {
-                final t = items[i];
+                final tItem = items[i];
                 return Card(child: ListTile(
-                  title: Text(t['label'] ?? ''),
-                  subtitle: Text(t['code'] ?? ''),
-                  trailing: Api.canManage ? IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-types/${t['id']}'); load(); }) : null,
+                  title: Text(tItem['label'] ?? ''),
+                  subtitle: Text(tItem['code'] ?? ''),
+                  trailing: Api.canManage ? IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await api.delete('/business/audit-types/${tItem['id']}'); load(); }) : null,
                 ));
               },
             ),
@@ -870,19 +874,19 @@ class _AuditReferentialsTabState extends State<_AuditReferentialsTab> {
     final label = TextEditingController();
     final description = TextEditingController();
     await showDialog(context: context, builder: (c) => AlertDialog(
-      title: const Text('Nouveau référentiel'),
+      title: Text(t('auditsPageFlt.nouveauReferentielTitre')),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: label, decoration: const InputDecoration(labelText: 'Libellé')),
-        TextField(controller: description, decoration: const InputDecoration(labelText: 'Description')),
+        TextField(controller: label, decoration: InputDecoration(labelText: t('auditsPageFlt.libelleLabel'))),
+        TextField(controller: description, decoration: InputDecoration(labelText: t('auditsPageFlt.descriptionLabel'))),
       ]),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('auditsPageFlt.annulerBtn'))),
         FilledButton(onPressed: () async {
           if (label.text.trim().isEmpty) return;
           await api.post('/business/audit-referentials', {'code': genCode('ARF'), 'label': label.text.trim(), 'description': description.text.trim().isEmpty ? null : description.text.trim()});
           if (c.mounted) Navigator.pop(c);
           load();
-        }, child: const Text('Ajouter')),
+        }, child: Text(t('auditsPageFlt.ajouterBtn'))),
       ],
     ));
   }
@@ -936,16 +940,16 @@ class _AuditChecklistsTabState extends State<_AuditChecklistsTab> {
   Future<void> addDialog() async {
     final title = TextEditingController();
     await showDialog(context: context, builder: (c) => AlertDialog(
-      title: const Text('Nouvelle check-list'),
-      content: TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
+      title: Text(t('auditsPageFlt.nouvelleChecklistTitre')),
+      content: TextField(controller: title, decoration: InputDecoration(labelText: t('auditsPageFlt.titreLabel'))),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('auditsPageFlt.annulerBtn'))),
         FilledButton(onPressed: () async {
           if (title.text.trim().isEmpty) return;
           await api.post('/business/audit-checklists', {'code': genCode('CKL'), 'title': title.text.trim()});
           if (c.mounted) Navigator.pop(c);
           load();
-        }, child: const Text('Ajouter')),
+        }, child: Text(t('auditsPageFlt.ajouterBtn'))),
       ],
     ));
   }
@@ -955,24 +959,24 @@ class _AuditChecklistsTabState extends State<_AuditChecklistsTab> {
     final critere = TextEditingController();
     String criticite = 'FAIBLE';
     await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-      title: Text('Question — ${checklist['title']}'),
+      title: Text(t('auditsPageFlt.questionChecklistTitre', {'titre': '${checklist['title']}'})),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: question, decoration: const InputDecoration(labelText: 'Question')),
-        TextField(controller: critere, decoration: const InputDecoration(labelText: 'Critère attendu')),
+        TextField(controller: question, decoration: InputDecoration(labelText: t('auditsPageFlt.questionLabel'))),
+        TextField(controller: critere, decoration: InputDecoration(labelText: t('auditsPageFlt.critereAttenduChampLabel'))),
         DropdownButtonFormField<String>(
-          value: criticite, isExpanded: true, decoration: const InputDecoration(labelText: 'Criticité'),
-          items: const [DropdownMenuItem(value: 'FAIBLE', child: Text('Faible')), DropdownMenuItem(value: 'MOYENNE', child: Text('Moyenne')), DropdownMenuItem(value: 'ELEVEE', child: Text('Élevée')), DropdownMenuItem(value: 'CRITIQUE', child: Text('Critique'))],
+          value: criticite, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.criticiteLabel')),
+          items: [DropdownMenuItem(value: 'FAIBLE', child: Text(t('auditsPageFlt.criticiteFaible'))), DropdownMenuItem(value: 'MOYENNE', child: Text(t('auditsPageFlt.criticiteMoyenne'))), DropdownMenuItem(value: 'ELEVEE', child: Text(t('auditsPageFlt.criticiteElevee'))), DropdownMenuItem(value: 'CRITIQUE', child: Text(t('auditsPageFlt.criticiteCritique')))],
           onChanged: (v) => setD(() => criticite = v ?? 'FAIBLE'),
         ),
       ]),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('auditsPageFlt.annulerBtn'))),
         FilledButton(onPressed: () async {
           if (question.text.trim().isEmpty) return;
           await api.post('/business/audit-checklist-items', {'checklistId': checklist['id'], 'question': question.text.trim(), 'critereAttendu': critere.text.trim().isEmpty ? null : critere.text.trim(), 'criticite': criticite});
           if (c.mounted) Navigator.pop(c);
           load();
-        }, child: const Text('Ajouter')),
+        }, child: Text(t('auditsPageFlt.ajouterBtn'))),
       ],
     )));
   }
@@ -994,10 +998,10 @@ class _AuditChecklistsTabState extends State<_AuditChecklistsTab> {
                 final itemsList = List.from(cl['items'] ?? []);
                 return Card(child: ExpansionTile(
                   title: Text(cl['title'] ?? ''),
-                  subtitle: Text('${itemsList.length} questions'),
+                  subtitle: Text(t('auditsPageFlt.questionsCount', {'count': '${itemsList.length}'})),
                   children: [
                     ...itemsList.map((it) => ListTile(dense: true, title: Text(it['question'] ?? ''), subtitle: it['critereAttendu'] != null ? Text(it['critereAttendu']) : null)),
-                    Padding(padding: const EdgeInsets.only(bottom: 8), child: TextButton.icon(onPressed: () => addItemDialog(cl), icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter une question'))),
+                    Padding(padding: const EdgeInsets.only(bottom: 8), child: TextButton.icon(onPressed: () => addItemDialog(cl), icon: const Icon(Icons.add, size: 16), label: Text(t('auditsPageFlt.ajouterQuestionBtn')))),
                   ],
                 ));
               },
@@ -1038,32 +1042,32 @@ class _AuditProgramTabState extends State<_AuditProgramTab> {
     String? typeId, workUnitId, auditeurId;
     DateTime? datePrevue;
     await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-      title: const Text("Nouvelle ligne de programme"),
+      title: Text(t('auditsPageFlt.nouvelleLigneProgrammeTitre')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
-        TextField(controller: year, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Année')),
+        TextField(controller: title, decoration: InputDecoration(labelText: t('auditsPageFlt.titreLabel'))),
+        TextField(controller: year, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('auditsPageFlt.anneeLabel'))),
         DropdownButtonFormField<String>(
-          value: typeId, isExpanded: true, decoration: const InputDecoration(labelText: 'Type'),
-          items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...types.map<DropdownMenuItem<String>>((t) => DropdownMenuItem<String>(value: t['id'] as String, child: Text(t['label'] ?? '')))],
+          value: typeId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.typeLabelCourt')),
+          items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...types.map<DropdownMenuItem<String>>((tp) => DropdownMenuItem<String>(value: tp['id'] as String, child: Text(tp['label'] ?? '')))],
           onChanged: (v) => setD(() => typeId = v),
         ),
         DropdownButtonFormField<String>(
-          value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail'),
-          items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
+          value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.uniteTravailLabelCourt')),
+          items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
           onChanged: (v) => setD(() => workUnitId = v),
         ),
         DropdownButtonFormField<String>(
-          value: auditeurId, isExpanded: true, decoration: const InputDecoration(labelText: 'Auditeur principal'),
-          items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
+          value: auditeurId, isExpanded: true, decoration: InputDecoration(labelText: t('auditsPageFlt.auditeurPrincipalLabel')),
+          items: [DropdownMenuItem<String>(value: null, child: Text(t('auditsPageFlt.tiretVide'))), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
           onChanged: (v) => setD(() => auditeurId = v),
         ),
         OutlinedButton.icon(onPressed: () async {
           final d = await showDatePicker(context: c, initialDate: DateTime.now(), firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 730)));
           if (d != null) setD(() => datePrevue = d);
-        }, icon: const Icon(Icons.event), label: Text(datePrevue == null ? 'Date prévue' : datePrevue!.toIso8601String().substring(0, 10))),
+        }, icon: const Icon(Icons.event), label: Text(datePrevue == null ? t('auditsPageFlt.datePrevueLabel') : datePrevue!.toIso8601String().substring(0, 10))),
       ])),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('auditsPageFlt.annulerBtn'))),
         FilledButton(onPressed: () async {
           if (title.text.trim().isEmpty) return;
           await api.post('/business/audit-programs', {
@@ -1073,7 +1077,7 @@ class _AuditProgramTabState extends State<_AuditProgramTab> {
           });
           if (c.mounted) Navigator.pop(c);
           load();
-        }, child: const Text('Ajouter')),
+        }, child: Text(t('auditsPageFlt.ajouterBtn'))),
       ],
     )));
   }
@@ -1093,7 +1097,7 @@ class _AuditProgramTabState extends State<_AuditProgramTab> {
         : RefreshIndicator(
             onRefresh: load,
             child: items.isEmpty
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune ligne de programme')))])
+                ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('auditsPageFlt.aucuneLigneProgramme'))))])
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: items.length,
@@ -1103,7 +1107,7 @@ class _AuditProgramTabState extends State<_AuditProgramTab> {
                         title: Text('${p['title']} (${p['year']})'),
                         subtitle: Text('${p['statut']}${p['datePrevue'] != null ? ' · ${p['datePrevue'].toString().substring(0, 10)}' : ''}'),
                         trailing: p['auditId'] == null
-                            ? TextButton(onPressed: () => generateAudit(p), child: const Text('Générer'))
+                            ? TextButton(onPressed: () => generateAudit(p), child: Text(t('auditsPageFlt.genererBtn')))
                             : const Icon(Icons.check_circle, color: QhseColors.green),
                       ));
                     },
