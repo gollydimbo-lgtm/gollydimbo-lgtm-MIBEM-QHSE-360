@@ -7,6 +7,7 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'validation_history_widgets.dart';
@@ -14,9 +15,9 @@ import 'document_link_widget.dart';
 import 'attachments_widget.dart';
 import 'load_error_view.dart';
 
-const _ncStatusLabels = {'OPEN': 'Ouverte', 'IN_PROGRESS': 'En cours', 'CLOSED': 'Clôturée'};
-const _ncCriticiteLabels = {'MINEURE': 'Mineure', 'MODEREE': 'Modérée', 'MAJEURE': 'Majeure', 'CRITIQUE': 'Critique'};
-const _ncEffLabels = {'EFFICACE': 'Efficace', 'PARTIELLEMENT_EFFICACE': 'Partiellement efficace', 'INEFFICACE': 'Inefficace'};
+Map<String, String> get _ncStatusLabels => {'OPEN': t('nonConformitiesPageFlt.statut.ouverte'), 'IN_PROGRESS': t('nonConformitiesPageFlt.statut.enCours'), 'CLOSED': t('nonConformitiesPageFlt.statut.cloturee')};
+Map<String, String> get _ncCriticiteLabels => {'MINEURE': t('nonConformitiesPageFlt.criticite.mineure'), 'MODEREE': t('nonConformitiesPageFlt.criticite.moderee'), 'MAJEURE': t('nonConformitiesPageFlt.criticite.majeure'), 'CRITIQUE': t('nonConformitiesPageFlt.criticite.critique')};
+Map<String, String> get _ncEffLabels => {'EFFICACE': t('nonConformitiesPageFlt.efficacite.efficace'), 'PARTIELLEMENT_EFFICACE': t('nonConformitiesPageFlt.efficacite.partiellementEfficace'), 'INEFFICACE': t('nonConformitiesPageFlt.efficacite.inefficace')};
 
 Color _ncCriticiteColor(String? n) => {
       'CRITIQUE': QhseColors.red, 'MAJEURE': QhseColors.amber,
@@ -57,7 +58,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   Future<void> exportCsv() async {
     setState(() => exporting = true);
     try {
-      final headers = ['Code', 'Titre', 'Source', 'Type', 'Criticité', 'Score', 'Unité de travail', 'Responsable', 'Date', 'Échéance', 'Statut', 'Efficacité'];
+      final headers = [t('nonConformitiesPageFlt.csv.code'), t('nonConformitiesPageFlt.csv.titre'), t('nonConformitiesPageFlt.csv.source'), t('nonConformitiesPageFlt.csv.type'), t('nonConformitiesPageFlt.csv.criticite'), t('nonConformitiesPageFlt.csv.score'), t('nonConformitiesPageFlt.csv.uniteTravail'), t('nonConformitiesPageFlt.csv.responsable'), t('nonConformitiesPageFlt.csv.date'), t('nonConformitiesPageFlt.csv.echeance'), t('nonConformitiesPageFlt.csv.statut'), t('nonConformitiesPageFlt.csv.efficacite')];
       final buffer = StringBuffer();
       buffer.writeln(headers.map((v) => _csvEscape(v)).join(','));
       for (final n in items) {
@@ -73,7 +74,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
       final fileName = 'Non-conformites-${DateTime.now().millisecondsSinceEpoch}.csv';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
-      await Share.shareXFiles([XFile(file.path)], text: 'Registre des non-conformités');
+      await Share.shareXFiles([XFile(file.path)], text: t('nonConformitiesPageFlt.share.registre'));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -112,14 +113,14 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     final seuilCritique = TextEditingController(text: '${ncSettings['seuilCritique'] ?? 75}');
     final delai = TextEditingController(text: '${ncSettings['delaiStandardJours'] ?? 30}');
     final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
-      title: const Text('Paramétrage des seuils de criticité'),
+      title: Text(t('nonConformitiesPageFlt.settings.titre')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: seuilModeree, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Seuil Modérée (score ≥)')),
-        TextField(controller: seuilMajeure, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Seuil Majeure (score ≥)')),
-        TextField(controller: seuilCritique, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Seuil Critique (score ≥)')),
-        TextField(controller: delai, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Délai standard de traitement (jours)')),
+        TextField(controller: seuilModeree, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.settings.seuilModeree'))),
+        TextField(controller: seuilMajeure, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.settings.seuilMajeure'))),
+        TextField(controller: seuilCritique, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.settings.seuilCritique'))),
+        TextField(controller: delai, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.settings.delai'))),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Enregistrer'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('nonConformitiesPageFlt.common.annuler'))), FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('nonConformitiesPageFlt.common.enregistrer')))],
     ));
     if (ok != true) return;
     try {
@@ -135,11 +136,11 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: Text('Supprimer définitivement « ${n['code']} — ${n['title']} » ? Cette action est irréversible.'),
+        title: Text(t('nonConformitiesPageFlt.delete.titre')),
+        content: Text(t('nonConformitiesPageFlt.delete.message', {'code': '${n['code']}', 'titre': '${n['title']}'})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('nonConformitiesPageFlt.common.annuler'))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text(t('nonConformitiesPageFlt.delete.confirmer'), style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -157,16 +158,16 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     length: 3,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Non-conformités'),
-        bottom: const TabBar(tabs: [Tab(text: 'Registre'), Tab(text: 'Récurrence'), Tab(text: 'Analyses')]),
+        title: Text(t('nonConformitiesPageFlt.titre')),
+        bottom: TabBar(tabs: [Tab(text: t('nonConformitiesPageFlt.onglets.registre')), Tab(text: t('nonConformitiesPageFlt.onglets.recurrence')), Tab(text: t('nonConformitiesPageFlt.onglets.analyses'))]),
         actions: [
           IconButton(
             icon: Icon(multiSelectMode ? Icons.close : Icons.checklist_outlined),
-            tooltip: multiSelectMode ? 'Annuler la sélection' : 'Sélection multiple (CAPA commune)',
+            tooltip: multiSelectMode ? t('nonConformitiesPageFlt.selection.annuler') : t('nonConformitiesPageFlt.selection.multiple'),
             onPressed: () => setState(() { multiSelectMode = !multiSelectMode; selectedIds = {}; }),
           ),
-          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: 'Exporter le registre', onPressed: exporting ? null : exportCsv),
-          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Paramétrage des seuils', onPressed: editSettings),
+          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: t('nonConformitiesPageFlt.export.tooltip'), onPressed: exporting ? null : exportCsv),
+          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: t('nonConformitiesPageFlt.settings.tooltip'), onPressed: editSettings),
         ],
       ),
       floatingActionButton: multiSelectMode
@@ -181,13 +182,13 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
                     if (ok == true) { setState(() { multiSelectMode = false; selectedIds = {}; }); load(); }
                   },
                   icon: const Icon(Icons.merge_type),
-                  label: Text('CAPA commune (${selectedIds.length})'),
+                  label: Text(t('nonConformitiesPageFlt.capa.commune', {'count': '${selectedIds.length}'})),
                 )
               : null)
           : FloatingActionButton.extended(
               onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NcFormPage())).then((_) => load()),
               icon: const Icon(Icons.add),
-              label: const Text('Déclarer une NC'),
+              label: Text(t('nonConformitiesPageFlt.fab.declarer')),
             ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -207,7 +208,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Wrap(spacing: 8, children: [
-        ChoiceChip(label: const Text('Toutes'), selected: filter == null, onSelected: (_) { filter = null; load(); }),
+        ChoiceChip(label: Text(t('nonConformitiesPageFlt.filtre.toutes')), selected: filter == null, onSelected: (_) { filter = null; load(); }),
         for (final s in _ncStatusLabels.keys)
           ChoiceChip(label: Text(_ncStatusLabels[s]!), selected: filter == s, onSelected: (_) { filter = s; load(); }),
       ]),
@@ -215,25 +216,25 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
     Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: TextField(
-        decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 20), hintText: 'Rechercher (code, titre, source...)', isDense: true, border: OutlineInputBorder()),
+        decoration: InputDecoration(prefixIcon: const Icon(Icons.search, size: 20), hintText: t('nonConformitiesPageFlt.recherche.hint'), isDense: true, border: const OutlineInputBorder()),
         onChanged: (v) => setState(() => search = v),
       ),
     ),
     Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: KpiBar([
-        KpiStat('Total', '${dashboard['total'] ?? items.length}', color: QhseColors.red, icon: Icons.error_outline),
-        KpiStat('Ouvertes', '${dashboard['ouvertes'] ?? 0}', color: QhseColors.amber, icon: Icons.hourglass_empty),
-        KpiStat('Critiques', '${dashboard['critiques'] ?? 0}', color: (dashboard['critiques'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
-        KpiStat('En retard', '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
-        KpiStat('Taux de clôture', '${dashboard['tauxCloture'] ?? '—'}%', color: QhseColors.blue, icon: Icons.check_circle_outline),
+        KpiStat(t('nonConformitiesPageFlt.kpi.total'), '${dashboard['total'] ?? items.length}', color: QhseColors.red, icon: Icons.error_outline),
+        KpiStat(t('nonConformitiesPageFlt.kpi.ouvertes'), '${dashboard['ouvertes'] ?? 0}', color: QhseColors.amber, icon: Icons.hourglass_empty),
+        KpiStat(t('nonConformitiesPageFlt.kpi.critiques'), '${dashboard['critiques'] ?? 0}', color: (dashboard['critiques'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+        KpiStat(t('nonConformitiesPageFlt.kpi.enRetard'), '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
+        KpiStat(t('nonConformitiesPageFlt.kpi.tauxCloture'), '${dashboard['tauxCloture'] ?? '—'}%', color: QhseColors.blue, icon: Icons.check_circle_outline),
       ]),
     ),
     Expanded(
       child: RefreshIndicator(
         onRefresh: load,
         child: _filteredItems.isEmpty
-            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? 'Aucune non-conformité' : 'Aucun résultat pour cette recherche')))])
+            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? t('nonConformitiesPageFlt.vide.aucuneNc') : t('nonConformitiesPageFlt.vide.aucunResultat'))))])
             : ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: _filteredItems.length,
@@ -249,7 +250,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
                               ? CircleAvatar(backgroundColor: _ncCriticiteColor(n['criticiteNiveau']), child: Text('${n['criticiteScore'] ?? ''}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))
                               : null,
                       title: Text('${n['code']} — ${n['title']}'),
-                      subtitle: Text('${_ncStatusLabels[n['status']] ?? n['status']} · ${actions.length} action(s)${n['criticiteNiveau'] != null ? ' · ${_ncCriticiteLabels[n['criticiteNiveau']]}' : ''}'),
+                      subtitle: Text('${_ncStatusLabels[n['status']] ?? n['status']} · ${t('nonConformitiesPageFlt.item.actions', {'count': '${actions.length}'})}${n['criticiteNiveau'] != null ? ' · ${_ncCriticiteLabels[n['criticiteNiveau']]}' : ''}'),
                       selected: selected,
                       onTap: multiSelectMode
                           ? () => setState(() { if (selected) { selectedIds.remove(n['id']); } else { selectedIds.add(n['id']); } })
@@ -266,7 +267,7 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   Widget _buildRecurrence() => RefreshIndicator(
     onRefresh: load,
     child: recurrentes.isEmpty
-        ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune non-conformité récurrente détectée')))])
+        ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('nonConformitiesPageFlt.vide.aucuneRecurrence'))))])
         : ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: recurrentes.length,
@@ -275,10 +276,10 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
               return Card(child: Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   Expanded(child: Text('${r['titre']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: QhseColors.red.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Text('${r['occurrences']}× constatée', style: TextStyle(color: QhseColors.red, fontSize: 11))),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: QhseColors.red.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Text(t('nonConformitiesPageFlt.recurrence.occurrences', {'count': '${r['occurrences']}'}), style: TextStyle(color: QhseColors.red, fontSize: 11))),
                 ]),
                 const SizedBox(height: 4),
-                Text('${r['processus']} · dernière occurrence le ${'${r['derniereOccurrence']}'.substring(0, 10)}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+                Text(t('nonConformitiesPageFlt.recurrence.derniereOccurrence', {'processus': '${r['processus']}', 'date': '${r['derniereOccurrence']}'.substring(0, 10)}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
               ])));
             },
           ),
@@ -287,12 +288,12 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
   Widget _buildAnalyses() => RefreshIndicator(
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(16), children: [
-      Text('Alertes (avec escalade)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+      Text(t('nonConformitiesPageFlt.analyses.alertesTitre'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
       const SizedBox(height: 4),
-      Text('${alertes.length} point(s) nécessitant attention', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+      Text(t('nonConformitiesPageFlt.analyses.alertesCount', {'count': '${alertes.length}'}), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
       const SizedBox(height: 8),
       alertes.isEmpty
-          ? Card(child: Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.textSecondary)))))
+          ? Card(child: Padding(padding: const EdgeInsets.all(16), child: Center(child: Text(t('nonConformitiesPageFlt.analyses.aucuneAlerte'), style: TextStyle(color: QhseColors.textSecondary)))))
           : Card(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: [
               for (final a in alertes)
                 ListTile(
@@ -306,37 +307,37 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
                 ),
             ]))),
       const SizedBox(height: 20),
-      Text('Évolution sur 12 mois — nouvelles NC', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+      Text(t('nonConformitiesPageFlt.analyses.evolutionTitre'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
       const SizedBox(height: 8),
-      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary))) : _NcTrendChart(trends: trends)),
+      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text(t('nonConformitiesPageFlt.analyses.pasAssezDonnees'), style: TextStyle(color: QhseColors.textSecondary))) : _NcTrendChart(trends: trends)),
       const SizedBox(height: 20),
       Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Coût de non-qualité', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Text(t('nonConformitiesPageFlt.analyses.coutTitre'), style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
         const SizedBox(height: 4),
         Text('${dashboard['coutTotalNonQualite'] ?? '—'}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        Text('Moyenne par NC : ${dashboard['coutMoyenParNc'] ?? '—'}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Text(t('nonConformitiesPageFlt.analyses.coutMoyen', {'value': '${dashboard['coutMoyenParNc'] ?? '—'}'}), style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
       ]))),
       const SizedBox(height: 20),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Synthèse direction', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+        Text(t('nonConformitiesPageFlt.analyses.syntheseTitre'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
         FilledButton.icon(
           onPressed: syntheseLoading ? null : generateSynthese,
           icon: syntheseLoading ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.summarize_outlined, size: 16),
-          label: const Text('Générer'),
+          label: Text(t('nonConformitiesPageFlt.analyses.genererBtn')),
         ),
       ]),
       if (syntheseDirection != null) ...[
         const SizedBox(height: 8),
-        Text('Générée le ${(syntheseDirection!['genereLe'] ?? '').toString().substring(0, 10)}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+        Text(t('nonConformitiesPageFlt.analyses.genereLe', {'date': (syntheseDirection!['genereLe'] ?? '').toString().substring(0, 10)}), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
         const SizedBox(height: 8),
         Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (final entry in <List<Object?>>[
-            ['Total NC', syntheseDirection!['dashboard']?['total']],
-            ['NC critiques', syntheseDirection!['dashboard']?['critiques']],
-            ['NC majeures', syntheseDirection!['dashboard']?['majeures']],
-            ['Taux de clôture', syntheseDirection!['dashboard']?['tauxCloture'] != null ? '${syntheseDirection!['dashboard']['tauxCloture']}%' : '—'],
-            ['Actions en retard', syntheseDirection!['dashboard']?['actionsEnRetard']],
-            ['Coût total de non-qualité', syntheseDirection!['dashboard']?['coutTotalNonQualite']],
+            [t('nonConformitiesPageFlt.synthese.totalNc'), syntheseDirection!['dashboard']?['total']],
+            [t('nonConformitiesPageFlt.synthese.ncCritiques'), syntheseDirection!['dashboard']?['critiques']],
+            [t('nonConformitiesPageFlt.synthese.ncMajeures'), syntheseDirection!['dashboard']?['majeures']],
+            [t('nonConformitiesPageFlt.synthese.tauxCloture'), syntheseDirection!['dashboard']?['tauxCloture'] != null ? '${syntheseDirection!['dashboard']['tauxCloture']}%' : '—'],
+            [t('nonConformitiesPageFlt.synthese.actionsEnRetard'), syntheseDirection!['dashboard']?['actionsEnRetard']],
+            [t('nonConformitiesPageFlt.synthese.coutTotal'), syntheseDirection!['dashboard']?['coutTotalNonQualite']],
           ])
             Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text('${entry[0]}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
@@ -345,13 +346,13 @@ class _NonConformitiesPageState extends State<NonConformitiesPage> {
         ]))),
         if ((syntheseDirection!['processusLesPlusProblematiques'] as List?)?.isNotEmpty ?? false) ...[
           const SizedBox(height: 12),
-          Text('Processus les plus problématiques', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text(t('nonConformitiesPageFlt.synthese.processusProblematiques'), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           for (final p in (syntheseDirection!['processusLesPlusProblematiques'] as List))
             ListTile(dense: true, title: Text('${p['processus']}', style: const TextStyle(fontSize: 12)), trailing: Text('${p['nombre']}')),
         ],
         if ((syntheseDirection!['principalesRecurrences'] as List?)?.isNotEmpty ?? false) ...[
           const SizedBox(height: 12),
-          Text('Principales récurrences', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text(t('nonConformitiesPageFlt.synthese.principalesRecurrences'), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           for (final r in (syntheseDirection!['principalesRecurrences'] as List))
             ListTile(dense: true, title: Text('${r['titre']}', style: const TextStyle(fontSize: 12)), trailing: Text('${r['occurrences']}')),
         ],
@@ -441,7 +442,7 @@ class _NcFormPageState extends State<NcFormPage> {
 
   Future<void> submit() async {
     if (title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('nonConformitiesPageFlt.form.titreObligatoire'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -463,7 +464,7 @@ class _NcFormPageState extends State<NcFormPage> {
       if (e.networkError && !editing) {
         await SyncQueue.enqueue('nonConformity', 'CREATE', {'code': genCode('NC'), ...payload});
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : NC enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('nonConformitiesPageFlt.form.horsLigne')), duration: const Duration(seconds: 4)));
           Navigator.pop(context);
         }
       } else {
@@ -484,44 +485,44 @@ class _NcFormPageState extends State<NcFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text(editing ? 'Modifier la non-conformité' : 'Nouvelle non-conformité')),
+    appBar: AppBar(title: Text(editing ? t('nonConformitiesPageFlt.form.titreModifier') : t('nonConformitiesPageFlt.form.titreNouvelle'))),
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
+            TextField(controller: title, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.form.champTitre'))),
             const SizedBox(height: 12),
-            TextField(controller: description, maxLines: 4, decoration: const InputDecoration(labelText: 'Description')),
+            TextField(controller: description, maxLines: 4, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.form.champDescription'))),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: source, decoration: const InputDecoration(labelText: 'Origine'))),
+              Expanded(child: TextField(controller: source, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.form.champOrigine')))),
               const SizedBox(width: 8),
-              Expanded(child: TextField(controller: classification, decoration: const InputDecoration(labelText: 'Type de NC'))),
+              Expanded(child: TextField(controller: classification, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.form.champType')))),
             ]),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail / zone'),
+              value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.form.champUnite')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
               onChanged: (v) => setState(() => workUnitId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: responsibleId, isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable du traitement'),
+              value: responsibleId, isExpanded: true, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.form.champResponsable')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => responsibleId = v),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text('Date : ${occurredAt.toIso8601String().substring(0, 10)}')),
+            OutlinedButton.icon(onPressed: () => pickDate(false), icon: const Icon(Icons.event), label: Text(t('nonConformitiesPageFlt.form.dateLabel', {'date': occurredAt.toIso8601String().substring(0, 10)}))),
             const SizedBox(height: 8),
-            OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.event_busy), label: Text(dueDate != null ? 'Échéance : ${dueDate!.toIso8601String().substring(0, 10)}' : 'Échéance (optionnel)')),
+            OutlinedButton.icon(onPressed: () => pickDate(true), icon: const Icon(Icons.event_busy), label: Text(dueDate != null ? t('nonConformitiesPageFlt.form.echeanceLabel', {'date': dueDate!.toIso8601String().substring(0, 10)}) : t('nonConformitiesPageFlt.form.echeanceOptionnel'))),
             const SizedBox(height: 16),
-            Text('Criticité — score calculé automatiquement', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: QhseColors.textSecondary)),
-            _criticiteSlider('Gravité', gravite, (v) => setState(() => gravite = v)),
-            _criticiteSlider('Probabilité', probabilite, (v) => setState(() => probabilite = v)),
-            _criticiteSlider('Étendue', etendue, (v) => setState(() => etendue = v)),
-            if (editing && widget.record!['criticiteScore'] != null) Text('Score actuel : ${widget.record!['criticiteScore']}/100 (${_ncCriticiteLabels[widget.record!['criticiteNiveau']]})', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(t('nonConformitiesPageFlt.form.criticiteAuto'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: QhseColors.textSecondary)),
+            _criticiteSlider(t('nonConformitiesPageFlt.form.gravite'), gravite, (v) => setState(() => gravite = v)),
+            _criticiteSlider(t('nonConformitiesPageFlt.form.probabilite'), probabilite, (v) => setState(() => probabilite = v)),
+            _criticiteSlider(t('nonConformitiesPageFlt.form.etendue'), etendue, (v) => setState(() => etendue = v)),
+            if (editing && widget.record!['criticiteScore'] != null) Text(t('nonConformitiesPageFlt.form.scoreActuel', {'score': '${widget.record!['criticiteScore']}', 'niveau': '${_ncCriticiteLabels[widget.record!['criticiteNiveau']]}'}), style: const TextStyle(fontWeight: FontWeight.bold)),
             if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : 'Enregistrer'))),
+            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? t('nonConformitiesPageFlt.form.envoi') : t('nonConformitiesPageFlt.common.enregistrer')))),
           ]),
   );
 }
@@ -587,15 +588,15 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
   }
 
   Future<void> createAction(String initialTitle) async {
-    final t = TextEditingController(text: initialTitle);
+    final tCtrl = TextEditingController(text: initialTitle);
     final r = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Nouvelle action corrective'),
-        content: TextField(controller: t, maxLines: 2, decoration: const InputDecoration(labelText: 'Titre de l\'action (modifiable)')),
+        title: Text(t('nonConformitiesPageFlt.action.nouvelleTitre')),
+        content: TextField(controller: tCtrl, maxLines: 2, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.action.champTitre'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Refuser')),
-          FilledButton(onPressed: () => Navigator.pop(context, t.text), child: const Text('Accepter')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(t('nonConformitiesPageFlt.action.refuser'))),
+          FilledButton(onPressed: () => Navigator.pop(context, tCtrl.text), child: Text(t('nonConformitiesPageFlt.action.accepter'))),
         ],
       ),
     );
@@ -615,9 +616,9 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
   Future<void> addContainment() async {
     final type = TextEditingController();
     final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
-      title: const Text('Action de confinement'),
-      content: TextField(controller: type, decoration: const InputDecoration(labelText: 'Ex. Blocage produit, quarantaine, tri...')),
-      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ajouter'))],
+      title: Text(t('nonConformitiesPageFlt.confinement.titre')),
+      content: TextField(controller: type, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.confinement.champHint'))),
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('nonConformitiesPageFlt.common.annuler'))), FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('nonConformitiesPageFlt.common.ajouter')))],
     ));
     if (ok != true || type.text.trim().isEmpty) return;
     try { await api.post('/business/nc-containment-actions', {'type': type.text.trim(), 'nonConformityId': widget.ncId}); load(); }
@@ -629,13 +630,13 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
     String methode = '5_POURQUOI';
     bool estRacine = false;
     final ok = await showDialog<bool>(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-      title: const Text('Analyse des causes'),
+      title: Text(t('nonConformitiesPageFlt.causes.titre')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        DropdownButtonFormField<String>(value: methode, items: const [DropdownMenuItem(value: '5_POURQUOI', child: Text('5 Pourquoi')), DropdownMenuItem(value: 'ISHIKAWA', child: Text('Ishikawa (5M)')), DropdownMenuItem(value: 'AUTRE', child: Text('Autre'))], onChanged: (v) => setD(() => methode = v ?? '5_POURQUOI')),
-        TextField(controller: desc, maxLines: 2, decoration: const InputDecoration(labelText: 'Description de la cause')),
-        CheckboxListTile(contentPadding: EdgeInsets.zero, value: estRacine, title: const Text('Cause racine', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => estRacine = v ?? false)),
+        DropdownButtonFormField<String>(value: methode, items: [DropdownMenuItem(value: '5_POURQUOI', child: Text(t('nonConformitiesPageFlt.causes.methode5pourquoi'))), DropdownMenuItem(value: 'ISHIKAWA', child: Text(t('nonConformitiesPageFlt.causes.methodeIshikawa'))), DropdownMenuItem(value: 'AUTRE', child: Text(t('nonConformitiesPageFlt.causes.methodeAutre')))], onChanged: (v) => setD(() => methode = v ?? '5_POURQUOI')),
+        TextField(controller: desc, maxLines: 2, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.causes.champDescription'))),
+        CheckboxListTile(contentPadding: EdgeInsets.zero, value: estRacine, title: Text(t('nonConformitiesPageFlt.causes.caseRacine'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setD(() => estRacine = v ?? false)),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ajouter'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('nonConformitiesPageFlt.common.annuler'))), FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('nonConformitiesPageFlt.common.ajouter')))],
     )));
     if (ok != true || desc.text.trim().isEmpty) return;
     try { await api.post('/business/nc-causes', {'methode': methode, 'description': desc.text.trim(), 'estRacine': estRacine, 'nonConformityId': widget.ncId}); load(); }
@@ -647,13 +648,13 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
     final montant = TextEditingController();
     final desc = TextEditingController();
     final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
-      title: const Text('Coût de non-qualité'),
+      title: Text(t('nonConformitiesPageFlt.analyses.coutTitre')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: type, decoration: const InputDecoration(labelText: 'Type (ex. Rebuts, retouches, transport...)')),
-        TextField(controller: montant, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Montant')),
-        TextField(controller: desc, decoration: const InputDecoration(labelText: 'Description (optionnel)')),
+        TextField(controller: type, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.cost.champType'))),
+        TextField(controller: montant, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.cost.champMontant'))),
+        TextField(controller: desc, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.cost.champDescription'))),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ajouter'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('nonConformitiesPageFlt.common.annuler'))), FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('nonConformitiesPageFlt.common.ajouter')))],
     ));
     if (ok != true || type.text.trim().isEmpty || montant.text.trim().isEmpty) return;
     try {
@@ -667,8 +668,8 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Non-conformité')), body: const Center(child: CircularProgressIndicator()));
-    if (error != null || nc == null) return Scaffold(appBar: AppBar(title: const Text('Non-conformité')), body: Center(child: Text(error ?? 'Introuvable')));
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('nonConformitiesPageFlt.detail.titre'))), body: const Center(child: CircularProgressIndicator()));
+    if (error != null || nc == null) return Scaffold(appBar: AppBar(title: Text(t('nonConformitiesPageFlt.detail.titre'))), body: Center(child: Text(error ?? t('nonConformitiesPageFlt.detail.introuvable'))));
     final n = nc!;
     final actions = List.from(n['actions'] ?? []);
     final containment = List.from(n['containmentActions'] ?? []);
@@ -691,16 +692,16 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
             const SizedBox(height: 12),
             Row(children: [
               Chip(label: Text(_ncStatusLabels[n['status']] ?? n['status'])),
-              if (n['status'] == 'CLOSED') ...[const SizedBox(width: 8), OutlinedButton(onPressed: busy ? null : reopen, child: const Text('Réouvrir'))]
+              if (n['status'] == 'CLOSED') ...[const SizedBox(width: 8), OutlinedButton(onPressed: busy ? null : reopen, child: Text(t('nonConformitiesPageFlt.detail.reouvrir')))]
               else ...[const SizedBox(width: 8), FilledButton(
                   // Finding #23 — pas de clôture pendant que la validation est en cours.
                   onPressed: busy || n['effectivenessResult'] != 'EFFICACE' || n['validationStatus'] == 'SOUMISE' || n['validationStatus'] == 'REJETEE' ? null : close,
-                  child: const Text('Clôturer'),
+                  child: Text(t('nonConformitiesPageFlt.detail.cloturer')),
                 )],
             ]),
             if (n['criticiteNiveau'] != null) ...[
               const SizedBox(height: 8),
-              Text('Criticité : ${n['criticiteScore']}/100 (${_ncCriticiteLabels[n['criticiteNiveau']]})', style: TextStyle(color: _ncCriticiteColor(n['criticiteNiveau']), fontWeight: FontWeight.bold)),
+              Text(t('nonConformitiesPageFlt.detail.criticiteLabel', {'score': '${n['criticiteScore']}', 'niveau': '${_ncCriticiteLabels[n['criticiteNiveau']]}'}), style: TextStyle(color: _ncCriticiteColor(n['criticiteNiveau']), fontWeight: FontWeight.bold)),
             ],
             const SizedBox(height: 20),
             CapaLinksSection(sourceModule: 'NON_CONFORMITY', sourceEntityId: n['id'], prefill: {'title': 'Traiter — ${n['title']}', 'source': 'Non-conformité', 'criticite': n['criticiteNiveau']}),
@@ -711,48 +712,48 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
             const SizedBox(height: 12),
 
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('Confinement / actions immédiates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              TextButton.icon(onPressed: addContainment, icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter')),
+              Text(t('nonConformitiesPageFlt.detail.confinementTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              TextButton.icon(onPressed: addContainment, icon: const Icon(Icons.add, size: 16), label: Text(t('nonConformitiesPageFlt.common.ajouter'))),
             ]),
-            if (containment.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune action de confinement', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            if (containment.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('nonConformitiesPageFlt.detail.aucunConfinement'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
             else ...containment.map((ca) => Card(child: ListTile(dense: true, title: Text('${ca['type']}'), subtitle: Text(ca['description'] ?? '')))),
 
             const SizedBox(height: 16),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('Analyse des causes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              TextButton.icon(onPressed: addCause, icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter')),
+              Text(t('nonConformitiesPageFlt.causes.titre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              TextButton.icon(onPressed: addCause, icon: const Icon(Icons.add, size: 16), label: Text(t('nonConformitiesPageFlt.common.ajouter'))),
             ]),
-            if (causes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune cause enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            if (causes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('nonConformitiesPageFlt.detail.aucuneCause'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
             else ...causes.map((cs) => Card(child: ListTile(dense: true, title: Text('${cs['description']}'), subtitle: Text('${cs['methode']}${cs['estRacine'] == true ? ' · Racine' : ''}')))),
 
             const SizedBox(height: 16),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('Coût de non-qualité${costs.isNotEmpty ? ' (${costs.fold<double>(0, (s, c) => s + ((c['montant'] ?? 0) as num).toDouble())})' : ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              TextButton.icon(onPressed: addCost, icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter')),
+              Text(costs.isNotEmpty ? t('nonConformitiesPageFlt.detail.coutAvecTotal', {'total': '${costs.fold<double>(0, (s, c) => s + ((c['montant'] ?? 0) as num).toDouble())}'}) : t('nonConformitiesPageFlt.analyses.coutTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              TextButton.icon(onPressed: addCost, icon: const Icon(Icons.add, size: 16), label: Text(t('nonConformitiesPageFlt.common.ajouter'))),
             ]),
-            if (costs.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucun coût enregistré', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            if (costs.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('nonConformitiesPageFlt.detail.aucunCout'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
             else ...costs.map((co) => Card(child: ListTile(dense: true, title: Text('${co['type']}'), subtitle: co['description'] != null ? Text('${co['description']}') : null, trailing: Text('${co['montant']}', style: const TextStyle(fontWeight: FontWeight.bold))))),
 
             const SizedBox(height: 16),
-            const Text("Vérification d'efficacité", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            if (n['effectivenessResult'] != null) Text('Dernier résultat : ${_ncEffLabels[n['effectivenessResult']]}', style: TextStyle(color: n['effectivenessResult'] == 'EFFICACE' ? QhseColors.green : n['effectivenessResult'] == 'INEFFICACE' ? QhseColors.red : QhseColors.amber)),
+            Text(t('nonConformitiesPageFlt.detail.verifTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            if (n['effectivenessResult'] != null) Text(t('nonConformitiesPageFlt.detail.dernierResultat', {'resultat': '${_ncEffLabels[n['effectivenessResult']]}'}), style: TextStyle(color: n['effectivenessResult'] == 'EFFICACE' ? QhseColors.green : n['effectivenessResult'] == 'INEFFICACE' ? QhseColors.red : QhseColors.amber)),
             DropdownButtonFormField<String>(
-              value: effResult.isEmpty ? null : effResult, decoration: const InputDecoration(labelText: 'Résultat'),
-              items: const [DropdownMenuItem(value: 'EFFICACE', child: Text('Efficace')), DropdownMenuItem(value: 'PARTIELLEMENT_EFFICACE', child: Text('Partiellement efficace')), DropdownMenuItem(value: 'INEFFICACE', child: Text('Inefficace'))],
+              value: effResult.isEmpty ? null : effResult, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.detail.champResultat')),
+              items: [DropdownMenuItem(value: 'EFFICACE', child: Text(t('nonConformitiesPageFlt.efficacite.efficace'))), DropdownMenuItem(value: 'PARTIELLEMENT_EFFICACE', child: Text(t('nonConformitiesPageFlt.efficacite.partiellementEfficace'))), DropdownMenuItem(value: 'INEFFICACE', child: Text(t('nonConformitiesPageFlt.efficacite.inefficace')))],
               onChanged: (v) => setState(() => effResult = v ?? ''),
             ),
-            TextField(controller: effNotes, decoration: const InputDecoration(labelText: 'Notes (optionnel)')),
+            TextField(controller: effNotes, decoration: InputDecoration(labelText: t('nonConformitiesPageFlt.detail.champNotes'))),
             const SizedBox(height: 8),
-            SizedBox(width: double.infinity, child: OutlinedButton(onPressed: busy || effResult.isEmpty ? null : saveEffectiveness, child: const Text('Enregistrer la vérification'))),
+            SizedBox(width: double.infinity, child: OutlinedButton(onPressed: busy || effResult.isEmpty ? null : saveEffectiveness, child: Text(t('nonConformitiesPageFlt.detail.enregistrerVerif')))),
 
             const SizedBox(height: 16),
             AttachmentsSection(ownerType: 'NON_CONFORMITY', ownerId: n['id']),
             const SizedBox(height: 4),
 
             if (!loadingSuggestions && suggestions.isNotEmpty) ...[
-              const Text('Suggestions du moteur de recommandations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(t('nonConformitiesPageFlt.detail.suggestionsTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 4),
-              const Text('Proposées automatiquement à partir du type de non-conformité. La décision reste humaine : acceptez, modifiez, refusez ou ajoutez librement.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(t('nonConformitiesPageFlt.detail.suggestionsDesc'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 8),
               ...suggestions.map((s) => Card(
                     color: Colors.indigo.withOpacity(0.04),
@@ -766,7 +767,7 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
                               child: Row(children: [
                                 const Icon(Icons.arrow_right, size: 18),
                                 Expanded(child: Text('$a', style: const TextStyle(fontSize: 13))),
-                                IconButton(icon: const Icon(Icons.add_circle_outline, size: 20), tooltip: 'Accepter / modifier', onPressed: () => createAction('$a')),
+                                IconButton(icon: const Icon(Icons.add_circle_outline, size: 20), tooltip: t('nonConformitiesPageFlt.detail.suggestionAction'), onPressed: () => createAction('$a')),
                               ]),
                             )),
                       ]),
@@ -775,10 +776,10 @@ class _NonConformityDetailPageState extends State<NonConformityDetailPage> {
               const SizedBox(height: 20),
             ],
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('Actions correctives', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              TextButton.icon(onPressed: () => createAction(''), icon: const Icon(Icons.add), label: const Text('Ajouter')),
+              Text(t('nonConformitiesPageFlt.detail.actionsTitre'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              TextButton.icon(onPressed: () => createAction(''), icon: const Icon(Icons.add), label: Text(t('nonConformitiesPageFlt.common.ajouter'))),
             ]),
-            if (actions.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucune action pour l\'instant')),
+            if (actions.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(t('nonConformitiesPageFlt.detail.aucuneAction'))),
             ...actions.map((a) => Card(child: ListTile(title: Text('${a['title']}'), subtitle: Text('${a['status']}')))),
           ],
         ),
