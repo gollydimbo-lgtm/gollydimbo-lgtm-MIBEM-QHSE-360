@@ -3,21 +3,22 @@ import '../services/api.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
 import '../services/sync_queue.dart';
+import '../i18n/i18n.dart';
 
 Map<String, dynamic> indicateurStatus(double? actuel, double? cible, bool sensInverse, double? seuilVert, double? seuilOrange) {
   if (actuel == null) return {'color': null, 'label': '—'};
   if (seuilVert != null && seuilOrange != null) {
     final good = sensInverse ? actuel <= seuilVert : actuel >= seuilVert;
     final warn = sensInverse ? actuel <= seuilOrange : actuel >= seuilOrange;
-    if (good) return {'color': QhseColors.green, 'label': 'Conforme'};
-    if (warn) return {'color': QhseColors.amber, 'label': 'À surveiller'};
-    return {'color': QhseColors.red, 'label': 'Non conforme'};
+    if (good) return {'color': QhseColors.green, 'label': t('indicateurs.conforme')};
+    if (warn) return {'color': QhseColors.amber, 'label': t('indicateurs.aSurveiller')};
+    return {'color': QhseColors.red, 'label': t('indicateurs.nonConforme')};
   }
   if (cible == null) return {'color': null, 'label': '—'};
   final ratio = sensInverse ? (cible == 0 ? (actuel == 0 ? 1.0 : 0.0) : cible / (actuel <= 0 ? 0.0001 : actuel)) : (cible == 0 ? 1.0 : actuel / cible);
-  if (ratio >= 1) return {'color': QhseColors.green, 'label': 'Conforme'};
-  if (ratio >= 0.7) return {'color': QhseColors.amber, 'label': 'À surveiller'};
-  return {'color': QhseColors.red, 'label': 'Non conforme'};
+  if (ratio >= 1) return {'color': QhseColors.green, 'label': t('indicateurs.conforme')};
+  if (ratio >= 0.7) return {'color': QhseColors.amber, 'label': t('indicateurs.aSurveiller')};
+  return {'color': QhseColors.red, 'label': t('indicateurs.nonConforme')};
 }
 
 class IndicateursQualitePage extends StatefulWidget {
@@ -62,14 +63,14 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text('Nouvelle mesure — ${ind['indicateur']}'),
+        title: Text(t('indicateurs.nouvelleMesure', {'nom': '${ind['indicateur']}'})),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: valeur, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Valeur')),
-          TextField(controller: commentaire, decoration: const InputDecoration(labelText: 'Commentaire (optionnel)')),
+          TextField(controller: valeur, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('indicateurs.valeur'))),
+          TextField(controller: commentaire, decoration: InputDecoration(labelText: t('indicateurs.commentaireOptionnel'))),
           if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('indicateurs.annuler'))),
           FilledButton(onPressed: saving ? null : () async {
             setD(() => saving = true);
             final payload = {'valeur': double.tryParse(valeur.text) ?? 0, 'commentaire': commentaire.text.isEmpty ? null : commentaire.text};
@@ -81,7 +82,7 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
               if (e.networkError) {
                 await SyncQueue.enqueue('indicateurMesure', 'CREATE', {'indicateurId': ind['id'], ...payload});
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : mesure enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('indicateurs.mesureHorsLigne')), duration: const Duration(seconds: 4)));
                   Navigator.pop(c);
                 }
                 load();
@@ -89,7 +90,7 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
                 setD(() { saving = false; formError = '$e'; });
               }
             } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-          }, child: Text(saving ? '…' : 'Enregistrer')),
+          }, child: Text(saving ? '…' : t('indicateurs.enregistrer'))),
         ],
       )),
     );
@@ -99,28 +100,28 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
     final actuel = (ind['actuel'] as num?) ?? 0;
     final cible = (ind['cible'] as num?) ?? 0;
     final ecart = ((actuel - cible) * 100).round() / 100;
-    final title = TextEditingController(text: "Corriger l'écart — ${ind['indicateur']}");
-    final description = TextEditingController(text: 'Valeur actuelle $actuel${ind['unite'] ?? ''}, cible $cible${ind['unite'] ?? ''} (écart ${ecart > 0 ? '+' : ''}$ecart${ind['unite'] ?? ''}).');
+    final title = TextEditingController(text: t('indicateurs.corrigerEcart', {'nom': '${ind['indicateur']}'}));
+    final description = TextEditingController(text: t('indicateurs.valeurActuelleDesc', {'actuel': '$actuel', 'cible': '$cible', 'ecart': '${ecart > 0 ? '+' : ''}$ecart', 'unite': '${ind['unite'] ?? ''}'}));
     String? formError;
     bool saving = false;
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Créer une action corrective'),
+        title: Text(t('indicateurs.creerActionCorrective')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre')),
-          TextField(controller: description, decoration: const InputDecoration(labelText: 'Description'), maxLines: 3),
+          TextField(controller: title, decoration: InputDecoration(labelText: t('indicateurs.titre'))),
+          TextField(controller: description, decoration: InputDecoration(labelText: t('indicateurs.description')), maxLines: 3),
           if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('indicateurs.annuler'))),
           FilledButton(onPressed: saving ? null : () async {
             setD(() => saving = true);
             try {
               await api.post('/business/actions', {'code': 'ACT-${DateTime.now().millisecondsSinceEpoch}', 'title': title.text, 'description': description.text, 'priority': 2, 'status': 'OPEN'});
               if (context.mounted) Navigator.pop(c);
             } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-          }, child: Text(saving ? '…' : 'Créer')),
+          }, child: Text(saving ? '…' : t('indicateurs.creer'))),
         ],
       )),
     );
@@ -143,22 +144,22 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                Column(children: [Text('Actuel', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('$actuel${ind['unite'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
-                Column(children: [Text('Cible', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('$cible${ind['unite'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
-                Column(children: [Text('Écart', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('${ecart > 0 ? '+' : ''}$ecart${ind['unite'] ?? ''}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: atteint ? QhseColors.green : QhseColors.red))]),
+                Column(children: [Text(t('indicateurs.actuel'), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('$actuel${ind['unite'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+                Column(children: [Text(t('indicateurs.cible'), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('$cible${ind['unite'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+                Column(children: [Text(t('indicateurs.ecart'), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)), Text('${ecart > 0 ? '+' : ''}$ecart${ind['unite'] ?? ''}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: atteint ? QhseColors.green : QhseColors.red))]),
               ]),
               if (ind['categorie'] != null || ind['formule'] != null) Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text('${ind['categorie'] != null ? 'Catégorie : ${ind['categorie']}\n' : ''}${ind['formule'] != null ? 'Formule : ${ind['formule']}' : ''}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+                child: Text('${ind['categorie'] != null ? t('indicateurs.categorieDetail', {'cat': '${ind['categorie']}'}) : ''}${ind['formule'] != null ? t('indicateurs.formuleDetail', {'formule': '${ind['formule']}'}) : ''}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
               ),
               if (!atteint) Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: SizedBox(width: double.infinity, child: OutlinedButton(onPressed: () { Navigator.pop(c); _createAction(ind); }, child: const Text('Créer une action corrective'))),
+                child: SizedBox(width: double.infinity, child: OutlinedButton(onPressed: () { Navigator.pop(c); _createAction(ind); }, child: Text(t('indicateurs.creerActionCorrective')))),
               ),
               const Divider(),
-              const Text('Historique des mesures', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(t('indicateurs.historiqueMesures'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 6),
-              if (mesures.isEmpty) Text('Aucune mesure enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
+              if (mesures.isEmpty) Text(t('indicateurs.aucuneMesure'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
               else ...mesures.map((m) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),
                     child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -169,7 +170,7 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
             ]),
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Fermer'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(t('indicateurs.fermer')))],
       ),
     );
   }
@@ -189,26 +190,26 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: Text(record == null ? 'Nouvel indicateur' : 'Modifier l\'indicateur'),
+        title: Text(record == null ? t('indicateurs.nouvelIndicateur') : t('indicateurs.modifierIndicateur')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: indicateur, decoration: const InputDecoration(labelText: 'Indicateur')),
-            TextField(controller: categorie, decoration: const InputDecoration(labelText: 'Catégorie (optionnel)')),
-            TextField(controller: formule, decoration: const InputDecoration(labelText: 'Formule (optionnel)')),
+            TextField(controller: indicateur, decoration: InputDecoration(labelText: t('indicateurs.indicateur'))),
+            TextField(controller: categorie, decoration: InputDecoration(labelText: t('indicateurs.categorieOptionnel'))),
+            TextField(controller: formule, decoration: InputDecoration(labelText: t('indicateurs.formuleOptionnel'))),
             Row(children: [
-              Expanded(child: TextField(controller: actuel, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Actuel'))),
+              Expanded(child: TextField(controller: actuel, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('indicateurs.actuel')))),
               const SizedBox(width: 8),
-              Expanded(child: TextField(controller: cible, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cible'))),
+              Expanded(child: TextField(controller: cible, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('indicateurs.cible')))),
             ]),
-            TextField(controller: unite, decoration: const InputDecoration(labelText: 'Unité (%, ...)')),
+            TextField(controller: unite, decoration: InputDecoration(labelText: t('indicateurs.unite'))),
             Row(children: [
-              Expanded(child: TextField(controller: seuilVert, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Seuil vert'))),
+              Expanded(child: TextField(controller: seuilVert, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('indicateurs.seuilVert')))),
               const SizedBox(width: 8),
-              Expanded(child: TextField(controller: seuilOrange, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Seuil orange'))),
+              Expanded(child: TextField(controller: seuilOrange, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('indicateurs.seuilOrange')))),
             ]),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading,
-              title: const Text('Sens inverse (atteint si actuel ≤ cible)', style: TextStyle(fontSize: 12)),
+              title: Text(t('indicateurs.sensInverse'), style: const TextStyle(fontSize: 12)),
               value: sensInverse, onChanged: (v) => setD(() => sensInverse = v ?? false),
             ),
             if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
@@ -220,9 +221,9 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
               try { await api.delete('/business/indicateurs-qualite/${record['id']}'); if (context.mounted) Navigator.pop(c); load(); }
               catch (e) { setD(() => formError = '$e'); }
             },
-            child: const Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+            child: Text(t('indicateurs.supprimer'), style: const TextStyle(color: QhseColors.red)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('indicateurs.annuler'))),
           FilledButton(onPressed: saving ? null : () async {
             setD(() => saving = true);
             final payload = {
@@ -238,7 +239,7 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
               if (context.mounted) Navigator.pop(c);
               load();
             } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-          }, child: Text(saving ? '…' : 'Enregistrer')),
+          }, child: Text(saving ? '…' : t('indicateurs.enregistrer'))),
         ],
       )),
     );
@@ -254,8 +255,8 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
     final categories = items.map((i) => i['categorie']).where((c) => c != null && c != '').cast<String>().toSet().toList();
     final filteredItems = categorieFilter == null ? items : items.where((i) => i['categorie'] == categorieFilter).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Indicateurs qualité')),
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addOrEdit(), icon: const Icon(Icons.add), label: const Text('Indicateur')),
+      appBar: AppBar(title: Text(t('indicateurs.pageTitle'))),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addOrEdit(), icon: const Icon(Icons.add), label: Text(t('indicateurs.fabIndicateur'))),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null
@@ -264,11 +265,11 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
               onRefresh: load,
               child: ListView(padding: const EdgeInsets.all(12), children: [
                 Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Indice global de performance qualité', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(t('indicateurs.indiceGlobalTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 8),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text(indiceGlobal['indice'] != null ? '${indiceGlobal['indice']}/100' : '—', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 32)),
-                    TextButton(onPressed: () => setState(() => showPonderation = !showPonderation), child: Text(showPonderation ? 'Masquer' : 'Pondérations')),
+                    TextButton(onPressed: () => setState(() => showPonderation = !showPonderation), child: Text(showPonderation ? t('indicateurs.masquer') : t('indicateurs.ponderations'))),
                   ]),
                   if (showPonderation) ...List.from(indiceGlobal['detail'] ?? []).map((d) {
                     final ctrl = TextEditingController(text: '${d['poids'] ?? 1}');
@@ -283,13 +284,13 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
                 ]))),
                 const SizedBox(height: 16),
                 KpiBar([
-                  KpiStat('Indicateurs suivis', '${items.length}', color: QhseColors.blue, icon: Icons.insights_outlined),
-                  KpiStat('Dans la cible', '$dansLaCible', color: QhseColors.green, icon: Icons.check_circle_outline),
-                  KpiStat('Hors cible', '${items.length - dansLaCible}', color: QhseColors.red, icon: Icons.error_outline),
+                  KpiStat(t('indicateurs.kpiIndicateursSuivis'), '${items.length}', color: QhseColors.blue, icon: Icons.insights_outlined),
+                  KpiStat(t('indicateurs.kpiDansLaCible'), '$dansLaCible', color: QhseColors.green, icon: Icons.check_circle_outline),
+                  KpiStat(t('indicateurs.kpiHorsCible'), '${items.length - dansLaCible}', color: QhseColors.red, icon: Icons.error_outline),
                 ]),
                 const SizedBox(height: 16),
-                const Text('Bibliothèque automatique', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                Text('Mois en cours vs mois précédent — calculée depuis les contrôles, NC, actions, réclamations, fournisseurs et audits déjà enregistrés.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+                Text(t('indicateurs.bibliothequeAutoTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(t('indicateurs.bibliothequeAutoSubtitle'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
                 const SizedBox(height: 8),
                 ...autoItems.map((a) {
                   final valeur = (a['valeur'] as num?)?.toDouble();
@@ -307,17 +308,17 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
                   ));
                 }),
                 const SizedBox(height: 16),
-                const Text('Indicateurs manuels', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(t('indicateurs.indicateursManuelsTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 8),
                 if (categories.length > 1)
                   SizedBox(
                     height: 36,
                     child: ListView(scrollDirection: Axis.horizontal, children: [
-                      Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(label: const Text('Toutes'), selected: categorieFilter == null, onSelected: (_) => setState(() => categorieFilter = null))),
+                      Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(label: Text(t('indicateurs.toutes')), selected: categorieFilter == null, onSelected: (_) => setState(() => categorieFilter = null))),
                       ...categories.map((cat) => Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(label: Text(cat), selected: categorieFilter == cat, onSelected: (_) => setState(() => categorieFilter = cat)))),
                     ]),
                   ),
-                if (filteredItems.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text('Aucun indicateur enregistré', style: TextStyle(color: QhseColors.textSecondary))),
+                if (filteredItems.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(t('indicateurs.aucunIndicateur'), style: TextStyle(color: QhseColors.textSecondary))),
                 ...filteredItems.map((i) {
                   final actuel = (i['actuel'] as num?)?.toDouble();
                   final cible = (i['cible'] as num?)?.toDouble();
@@ -325,11 +326,11 @@ class _IndicateursQualitePageState extends State<IndicateursQualitePage> {
                   final mesures = List.from(i['mesures'] ?? []);
                   return Card(child: ListTile(
                     title: Text(i['indicateur'] ?? ''),
-                    subtitle: Text('${actuel ?? '—'}${i['unite'] ?? ''} / ${cible ?? '—'}${i['unite'] ?? ''}${mesures.length > 1 ? ' · ${mesures.length} mesures' : ''}'),
+                    subtitle: Text('${actuel ?? '—'}${i['unite'] ?? ''} / ${cible ?? '—'}${i['unite'] ?? ''}${mesures.length > 1 ? t('indicateurs.mesuresCount', {'count': '${mesures.length}'}) : ''}'),
                     leading: st['color'] != null ? Icon(Icons.circle, size: 12, color: st['color'] as Color) : null,
                     onTap: () => _showDetail(i),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      IconButton(icon: const Icon(Icons.add_chart, size: 20), onPressed: () => _addMesure(i), tooltip: 'Ajouter une mesure'),
+                      IconButton(icon: const Icon(Icons.add_chart, size: 20), onPressed: () => _addMesure(i), tooltip: t('indicateurs.ajouterMesure')),
                       IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => _addOrEdit(record: i)),
                     ]),
                   ));
