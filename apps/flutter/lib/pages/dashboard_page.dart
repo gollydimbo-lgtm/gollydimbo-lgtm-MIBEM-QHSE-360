@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 /// Correspondance rôle réel -> vue par défaut du pilotage, identique à
 /// celle du tableau de bord web (App.jsx / PilotagePage), pour que les deux
@@ -89,7 +90,7 @@ class _DashboardPageState extends State<DashboardPage> {
       actions = List.from(await api.get('/business/actions'));
       nonConformities = List.from(await api.get('/business/non-conformities'));
     } catch (e) {
-      error = 'Impossible de charger le tableau de bord';
+      error = t('dashboard.loadError');
     }
     setState(() => loading = false);
   }
@@ -144,7 +145,7 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(error!, style: const TextStyle(color: QhseColors.red)),
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: load, child: const Text('Réessayer')),
+          OutlinedButton(onPressed: load, child: Text(t('dashboard.retry'))),
         ]),
       );
     }
@@ -176,9 +177,9 @@ class _DashboardPageState extends State<DashboardPage> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Tableau de bord QHSE', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
+          Text(t('dashboard.title'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: QhseColors.textPrimary)),
           const SizedBox(height: 4),
-          Text('Pilotez la conformité, en temps réel.', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+          Text(t('dashboard.subtitle'), style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
           const SizedBox(height: 12),
 
           _vueSelector(),
@@ -186,22 +187,22 @@ class _DashboardPageState extends State<DashboardPage> {
 
           // Les 5 mêmes cartes KPI que le web, dans le même ordre.
           Wrap(spacing: 10, runSpacing: 10, children: [
-            _kpi('NC ouvertes', counters['nonConformitiesOpen'], "${counters['nonConformitiesCritical'] ?? 0} critique(s)", QhseColors.red, Icons.report_gmailerrorred),
-            _kpi('Actions en retard', counters['actionsOverdue'], "${counters['actionsOpen'] ?? 0} ouverte(s) au total", QhseColors.red, Icons.schedule),
-            _kpi('Événements sécurité', counters['safetyEvents30d'], '30 derniers jours', QhseColors.amber, Icons.warning_amber_rounded),
-            _kpi('Audits', '${auditsTotal - auditsPlanifies} / $auditsTotal', "$auditsPlanifies planifié(s)", QhseColors.blue, Icons.fact_check_outlined),
-            _kpi('Taux de conformité', tauxConformite != null ? '$tauxConformite%' : '—', '30 derniers jours', QhseColors.green, Icons.verified_outlined),
+            _kpi(t('dashboard.kpiNcOuvertes'), counters['nonConformitiesOpen'], t('dashboard.kpiNcOuvertesObj', {'count': '${counters['nonConformitiesCritical'] ?? 0}'}), QhseColors.red, Icons.report_gmailerrorred),
+            _kpi(t('dashboard.kpiActionsEnRetard'), counters['actionsOverdue'], t('dashboard.kpiActionsEnRetardObj', {'count': '${counters['actionsOpen'] ?? 0}'}), QhseColors.red, Icons.schedule),
+            _kpi(t('dashboard.kpiEvenementsSecurite'), counters['safetyEvents30d'], t('dashboard.derniers30Jours'), QhseColors.amber, Icons.warning_amber_rounded),
+            _kpi(t('dashboard.kpiAudits'), '${auditsTotal - auditsPlanifies} / $auditsTotal', t('dashboard.kpiAuditsObj', {'count': '$auditsPlanifies'}), QhseColors.blue, Icons.fact_check_outlined),
+            _kpi(t('dashboard.kpiTauxConformite'), tauxConformite != null ? '$tauxConformite%' : '—', t('dashboard.derniers30Jours'), QhseColors.green, Icons.verified_outlined),
           ]),
 
           // Deuxième rangée de KPI, masquée en vue Direction (vue une minute).
           if (vue != 'direction') ...[
             const SizedBox(height: 10),
             Wrap(spacing: 10, runSpacing: 10, children: [
-              _kpi('Risques élevés', counters['risksHigh'], "${counters['risksTotal'] ?? 0} risque(s) suivi(s)", QhseColors.red, Icons.dangerous_outlined),
-              _kpi('Documents en attente', counters['documentsPendingApproval'], 'validation GED', QhseColors.blue, Icons.description_outlined),
-              _kpi('Formations expirant', counters['trainingsExpiringSoon'], 'sous 30 jours', QhseColors.amber, Icons.school_outlined),
-              _kpi('EPI à renouveler', counters['epiRenewalsDue30d'], 'sous 30 jours', QhseColors.amber, Icons.shield_outlined),
-              _kpi('Équipements en retard', counters['equipmentOverdueInspection'], 'inspection dépassée', QhseColors.red, Icons.build_outlined),
+              _kpi(t('dashboard.kpiRisquesEleves'), counters['risksHigh'], t('dashboard.kpiRisquesElevesObj', {'count': '${counters['risksTotal'] ?? 0}'}), QhseColors.red, Icons.dangerous_outlined),
+              _kpi(t('dashboard.kpiDocumentsEnAttente'), counters['documentsPendingApproval'], t('dashboard.validationGed'), QhseColors.blue, Icons.description_outlined),
+              _kpi(t('dashboard.kpiFormationsExpirant'), counters['trainingsExpiringSoon'], t('dashboard.sous30Jours'), QhseColors.amber, Icons.school_outlined),
+              _kpi(t('dashboard.kpiEpiARenouveler'), counters['epiRenewalsDue30d'], t('dashboard.sous30Jours'), QhseColors.amber, Icons.shield_outlined),
+              _kpi(t('dashboard.kpiEquipementsEnRetard'), counters['equipmentOverdueInspection'], t('dashboard.inspectionDepassee'), QhseColors.red, Icons.build_outlined),
             ]),
           ],
           const SizedBox(height: 20),
@@ -210,8 +211,8 @@ class _DashboardPageState extends State<DashboardPage> {
           // regarder en premier, tous domaines confondus, déjà trié par
           // priorité côté API.
           _panel(
-            title: 'Alertes prioritaires',
-            subtitle: 'Toutes les échéances et anomalies critiques, triées par priorité',
+            title: t('dashboard.alertesPrioritairesTitle'),
+            subtitle: t('dashboard.alertesPrioritairesSubtitle'),
             child: _alertsList(alertes),
           ),
           const SizedBox(height: 16),
@@ -221,22 +222,22 @@ class _DashboardPageState extends State<DashboardPage> {
           // réservées à la vue Responsable QHSE.
           if (vue == 'qhse') ...[
             _panel(
-              title: 'Pareto des causes racines — sécurité',
-              subtitle: "Causes qui concentrent le plus d'événements de sécurité",
+              title: t('dashboard.paretoSecuriteTitle'),
+              subtitle: t('dashboard.paretoSecuriteSubtitle'),
               child: _paretoList(paretoSecurite),
             ),
             const SizedBox(height: 16),
             _panel(
-              title: 'Non-conformités récurrentes',
-              subtitle: 'Mêmes anomalies qui reviennent — à instruire en Ishikawa / 5 Pourquoi',
+              title: t('dashboard.ncRecurrentesTitle'),
+              subtitle: t('dashboard.ncRecurrentesSubtitle'),
               child: _recurrencesList(recurrences),
             ),
             const SizedBox(height: 16),
             _panel(
-              title: 'Processus les plus problématiques',
-              subtitle: 'Nombre de non-conformités par processus',
+              title: t('dashboard.processusProblematiquesTitle'),
+              subtitle: t('dashboard.processusProblematiquesSubtitle'),
               child: processusProblematiques.isEmpty
-                  ? Center(child: Text('Aucun processus renseigné sur les non-conformités', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                  ? Center(child: Text(t('dashboard.aucunProcessusRenseigne'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
                   : _HorizontalBars(
                       entries: processusProblematiques.map<MapEntry<String, int>>((p) => MapEntry('${p['processus'] ?? ''}', ((p['nombre'] ?? 0) as num).toInt())).toList(),
                       color: QhseColors.red,
@@ -249,18 +250,18 @@ class _DashboardPageState extends State<DashboardPage> {
           // minute) et au Responsable QHSE ; pas au Contrôleur Terrain.
           if (vue != 'terrain') ...[
             _panel(
-              title: 'Évolution des non-conformités & événements sécurité',
-              subtitle: '8 dernières semaines',
+              title: t('dashboard.evolutionTitle'),
+              subtitle: t('dashboard.evolutionSubtitle'),
               child: SizedBox(
                 height: 200,
                 child: (ncSeries.isEmpty && eventSeries.isEmpty)
-                    ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                    ? Center(child: Text(t('dashboard.pasAssezDeDonnees'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
                     : _TrendLineChart(ncSeries: ncSeries, eventSeries: eventSeries),
               ),
             ),
             const SizedBox(height: 16),
             _panel(
-              title: score['global'] != null ? 'Score composite QHSE : ${score['global']}%' : 'Score composite QHSE',
+              title: score['global'] != null ? t('dashboard.scoreCompositeTitleWithValue', {'value': '${score['global']}'}) : t('dashboard.scoreCompositeTitle'),
               subtitle: _scoreConfianceLabel(score['confiance']),
               child: _scoreBreakdown(score['global'], scoreDomaines),
             ),
@@ -270,34 +271,34 @@ class _DashboardPageState extends State<DashboardPage> {
           // Répartitions détaillées : réservées à la vue Responsable QHSE.
           if (vue == 'qhse') ...[
             _panel(
-              title: 'Non-conformités par source',
+              title: t('dashboard.ncParSourceTitle'),
               child: SizedBox(
                 height: 180,
                 child: ncBySource.isEmpty
-                    ? Center(child: Text('Aucune non-conformité enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                    ? Center(child: Text(t('dashboard.aucuneNcEnregistree'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
                     : _LabeledDonut(entries: ncBySource, colors: [QhseColors.red, QhseColors.amber, QhseColors.blue, QhseColors.green, const Color(0xFF8B5CF6), QhseColors.textSecondary]),
               ),
             ),
             const SizedBox(height: 16),
             _panel(
-              title: 'Répartition des événements sécurité par sévérité',
+              title: t('dashboard.repartitionSeveriteTitle'),
               child: SizedBox(
                 height: 180,
                 child: severityBreakdown.isEmpty
-                    ? Center(child: Text('Aucun événement sur 30 jours', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+                    ? Center(child: Text(t('dashboard.aucunEvenement30j'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
                     : _SeverityDonut(data: severityBreakdown),
               ),
             ),
             const SizedBox(height: 16),
             _panel(
-              title: 'Statut des actions correctives',
+              title: t('dashboard.statutActionsTitle'),
               child: SizedBox(
                 height: 180,
                 child: _LabeledDonut(
                   entries: [
-                    MapEntry('Terminées', capa['terminees']!),
-                    MapEntry('En cours', capa['enCours']!),
-                    MapEntry('En retard', capa['enRetard']!),
+                    MapEntry(t('dashboard.terminees'), capa['terminees']!),
+                    MapEntry(t('dashboard.enCours'), capa['enCours']!),
+                    MapEntry(t('dashboard.enRetard'), capa['enRetard']!),
                   ],
                   colors: const [QhseColors.green, QhseColors.blue, QhseColors.red],
                 ),
@@ -311,15 +312,15 @@ class _DashboardPageState extends State<DashboardPage> {
 
   String _scoreConfianceLabel(dynamic confiance) {
     switch (confiance) {
-      case 'ELEVEE': return 'Fiabilité élevée — tous les domaines ont assez de données';
-      case 'MOYENNE': return 'Fiabilité moyenne — certains domaines manquent de données';
-      case 'FAIBLE': return 'Fiabilité faible — trop peu de données pour se fier à ce score';
+      case 'ELEVEE': return t('dashboard.fiabiliteElevee');
+      case 'MOYENNE': return t('dashboard.fiabiliteMoyenne');
+      case 'FAIBLE': return t('dashboard.fiabiliteFaible');
       default: return '';
     }
   }
 
   Widget _vueSelector() {
-    const options = [['direction', 'Direction'], ['qhse', 'Responsable QHSE'], ['terrain', 'Contrôleur Terrain']];
+    final options = [['direction', t('dashboard.vueDirection')], ['qhse', t('dashboard.vueQhse')], ['terrain', t('dashboard.vueTerrain')]];
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(color: QhseColors.card, borderRadius: BorderRadius.circular(10), border: Border.all(color: QhseColors.border)),
@@ -341,7 +342,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _alertsList(List alertes) {
     if (alertes.isEmpty) {
-      return Center(child: Text('Aucune alerte en cours.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
+      return Center(child: Text(t('dashboard.aucuneAlerte'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
     }
     final shown = alertes.take(vue == 'direction' ? 5 : 10).toList();
     return Column(children: [
@@ -359,7 +360,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   if (a['code'] != null) ...[const SizedBox(width: 6), Text('${a['code']}', style: TextStyle(fontSize: 10, color: QhseColors.textSecondary))],
                 ]),
                 Text('${a['title'] ?? ''}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: QhseColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text('${a['detail'] ?? ''}${a['dueDate'] != null ? ' · échéance ${_fmtDate(a['dueDate'])}' : ''}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+                Text('${a['detail'] ?? ''}${a['dueDate'] != null ? t('dashboard.echeance', {'date': _fmtDate(a['dueDate'])}) : ''}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
               ]),
             ),
           ]),
@@ -370,7 +371,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _recurrencesList(List recurrences) {
     if (recurrences.isEmpty) {
-      return Center(child: Text('Aucune récurrence détectée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
+      return Center(child: Text(t('dashboard.aucuneRecurrence'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
     }
     return Column(children: [
       for (final raw in recurrences) Builder(builder: (_) {
@@ -385,7 +386,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ]),
             const SizedBox(height: 2),
             Text('${r['processus'] ?? ''} · ${_fmtDate(r['premiereOccurrence'])} → ${_fmtDate(r['derniereOccurrence'])}', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
-            Text(faite ? '✓ cause racine identifiée' : '⚠ analyse causale manquante', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: faite ? QhseColors.green : QhseColors.amber)),
+            Text(faite ? t('dashboard.causeRacineIdentifiee') : t('dashboard.analyseCausaleManquante'), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: faite ? QhseColors.green : QhseColors.amber)),
           ]),
         );
       }),
@@ -394,7 +395,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _paretoList(List pareto) {
     if (pareto.isEmpty) {
-      return Center(child: Text('Aucune cause racine renseignée sur les événements sécurité', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
+      return Center(child: Text(t('dashboard.aucuneCauseRacine'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
     }
     final total = pareto.fold<num>(0, (s, p) => s + ((p['value'] ?? 0) as num));
     num cumul = 0;
@@ -416,7 +417,7 @@ class _DashboardPageState extends State<DashboardPage> {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(value: total > 0 ? value / total : 0, minHeight: 6, backgroundColor: QhseColors.border, color: QhseColors.red),
             ),
-            Align(alignment: Alignment.centerRight, child: Text('cumul ${cumulPct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 9, color: QhseColors.textSecondary))),
+            Align(alignment: Alignment.centerRight, child: Text(t('dashboard.cumul', {'pct': cumulPct.toStringAsFixed(0)}), style: TextStyle(fontSize: 9, color: QhseColors.textSecondary))),
           ]),
         );
       }),
@@ -424,7 +425,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _scoreBreakdown(dynamic global, Map<String, dynamic> domaines) {
-    const labels = {'qualite': 'Qualité', 'securite': 'Sécurité', 'risques': 'Risques', 'actions': 'Actions correctives'};
+    final labels = {'qualite': t('dashboard.domaineQualite'), 'securite': t('dashboard.domaineSecurite'), 'risques': t('dashboard.domaineRisques'), 'actions': t('dashboard.domaineActions')};
     final g = global is num ? global.round() : null;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Center(
@@ -443,7 +444,7 @@ class _DashboardPageState extends State<DashboardPage> {
             SizedBox(width: 88, child: Text(labels[entry.key] ?? entry.key, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: QhseColors.textPrimary))),
             Expanded(
               child: Text(
-                hasScore ? "${d['score']}% · ${d['detail'] ?? ''}" : "Données insuffisantes · ${d['detail'] ?? ''}",
+                hasScore ? "${d['score']}% · ${d['detail'] ?? ''}" : t('dashboard.donneesInsuffisantesDetail', {'detail': '${d['detail'] ?? ''}'}),
                 style: TextStyle(fontSize: 10, color: hasScore ? QhseColors.textSecondary : QhseColors.amber),
               ),
             ),
@@ -570,7 +571,7 @@ class _SeverityDonut extends StatelessWidget {
               child: Row(children: [
                 Container(width: 8, height: 8, decoration: BoxDecoration(color: _colorFor((s['severity'] ?? 1) as int), shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                Text('Sévérité ${s['severity']}', style: TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
+                Text(t('dashboard.severite', {'level': '${s['severity']}'}), style: TextStyle(fontSize: 10, color: QhseColors.textSecondary)),
               ]),
             ),
         ],
@@ -591,7 +592,7 @@ class _LabeledDonut extends StatelessWidget {
   Widget build(BuildContext context) {
     final filtered = entries.where((e) => e.value > 0).toList();
     if (filtered.isEmpty) {
-      return Center(child: Text('Aucune donnée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
+      return Center(child: Text(t('dashboard.aucuneDonnee'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
     }
     return Row(children: [
       Expanded(
@@ -644,7 +645,7 @@ class _HorizontalBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) {
-      return Center(child: Text('Aucune donnée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
+      return Center(child: Text(t('dashboard.aucuneDonnee'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)));
     }
     final max = entries.map((e) => e.value).fold<int>(1, (a, b) => a > b ? a : b);
     return Column(children: [
