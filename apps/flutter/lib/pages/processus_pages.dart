@@ -604,7 +604,7 @@ class _ProcessusHomeState extends State<ProcessusHome> {
                         ),
                       ]),
                       const SizedBox(height: 6),
-                      ...kProcessTypeLabels.keys.expand((t) {
+                      ...kProcessTypeKeys.keys.expand((t) {
                         final group = items.where((p) => (p['type'] ?? 'OPERATIONNEL') == t).toList();
                         if (group.isEmpty) return <Widget>[];
                         return [

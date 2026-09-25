@@ -22,18 +22,18 @@ const Map<String, String> trainingStatusKeys = {
   'REALISEE': 'statusRealisee', 'REPORTEE': 'statusReportee', 'ANNULEE': 'statusAnnulee', 'CLOTUREE': 'statusCloturee',
 };
 String trainingStatusLabelRaw(String? status) { final k = trainingStatusKeys[status]; return k == null ? (status ?? '—') : t('formation.$k'); }
-String trainingStatusLabel(Map t) {
-  final status = t['status'];
-  final scheduledAt = t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']) : null;
+String trainingStatusLabel(Map row) {
+  final status = row['status'];
+  final scheduledAt = row['scheduledAt'] != null ? DateTime.parse(row['scheduledAt']) : null;
   if (status != 'REALISEE' && status != 'CLOTUREE' && status != 'ANNULEE' && scheduledAt != null && scheduledAt.isBefore(DateTime.now())) return t('formation.statusEnRetard');
   return trainingStatusLabelRaw(status);
 }
-Color trainingStatusColor(Map t) {
-  final status = t['status'];
+Color trainingStatusColor(Map row) {
+  final status = row['status'];
   if (status == 'REALISEE' || status == 'CLOTUREE') return QhseColors.green;
   if (status == 'ANNULEE') return QhseColors.textSecondary;
   if (status == 'REPORTEE') return QhseColors.amber;
-  final scheduledAt = t['scheduledAt'] != null ? DateTime.parse(t['scheduledAt']) : null;
+  final scheduledAt = row['scheduledAt'] != null ? DateTime.parse(row['scheduledAt']) : null;
   if (scheduledAt != null && scheduledAt.isBefore(DateTime.now())) return QhseColors.red;
   return QhseColors.blue;
 }
