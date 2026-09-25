@@ -5857,6 +5857,7 @@ function IndicateursQualitePage() {
 
 function QualiteReclamationsPage() {
   const C = useTheme();
+  const { t, lang } = useI18n();
   const reclamations = useCollection('/business/reclamations');
   const stats = useCollection('/business/reclamations-stats');
   const alertesQ = useCollection('/business/reclamations-alertes');
@@ -5877,6 +5878,7 @@ function QualiteReclamationsPage() {
   const enCours = list.filter((r) => r.statut === 'OPEN').length;
   const recurrentes = list.filter((r) => r.recurrente).length;
   const graviteColor = { Critique: C.red, Majeure: C.red, Modérée: C.amber, Élevée: C.red, Faible: C.textMuted };
+  const dateLocale = lang === 'en' ? 'en-US' : 'fr-FR';
   const now = new Date();
   const enRetard = list.filter((r) => r.statut === 'OPEN' && r.delaiCibleJours && new Date(r.date).getTime() + r.delaiCibleJours * 86400000 < now.getTime()).length;
   const coutTotalGlobal = list.reduce((s2, r) => s2 + (r.coutTotal || 0), 0);
@@ -5892,10 +5894,11 @@ function QualiteReclamationsPage() {
   }
   const norm = (v) => (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const filteredReclamations = search.trim() ? sorted.filter((r) => norm([r.client, r.motif, r.produitService].join(' ')).includes(norm(search))) : sorted;
+  const reclamColumns = [t('reclamations.colClient'), t('reclamations.colMotif'), t('reclamations.colProduitService'), t('reclamations.colDate'), t('reclamations.colGravite'), t('reclamations.colStatut'), t('reclamations.colCout')];
   function reclamationsExportRows() {
     return [
-      ['Client', 'Motif', 'Produit/Service', 'Date', 'Gravité', 'Statut', 'Coût'],
-      ...filteredReclamations.map((r) => [r.client, r.motif, r.produitService || '', new Date(r.date).toLocaleDateString('fr-FR'), r.gravite || '', r.statut === 'OPEN' ? 'Ouverte' : 'Clôturée', r.coutTotal || 0]),
+      reclamColumns,
+      ...filteredReclamations.map((r) => [r.client, r.motif, r.produitService || '', new Date(r.date).toLocaleDateString(dateLocale), r.gravite || '', r.statut === 'OPEN' ? t('reclamations.ouverte') : t('reclamations.cloturee'), r.coutTotal || 0]),
     ];
   }
   function exportReclamationsExcel() { downloadWorkbook([['Réclamations', reclamationsExportRows()]], `Reclamations-${new Date().toISOString().slice(0, 10)}.xlsx`); }
@@ -5907,24 +5910,24 @@ function QualiteReclamationsPage() {
       {detailFor && <ReclamationDetailModal reclamationId={detailFor} onClose={() => setDetailFor(null)} onChanged={() => { reclamations.reload(); stats.reload(); alertesQ.reload(); scoreQ.reload(); }} onEdit={() => { setSelected(list.find((r) => r.id === detailFor)); setDetailFor(null); }} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle réclamation</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('reclamations.nouvelleReclamation')}</button>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {[['dashboard', 'Tableau de bord'], ['registre', 'Registre']].map(([id, label]) => (
+        {[['dashboard', t('reclamations.tabDashboard')], ['registre', t('reclamations.tabRegistre')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
 
       {tab === 'dashboard' && (
         <div className="space-y-6">
-          <Panel title="Score global de performance réclamations" subtitle="Moyenne pondérée — pondérations configurables ci-dessous.">
+          <Panel title={t('reclamations.scoreTitle')} subtitle={t('reclamations.scoreSubtitle')}>
             <div className="flex items-center gap-6">
               <div>
                 <p className="text-5xl font-bold" style={{ color: scoreLevel?.color || C.text }}>{score.score != null ? score.score : '—'}<span className="text-lg" style={{ color: C.textMuted }}>/100</span></p>
                 {scoreLevel && <p className="text-xs font-medium" style={{ color: scoreLevel.color }}>{scoreLevel.label}</p>}
               </div>
-              <button onClick={() => setShowPonderation((v) => !v)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{showPonderation ? 'Masquer les pondérations' : 'Régler les pondérations'}</button>
+              <button onClick={() => setShowPonderation((v) => !v)} className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{showPonderation ? t('reclamations.masquerPonderations') : t('reclamations.reglerPonderations')}</button>
             </div>
             {showPonderation && (
               <div className="mt-4 space-y-2">
@@ -5938,7 +5941,7 @@ function QualiteReclamationsPage() {
             )}
           </Panel>
 
-          <Panel title="Alertes automatiques" subtitle={`${alertes.length} réclamation(s) ouverte(s) nécessitant attention`}>
+          <Panel title={t('reclamations.alertesTitle')} subtitle={t('reclamations.alertesSubtitle', { count: alertes.length })}>
             {alertes.length
               ? <div className="space-y-2">
                   {alertes.map((a) => (
@@ -5951,31 +5954,31 @@ function QualiteReclamationsPage() {
                     </div>
                   ))}
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('reclamations.aucuneAlerte')}</p>}
           </Panel>
 
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Réclamations" value={list.length} objectif={`${enCours} en cours`} color={C.amber} icon={Bell} />
-            <KpiCard label="Gravité majeure/critique" value={list.filter((r) => r.gravite === 'Majeure' || r.gravite === 'Critique' || r.gravite === 'Élevée').length} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="En retard" value={enRetard} color={enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Récurrences détectées" value={s.recurrencesDetectees.length} color={s.recurrencesDetectees.length > 0 ? C.amber : C.green} icon={Activity} />
-            <KpiCard label="Satisfaction (après traitement)" value={closedWithSat.length ? `${Math.round((satisfaits / closedWithSat.length) * 100)}%` : '—'} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Coût total" value={`${coutTotalGlobal.toLocaleString('fr-FR')} FCFA`} color={C.amber} icon={ClipboardList} />
+            <KpiCard label={t('reclamations.kpiReclamations')} value={list.length} objectif={t('reclamations.kpiReclamationsSub', { count: enCours })} color={C.amber} icon={Bell} />
+            <KpiCard label={t('reclamations.kpiGraviteMajeure')} value={list.filter((r) => r.gravite === 'Majeure' || r.gravite === 'Critique' || r.gravite === 'Élevée').length} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('reclamations.kpiEnRetard')} value={enRetard} color={enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('reclamations.kpiRecurrences')} value={s.recurrencesDetectees.length} color={s.recurrencesDetectees.length > 0 ? C.amber : C.green} icon={Activity} />
+            <KpiCard label={t('reclamations.kpiSatisfaction')} value={closedWithSat.length ? `${Math.round((satisfaits / closedWithSat.length) * 100)}%` : '—'} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('reclamations.kpiCoutTotal')} value={`${coutTotalGlobal.toLocaleString(dateLocale)} FCFA`} color={C.amber} icon={ClipboardList} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Performance">
+            <Panel title={t('reclamations.performanceTitle')}>
               <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span style={{ color: C.textMuted }}>Taux de clôture</span><span style={{ color: C.text }}>{s.performance.tauxCloture != null ? `${s.performance.tauxCloture}%` : '—'}</span></div>
-                <div className="flex justify-between"><span style={{ color: C.textMuted }}>Taux de clôture dans les délais</span><span style={{ color: C.text }}>{s.performance.tauxClotureDelai != null ? `${s.performance.tauxClotureDelai}%` : '—'}</span></div>
-                <div className="flex justify-between"><span style={{ color: C.textMuted }}>Délai moyen d'accusé de réception</span><span style={{ color: C.text }}>{s.performance.delaiMoyenAccuseReception != null ? `${s.performance.delaiMoyenAccuseReception} j` : '—'}</span></div>
-                <div className="flex justify-between"><span style={{ color: C.textMuted }}>Délai moyen de première réponse</span><span style={{ color: C.text }}>{s.performance.delaiMoyenPremiereReponse != null ? `${s.performance.delaiMoyenPremiereReponse} j` : '—'}</span></div>
-                <div className="flex justify-between"><span style={{ color: C.textMuted }}>Délai moyen de résolution</span><span style={{ color: C.text }}>{s.performance.delaiMoyenResolution != null ? `${s.performance.delaiMoyenResolution} j` : '—'}</span></div>
-                <div className="flex justify-between"><span style={{ color: C.textMuted }}>Délai moyen de clôture</span><span style={{ color: C.text }}>{s.performance.delaiMoyenCloture != null ? `${s.performance.delaiMoyenCloture} j` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: C.textMuted }}>{t('reclamations.tauxCloture')}</span><span style={{ color: C.text }}>{s.performance.tauxCloture != null ? `${s.performance.tauxCloture}%` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: C.textMuted }}>{t('reclamations.tauxClotureDelai')}</span><span style={{ color: C.text }}>{s.performance.tauxClotureDelai != null ? `${s.performance.tauxClotureDelai}%` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: C.textMuted }}>{t('reclamations.delaiAccuse')}</span><span style={{ color: C.text }}>{s.performance.delaiMoyenAccuseReception != null ? `${s.performance.delaiMoyenAccuseReception} j` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: C.textMuted }}>{t('reclamations.delaiPremiereReponse')}</span><span style={{ color: C.text }}>{s.performance.delaiMoyenPremiereReponse != null ? `${s.performance.delaiMoyenPremiereReponse} j` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: C.textMuted }}>{t('reclamations.delaiResolution')}</span><span style={{ color: C.text }}>{s.performance.delaiMoyenResolution != null ? `${s.performance.delaiMoyenResolution} j` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: C.textMuted }}>{t('reclamations.delaiCloture')}</span><span style={{ color: C.text }}>{s.performance.delaiMoyenCloture != null ? `${s.performance.delaiMoyenCloture} j` : '—'}</span></div>
               </div>
             </Panel>
 
-            <Panel title="Récurrences détectées automatiquement" subtitle="Même client, même nature de problème, plus d'une fois">
+            <Panel title={t('reclamations.recurrencesTitle')} subtitle={t('reclamations.recurrencesSubtitle')}>
               {s.recurrencesDetectees.length
                 ? <div className="space-y-2">
                     {s.recurrencesDetectees.slice(0, 6).map((r, i) => (
@@ -5985,11 +5988,11 @@ function QualiteReclamationsPage() {
                       </div>
                     ))}
                   </div>
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune récurrence détectée</p>}
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('reclamations.aucuneRecurrence')}</p>}
             </Panel>
           </div>
 
-          <Panel title="Pareto des causes" subtitle="80% des réclamations viennent généralement de 20% des causes">
+          <Panel title={t('reclamations.paretoTitle')} subtitle={t('reclamations.paretoSubtitle')}>
             {s.pareto.length
               ? <ResponsiveContainer width="100%" height={280}>
                   <ComposedChart data={s.pareto}>
@@ -5998,21 +6001,21 @@ function QualiteReclamationsPage() {
                     <YAxis yAxisId="left" tick={{ fontSize: 10, fill: C.textMuted }} />
                     <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: C.textMuted }} />
                     <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
-                    <Bar yAxisId="left" dataKey="value" name="Nombre" fill={C.blue} radius={[4, 4, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="cumulPct" name="% cumulé" stroke={C.amber} strokeWidth={2} dot={{ r: 3 }} />
+                    <Bar yAxisId="left" dataKey="value" name={t('reclamations.paretoNombre')} fill={C.blue} radius={[4, 4, 0, 0]} />
+                    <Line yAxisId="right" type="monotone" dataKey="cumulPct" name={t('reclamations.paretoCumulPct')} stroke={C.amber} strokeWidth={2} dot={{ r: 3 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
-              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune réclamation classifiée pour le moment</p>}
+              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('reclamations.aucuneClassifiee')}</p>}
           </Panel>
 
           <div className="grid grid-cols-3 gap-4">
-            <Panel title="Par client">
+            <Panel title={t('reclamations.parClient')}>
               {s.parClient.length ? <div className="space-y-1">{s.parClient.map((c) => <div key={c.name} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{c.name}</span><span style={{ color: C.textMuted }}>{c.value}</span></div>)}</div> : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>—</p>}
             </Panel>
-            <Panel title="Par produit/service">
+            <Panel title={t('reclamations.parProduit')}>
               {s.parProduit.length ? <div className="space-y-1">{s.parProduit.map((c) => <div key={c.name} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{c.name}</span><span style={{ color: C.textMuted }}>{c.value}</span></div>)}</div> : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>—</p>}
             </Panel>
-            <Panel title="Par processus">
+            <Panel title={t('reclamations.parProcessus')}>
               {s.parProcessus.length ? <div className="space-y-1">{s.parProcessus.map((c) => <div key={c.name} className="flex justify-between text-xs py-1" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{c.name}</span><span style={{ color: C.textMuted }}>{c.value}</span></div>)}</div> : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>—</p>}
             </Panel>
           </div>
@@ -6022,16 +6025,16 @@ function QualiteReclamationsPage() {
       {tab === 'registre' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une réclamation (client, motif, produit...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('reclamations.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={exportReclamationsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
             <button onClick={exportReclamationsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
           </div>
-          <Panel title={search.trim() ? `Résultats de recherche (${filteredReclamations.length})` : 'Registre des réclamations clients'}>
+          <Panel title={search.trim() ? t('reclamations.resultatsRecherche', { count: filteredReclamations.length }) : t('reclamations.registreTitre')}>
             {filteredReclamations.length
-              ? <DataTable columns={['Client', 'Motif', 'Produit/Service', 'Date', 'Gravité', 'Statut', 'Coût']}
-                  rows={filteredReclamations.map((r) => [r.client, r.motif, r.produitService || '—', new Date(r.date).toLocaleDateString('fr-FR'), <span style={{ color: graviteColor[r.gravite] || C.textMuted }}>{r.gravite}</span>, <StatusChip statut={r.statut === 'OPEN' ? 'Ouverte' : 'Clôturée'} />, r.coutTotal ? `${r.coutTotal.toLocaleString('fr-FR')} FCFA` : '—'])}
+              ? <DataTable columns={reclamColumns}
+                  rows={filteredReclamations.map((r) => [r.client, r.motif, r.produitService || '—', new Date(r.date).toLocaleDateString(dateLocale), <span style={{ color: graviteColor[r.gravite] || C.textMuted }}>{r.gravite}</span>, <StatusChip statut={r.statut === 'OPEN' ? t('reclamations.ouverte') : t('reclamations.cloturee')} />, r.coutTotal ? `${r.coutTotal.toLocaleString(dateLocale)} FCFA` : '—'])}
                   onRowClick={(i) => setDetailFor(filteredReclamations[i].id)} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune réclamation enregistrée pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('reclamations.aucunResultat') : t('reclamations.aucuneEnregistree')}</p>}
           </Panel>
         </div>
       )}
@@ -6146,6 +6149,7 @@ function FournisseurDetailModal({ fournisseurId, onClose, onEdit }) {
 
 function QualiteFournisseursPage() {
   const C = useTheme();
+  const { t } = useI18n();
   const fournisseurs = useCollection('/business/fournisseurs');
   const classementQ = useCollection('/business/fournisseurs-classement');
   const alertesQ = useCollection('/business/fournisseurs-alertes');
@@ -6164,9 +6168,9 @@ function QualiteFournisseursPage() {
   const matrice = matriceQ.data || [];
   const niveauColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber };
   const statutLabel = {
-    PROSPECT: 'Prospect', EN_QUALIFICATION: 'En qualification', EN_ATTENTE_HOMOLOGATION: "En attente d'homologation",
-    HOMOLOGUE: 'Homologué', HOMOLOGUE_CONDITIONS: 'Homologué sous conditions', SOUS_SURVEILLANCE: 'Sous surveillance',
-    SUSPENDU: 'Suspendu', BLOQUE: 'Bloqué', INACTIF: 'Inactif', RETIRE: 'Retiré du panel',
+    PROSPECT: t('fournisseurs.statutProspect'), EN_QUALIFICATION: t('fournisseurs.statutEnQualification'), EN_ATTENTE_HOMOLOGATION: t('fournisseurs.statutEnAttenteHomologation'),
+    HOMOLOGUE: t('fournisseurs.statutHomologue'), HOMOLOGUE_CONDITIONS: t('fournisseurs.statutHomologueConditions'), SOUS_SURVEILLANCE: t('fournisseurs.statutSousSurveillance'),
+    SUSPENDU: t('fournisseurs.statutSuspendu'), BLOQUE: t('fournisseurs.statutBloque'), INACTIF: t('fournisseurs.statutInactif'), RETIRE: t('fournisseurs.statutRetire'),
   };
   const criticiteCount = list.filter((f) => f.criticite).length;
   const nonHomologues = list.filter((f) => ['EN_ATTENTE_HOMOLOGATION', 'EN_QUALIFICATION'].includes(f.statut)).length;
@@ -6182,7 +6186,7 @@ function QualiteFournisseursPage() {
   const filteredFournisseurs = search.trim() ? list.filter((f) => norm([f.nom, f.typeFournisseur, f.categorie].join(' ')).includes(norm(search))) : list;
   function fournisseursExportRows() {
     return [
-      ['Fournisseur', 'Type', 'Score global', 'NC ouvertes', 'Statut'],
+      [t('fournisseurs.colFournisseur'), t('fournisseurs.colType'), t('fournisseurs.colScoreGlobal'), t('fournisseurs.colNcOuvertes'), t('fournisseurs.colStatut')],
       ...filteredFournisseurs.map((f) => [f.nom, f.typeFournisseur || f.categorie || '', scoreGlobalApprox(f) ?? '', f._count?.nonConformities || 0, statutLabel[f.statut] || f.statut]),
     ];
   }
@@ -6195,11 +6199,11 @@ function QualiteFournisseursPage() {
       {detailFor && <FournisseurDetailModal fournisseurId={detailFor} onClose={() => setDetailFor(null)} onEdit={() => { setSelected(list.find((f) => f.id === detailFor)); setDetailFor(null); }} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau fournisseur</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('fournisseurs.nouveauFournisseur')}</button>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {[['dashboard', 'Tableau de bord'], ['registre', 'Registre']].map(([id, label]) => (
+        {[['dashboard', t('fournisseurs.tabDashboard')], ['registre', t('fournisseurs.tabRegistre')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -6207,14 +6211,14 @@ function QualiteFournisseursPage() {
       {tab === 'dashboard' && (
         <div className="space-y-6">
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Fournisseurs" value={list.length} color={C.blue} icon={FlaskConical} />
-            <KpiCard label="Critiques" value={criticiteCount} color={criticiteCount > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="En attente d'homologation" value={nonHomologues} color={nonHomologues > 0 ? C.amber : C.green} icon={ClipboardList} />
-            <KpiCard label="Avec NC ouvertes" value={avecNcOuvertes} color={avecNcOuvertes > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Réévaluation échue" value={reevaluationEchue} color={reevaluationEchue > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('fournisseurs.kpiFournisseurs')} value={list.length} color={C.blue} icon={FlaskConical} />
+            <KpiCard label={t('fournisseurs.kpiCritiques')} value={criticiteCount} color={criticiteCount > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('fournisseurs.kpiEnAttenteHomologation')} value={nonHomologues} color={nonHomologues > 0 ? C.amber : C.green} icon={ClipboardList} />
+            <KpiCard label={t('fournisseurs.kpiAvecNc')} value={avecNcOuvertes} color={avecNcOuvertes > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('fournisseurs.kpiReevaluationEchue')} value={reevaluationEchue} color={reevaluationEchue > 0 ? C.red : C.green} icon={AlertTriangle} />
           </div>
 
-          <Panel title="Alertes automatiques" subtitle={`${alertes.length} fournisseur(s) nécessitant attention`}>
+          <Panel title={t('fournisseurs.alertesTitle')} subtitle={t('fournisseurs.alertesSubtitle', { count: alertes.length })}>
             {alertes.length
               ? <div className="space-y-2">
                   {alertes.map((a) => (
@@ -6227,26 +6231,26 @@ function QualiteFournisseursPage() {
                     </div>
                   ))}
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('fournisseurs.aucuneAlerte')}</p>}
           </Panel>
 
           {matrice.length > 0 && (
-            <Panel title="Matrice de risque fournisseurs" subtitle="Risques actifs liés à un fournisseur — probabilité × gravité.">
-              <DataTable columns={['Fournisseur', 'Risque', 'Probabilité', 'Gravité', 'Score']}
+            <Panel title={t('fournisseurs.matriceTitle')} subtitle={t('fournisseurs.matriceSubtitle')}>
+              <DataTable columns={[t('fournisseurs.colFournisseur'), t('fournisseurs.colRisque'), t('fournisseurs.colProbabilite'), t('fournisseurs.colGravite'), t('fournisseurs.colScore')]}
                 rows={matrice.map((r) => [r.fournisseur || '—', r.hazard, r.probability, r.severity, <span style={{ color: r.score >= 12 ? C.red : r.score >= 6 ? C.amber : C.green, fontWeight: 600 }}>{r.score}</span>])} />
             </Panel>
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Top 10 fournisseurs" subtitle="Classés par score global pondéré (mêmes pondérations que le score détaillé).">
+            <Panel title={t('fournisseurs.topTitle')} subtitle={t('fournisseurs.topSubtitle')}>
               {classement.top.length
                 ? <div className="space-y-1">{classement.top.map((f, i) => <div key={f.id} onClick={() => setDetailFor(f.id)} className="flex justify-between text-xs py-1.5 cursor-pointer" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{i + 1}. {f.nom}</span><span style={{ color: C.green, fontWeight: 600 }}>{f.score}%</span></div>)}</div>
-                : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>Aucun fournisseur avec un score renseigné</p>}
+                : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>{t('fournisseurs.aucunScore')}</p>}
             </Panel>
-            <Panel title="Fournisseurs les moins performants">
+            <Panel title={t('fournisseurs.flopTitle')}>
               {classement.flop.length
                 ? <div className="space-y-1">{classement.flop.map((f, i) => <div key={f.id} onClick={() => setDetailFor(f.id)} className="flex justify-between text-xs py-1.5 cursor-pointer" style={{ borderTop: `1px solid ${C.border}` }}><span style={{ color: C.text }}>{i + 1}. {f.nom}</span><span style={{ color: f.score < 50 ? C.red : C.amber, fontWeight: 600 }}>{f.score}%</span></div>)}</div>
-                : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>Aucun fournisseur avec un score renseigné</p>}
+                : <p className="text-xs text-center py-4" style={{ color: C.textMuted }}>{t('fournisseurs.aucunScore')}</p>}
             </Panel>
           </div>
         </div>
@@ -6255,13 +6259,13 @@ function QualiteFournisseursPage() {
       {tab === 'registre' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un fournisseur (nom, type...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('fournisseurs.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={exportFournisseursExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
             <button onClick={exportFournisseursCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
           </div>
-          <Panel title={search.trim() ? `Résultats de recherche (${filteredFournisseurs.length})` : 'Évaluation des fournisseurs'}>
+          <Panel title={search.trim() ? t('fournisseurs.resultatsRecherche', { count: filteredFournisseurs.length }) : t('fournisseurs.evaluationTitre')}>
             {filteredFournisseurs.length
-              ? <DataTable columns={['Fournisseur', 'Type', 'Score global (moyenne)', 'NC ouvertes', 'Statut']}
+              ? <DataTable columns={[t('fournisseurs.colFournisseur'), t('fournisseurs.colType'), t('fournisseurs.colScoreGlobalMoyenne'), t('fournisseurs.colNcOuvertes'), t('fournisseurs.colStatut')]}
                   rows={filteredFournisseurs.map((f) => {
                     const score = scoreGlobalApprox(f);
                     return [
@@ -6272,7 +6276,7 @@ function QualiteFournisseursPage() {
                     ];
                   })}
                   onRowClick={(i) => setDetailFor(filteredFournisseurs[i].id)} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun fournisseur enregistré pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('fournisseurs.aucunResultat') : t('fournisseurs.aucunEnregistre')}</p>}
           </Panel>
         </div>
       )}
@@ -9798,13 +9802,14 @@ function CapaPage() {
 
 function VeillePage() {
   const C = useTheme();
+  const { t, lang } = useI18n();
   const veille = useCollection('/business/veille-reglementaire');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
   if (veille.loading) return <LoadingPanel />;
   if (veille.error) return <ErrorPanel message={veille.error} onRetry={veille.reload} />;
   const list = veille.data || [];
-  const statutLabel = { A_TRAITER: 'À traiter', EN_COURS: 'En cours', INTEGREE: 'Intégrée' };
+  const statutLabel = { A_TRAITER: t('veille.statutATraiter'), EN_COURS: t('veille.statutEnCours'), INTEGREE: t('veille.statutIntegree') };
   const sorted = [...list].sort((a, b) => (a.dateApplication ? new Date(a.dateApplication) : Infinity) - (b.dateApplication ? new Date(b.dateApplication) : Infinity));
 
   return (
@@ -9812,14 +9817,14 @@ function VeillePage() {
       {(showForm || selected) && <VeilleForm record={selected} onClose={() => { setShowForm(false); setSelected(null); }} onCreated={veille.reload} />}
       <div className="flex items-center justify-between">
         <LiveBadge />
-        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau texte</button>
+        <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('veille.nouveauTexte')}</button>
       </div>
-      <Panel title="Veille réglementaire QHSE">
+      <Panel title={t('veille.titre')}>
         {sorted.length
-          ? <DataTable columns={['Texte', 'Domaine', "Date d'application", 'Statut']}
-              rows={sorted.map((v) => [v.texte, v.domaine || '—', v.dateApplication ? new Date(v.dateApplication).toLocaleDateString('fr-FR') : '—', <StatusChip statut={statutLabel[v.statut] || v.statut} />])}
+          ? <DataTable columns={[t('veille.colTexte'), t('veille.colDomaine'), t('veille.colDateApplication'), t('veille.colStatut')]}
+              rows={sorted.map((v) => [v.texte, v.domaine || '—', v.dateApplication ? new Date(v.dateApplication).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR') : '—', <StatusChip statut={statutLabel[v.statut] || v.statut} />])}
               onRowClick={(i) => setSelected(sorted[i])} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun texte réglementaire enregistré pour le moment</p>}
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('veille.aucunTexte')}</p>}
       </Panel>
     </div>
   );
@@ -10810,10 +10815,11 @@ function RegulatoryReportsTab() {
 
 function VeilleReglementairePage() {
   const C = useTheme();
+  const { t } = useI18n();
   const [tab, setTab] = useState('dashboard');
   const tabs = [
-    ['dashboard', 'Tableau de bord'], ['textes', 'Textes'], ['exigences', 'Exigences'], ['alertes', 'Alertes & échéances'],
-    ['reevaluations', 'Réévaluations risques'], ['rapports', 'Rapports & indicateurs'], ['domaines', 'Domaines'], ['catalogue', 'Catalogue simple (ancien)'],
+    ['dashboard', t('veilleReg.tabDashboard')], ['textes', t('veilleReg.tabTextes')], ['exigences', t('veilleReg.tabExigences')], ['alertes', t('veilleReg.tabAlertes')],
+    ['reevaluations', t('veilleReg.tabReevaluations')], ['rapports', t('veilleReg.tabRapports')], ['domaines', t('veilleReg.tabDomaines')], ['catalogue', t('veilleReg.tabCatalogue')],
   ];
   return (
     <div className="space-y-4">
@@ -11831,8 +11837,9 @@ function ObjectifRecetteTab() {
 }
 function ObjectifsPage() {
   const C = useTheme();
+  const { t } = useI18n();
   const [tab, setTab] = useState('dashboard');
-  const tabs = [['dashboard', 'Tableau de bord'], ['matrice', 'Objectifs'], ['bibliotheque', 'Bibliothèque'], ['recette', 'Recette (CA-01 à CA-49)']];
+  const tabs = [['dashboard', t('objectifsPage.tabDashboard')], ['matrice', t('objectifsPage.tabMatrice')], ['bibliotheque', t('objectifsPage.tabBibliotheque')], ['recette', t('objectifsPage.tabRecette')]];
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2"><LiveBadge /></div>
@@ -11850,6 +11857,7 @@ function ObjectifsPage() {
 }
 function RapportsPage() {
   const C = useTheme();
+  const { t, lang } = useI18n();
   const [tab, setTab] = useState('generateur');
   const [derniers, setDerniers] = useState([]);
   const dashboardQ = useCollection('/dashboard');
@@ -11903,14 +11911,14 @@ function RapportsPage() {
     if (format === 'excel') {
       downloadWorkbook(rep.sheets(), `${rep.titre.replace(/[^a-zA-Z0-9]+/g, '-')}.xlsx`);
     }
-    setDerniers((prev) => [{ titre: rep.titre, format, date: new Date().toLocaleString('fr-FR') }, ...prev].slice(0, 5));
+    setDerniers((prev) => [{ titre: rep.titre, format, date: new Date().toLocaleString(lang === 'en' ? 'en-US' : 'fr-FR') }, ...prev].slice(0, 5));
   }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <LiveBadge />
         <div className="flex flex-wrap gap-2">
-          {[['generateur', 'Générateur'], ['identite', "Identité de l'entreprise"], ['consolidation', 'Aperçu consolidation'], ['document', 'Document standardisé']].map(([id, label]) => (
+          {[['generateur', t('rapports.tabGenerateur')], ['identite', t('rapports.tabIdentite')], ['consolidation', t('rapports.tabConsolidation')], ['document', t('rapports.tabDocument')]].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : C.cardAlt, color: tab === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
           ))}
         </div>
@@ -11921,18 +11929,18 @@ function RapportsPage() {
             {reports.map((r) => (
               <Panel key={r.id} title={r.titre} subtitle={r.description}>
                 <div className="flex gap-2">
-                  <button onClick={() => generer(r, 'pdf')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Générer PDF</button>
-                  <button onClick={() => generer(r, 'excel')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>Générer Excel</button>
+                  <button onClick={() => generer(r, 'pdf')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('rapports.genererPdf')}</button>
+                  <button onClick={() => generer(r, 'excel')} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, color: C.text, border: `1px solid ${C.border}` }}>{t('rapports.genererExcel')}</button>
                 </div>
               </Panel>
             ))}
           </div>
-          <Panel title="Derniers rapports générés">
+          <Panel title={t('rapports.derniersGeneres')}>
             {derniers.length === 0
-              ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun rapport généré pour le moment</p>
-              : <DataTable columns={['Rapport', 'Format', 'Généré le']} rows={derniers.map((d) => [d.titre, d.format.toUpperCase(), d.date])} />}
+              ? <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('rapports.aucunGenere')}</p>
+              : <DataTable columns={[t('rapports.colRapport'), t('rapports.colFormat'), t('rapports.colGenereLe')]} rows={derniers.map((d) => [d.titre, d.format.toUpperCase(), d.date])} />}
             <p className="text-xs mt-3" style={{ color: C.textMuted }}>
-              « Générer PDF » ouvre un aperçu imprimable (Ctrl+P puis « Enregistrer en PDF » depuis votre navigateur) — la génération PDF directe n'est pas disponible dans cet environnement d'aperçu. « Générer Excel » télécharge un classeur réel, construit à partir de vos données actuelles.
+              {t('rapports.noteGeneration')}
             </p>
           </Panel>
         </>
@@ -13297,6 +13305,7 @@ function HaccpOverviewTab({ onOpenMonitoring }) {
 
 function HaccpPage() {
   const C = useTheme();
+  const { t } = useI18n();
   const [tab, setTab] = useState('apercu');
   const [surveillanceStudyId, setSurveillanceStudyId] = useState(null);
   const [surveillanceCcpId, setSurveillanceCcpId] = useState(null);
@@ -13306,7 +13315,7 @@ function HaccpPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['etudes', 'Études'], ['surveillance', 'Surveillance'], ['prp', 'PRP / BPH'], ['matrice', 'Matrice']].map(([id, label]) => (
+        {[['apercu', t('haccpPage.tabApercu')], ['etudes', t('haccpPage.tabEtudes')], ['surveillance', t('haccpPage.tabSurveillance')], ['prp', t('haccpPage.tabPrp')], ['matrice', t('haccpPage.tabMatrice')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -14585,6 +14594,7 @@ function CompetenceQuickForm({ onClose, onCreated }) {
 
 function EquipmentPage() {
   const C = useTheme();
+  const { t, lang } = useI18n();
   const equipment = useCollection('/business/equipment');
   const dashboardQ = useCollection('/business/equipment-dashboard');
   const [showForm, setShowForm] = useState(false);
@@ -14611,6 +14621,7 @@ function EquipmentPage() {
     if (filter === 'CRITIQUES') return e.criticiteNiveau === 'CRITIQUE';
     return true;
   }).filter((e) => !search.trim() || norm([e.code, e.name, e.categoryEq?.label, e.category, e.site?.name].join(' ')).includes(norm(search)));
+  const dateLocale = lang === 'en' ? 'en-US' : 'fr-FR';
   const dash = dashboardQ.data;
   return (
     <div className="space-y-6">
@@ -14619,64 +14630,64 @@ function EquipmentPage() {
       <div className="flex items-center justify-between">
         <LiveBadge />
         <div className="flex gap-2">
-          <button onClick={() => setShowAnalytics((v) => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: showAnalytics ? C.blue : C.cardAlt, color: showAnalytics ? '#fff' : C.text, border: `1px solid ${C.border}` }}>{showAnalytics ? 'Masquer les analytics' : 'Analytics avancées'}</button>
-          <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel équipement</button>
+          <button onClick={() => setShowAnalytics((v) => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: showAnalytics ? C.blue : C.cardAlt, color: showAnalytics ? '#fff' : C.text, border: `1px solid ${C.border}` }}>{showAnalytics ? t('equipements.masquerAnalytics') : t('equipements.analyticsAvancees')}</button>
+          <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('equipements.nouvelEquipement')}</button>
         </div>
       </div>
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="Équipements" value={list.length} color={C.blue} icon={Cog} />
-        <KpiCard label="En retard" value={list.filter(equipmentIsOverdue).length} color={C.red} icon={AlertTriangle} />
-        <KpiCard label="Non conformes" value={list.filter(equipmentHasNonConformiteOuverte).length} color={C.amber} icon={FileWarning} />
-        <KpiCard label="Critiques" value={list.filter((e) => e.criticiteNiveau === 'CRITIQUE').length} color={C.red} icon={Shield} />
-        <KpiCard label="Hors service" value={list.filter((e) => ['HORS_SERVICE', 'CONSIGNE', 'REFORME', 'MIS_AU_REBUT'].includes(e.etat)).length} color={C.textMuted} icon={Wrench} />
+        <KpiCard label={t('equipements.kpiEquipements')} value={list.length} color={C.blue} icon={Cog} />
+        <KpiCard label={t('equipements.kpiEnRetard')} value={list.filter(equipmentIsOverdue).length} color={C.red} icon={AlertTriangle} />
+        <KpiCard label={t('equipements.kpiNonConformes')} value={list.filter(equipmentHasNonConformiteOuverte).length} color={C.amber} icon={FileWarning} />
+        <KpiCard label={t('equipements.kpiCritiques')} value={list.filter((e) => e.criticiteNiveau === 'CRITIQUE').length} color={C.red} icon={Shield} />
+        <KpiCard label={t('equipements.kpiHorsService')} value={list.filter((e) => ['HORS_SERVICE', 'CONSIGNE', 'REFORME', 'MIS_AU_REBUT'].includes(e.etat)).length} color={C.textMuted} icon={Wrench} />
       </div>
       {showAnalytics && dash && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Taux de disponibilité" value={dash.tauxDisponibilite != null ? `${dash.tauxDisponibilite}%` : '—'} color={C.green} icon={CheckCircle2} />
-            <KpiCard label="Indice de conformité" value={dash.indiceConformite != null ? `${dash.indiceConformite}%` : '—'} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Échéances en retard" value={dash.enRetard} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="Critiques avec NC ouverte" value={dash.critiquesNonTraites} color={C.red} icon={FileWarning} />
-            <KpiCard label="Coût maintenance" value={`${dash.coutTotalMaintenance.toLocaleString('fr-FR')} FCFA`} color={C.amber} icon={Wrench} />
-            <KpiCard label="Coût étalonnage + contrôles" value={`${(dash.coutTotalEtalonnage + dash.coutTotalControles).toLocaleString('fr-FR')} FCFA`} color={C.amber} icon={ClipboardCheck} />
+            <KpiCard label={t('equipements.kpiTauxDisponibilite')} value={dash.tauxDisponibilite != null ? `${dash.tauxDisponibilite}%` : '—'} color={C.green} icon={CheckCircle2} />
+            <KpiCard label={t('equipements.kpiIndiceConformite')} value={dash.indiceConformite != null ? `${dash.indiceConformite}%` : '—'} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('equipements.kpiEcheancesEnRetard')} value={dash.enRetard} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('equipements.kpiCritiquesNc')} value={dash.critiquesNonTraites} color={C.red} icon={FileWarning} />
+            <KpiCard label={t('equipements.kpiCoutMaintenance')} value={`${dash.coutTotalMaintenance.toLocaleString(dateLocale)} FCFA`} color={C.amber} icon={Wrench} />
+            <KpiCard label={t('equipements.kpiCoutEtalonnage')} value={`${(dash.coutTotalEtalonnage + dash.coutTotalControles).toLocaleString(dateLocale)} FCFA`} color={C.amber} icon={ClipboardCheck} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Répartition par état">
+            <Panel title={t('equipements.parEtat')}>
               <DonutChart data={Object.entries(dash.parEtat).map(([k, v]) => ({ name: EQUIPMENT_ETAT_LABELS[k] || k, value: v }))} colors={[C.green, C.blue, C.amber, C.red, C.textMuted, C.red, C.textMuted, C.textMuted]} />
             </Panel>
-            <Panel title="Répartition par criticité">
+            <Panel title={t('equipements.parCriticite')}>
               <DonutChart data={Object.entries(dash.parCriticite).map(([k, v]) => ({ name: EQUIPMENT_CRITICITE_LABELS[k] || k, value: v }))} colors={[C.textMuted, C.blue, C.amber, C.red]} />
             </Panel>
           </div>
-          <Panel title="Top 5 des coûts de maintenance">
+          <Panel title={t('equipements.topCouts')}>
             {dash.topCouts.length
-              ? <DataTable columns={['Équipement', 'Coût cumulé']} rows={dash.topCouts.map((t) => [`${t.code} — ${t.name}`, `${t.total.toLocaleString('fr-FR')} FCFA`])} />
-              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun coût de maintenance enregistré</p>}
+              ? <DataTable columns={[t('equipements.colEquipement'), t('equipements.colCoutCumule')]} rows={dash.topCouts.map((tc) => [`${tc.code} — ${tc.name}`, `${tc.total.toLocaleString(dateLocale)} FCFA`])} />
+              : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>{t('equipements.aucunCout')}</p>}
           </Panel>
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        {[['TOUS', 'Tous'], ['A_JOUR', 'À jour'], ['EN_RETARD', 'En retard'], ['NON_CONFORMES', 'Non conformes'], ['MAINTENANCE', 'Maintenance'], ['HORS_SERVICE', 'Hors service'], ['CRITIQUES', 'Critiques']].map(([id, label]) => (
+        {[['TOUS', t('equipements.filtreTous')], ['A_JOUR', t('equipements.filtreAJour')], ['EN_RETARD', t('equipements.filtreEnRetard')], ['NON_CONFORMES', t('equipements.filtreNonConformes')], ['MAINTENANCE', t('equipements.filtreMaintenance')], ['HORS_SERVICE', t('equipements.filtreHorsService')], ['CRITIQUES', t('equipements.filtreCritiques')]].map(([id, label]) => (
           <button key={id} onClick={() => setFilter(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: filter === id ? C.blue : C.cardAlt, color: filter === id ? '#fff' : C.textMuted, border: `1px solid ${C.border}` }}>{label}</button>
         ))}
       </div>
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un équipement (code, nom, catégorie, site...)" className="w-full max-w-md px-3 py-2 rounded-lg text-xs outline-none" style={inputStyle(C)} />
-      <Panel title="Registre des équipements" subtitle={`${filtered.length} équipement(s)`} right={
+      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('equipements.rechercherPlaceholder')} className="w-full max-w-md px-3 py-2 rounded-lg text-xs outline-none" style={inputStyle(C)} />
+      <Panel title={t('equipements.registreTitre')} subtitle={t('equipements.registreSubtitle', { count: filtered.length })} right={
         <div className="flex gap-2">
           <button onClick={() => exportEquipmentExcel(filtered)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
           <button onClick={() => exportEquipmentCsv(filtered)} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
-          <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}><Printer size={14} /> Imprimer / PDF</button>
+          <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.green, color: '#052e1f' }}><Printer size={14} /> {t('equipements.imprimer')}</button>
         </div>
       }>
         {filtered.length
-          ? <DataTable columns={['Code', 'Équipement', 'Catégorie', 'Site', 'Responsable', 'État', 'Criticité', 'Prochaine échéance']}
+          ? <DataTable columns={[t('equipements.colCode'), t('equipements.colEquipement'), t('equipements.colCategorie'), t('equipements.colSite'), t('equipements.colResponsable'), t('equipements.colEtat'), t('equipements.colCriticite'), t('equipements.colProchaineEcheance')]}
               rows={filtered.map((e) => [
                 e.code, e.name, e.categoryEq?.label || e.category || '—', e.site?.name || '—', e.responsable ? `${e.responsable.firstName} ${e.responsable.lastName}` : '—',
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${equipmentEtatColor(C, e.etat)}22`, color: equipmentEtatColor(C, e.etat) }}>{EQUIPMENT_ETAT_LABELS[e.etat] || e.etat}</span>,
                 e.criticiteNiveau ? <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${equipmentCriticiteColor(C, e.criticiteNiveau)}22`, color: equipmentCriticiteColor(C, e.criticiteNiveau) }}>{EQUIPMENT_CRITICITE_LABELS[e.criticiteNiveau]}</span> : '—',
-                equipmentNextDueDate(e) ? <span style={{ color: equipmentIsOverdue(e) ? C.red : C.text }}>{equipmentNextDueDate(e).toLocaleDateString('fr-FR')}</span> : '—',
+                equipmentNextDueDate(e) ? <span style={{ color: equipmentIsOverdue(e) ? C.red : C.text }}>{equipmentNextDueDate(e).toLocaleDateString(dateLocale)}</span> : '—',
               ])} onRowClick={(i) => setDetailId(filtered[i].id)} />
-          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun équipement pour ce filtre</p>}
+          : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('equipements.aucunPourFiltre')}</p>}
       </Panel>
     </div>
   );
