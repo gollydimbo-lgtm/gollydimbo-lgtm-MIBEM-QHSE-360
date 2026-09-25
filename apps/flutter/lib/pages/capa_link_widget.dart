@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'actions_page.dart';
 import 'attachment_helpers.dart';
 
-const _capaTypeLabels = {'CURATIVE': 'Curative / immédiate', 'CORRECTIVE': 'Corrective', 'PREVENTIVE': 'Préventive', 'AMELIORATION': 'Amélioration'};
-const _capaPriorityLabels = {1: 'Urgente', 2: 'Haute', 3: 'Moyenne', 4: 'Faible'};
+Map<String, String> get _capaTypeLabels => {'CURATIVE': t('capaLinkWidget.typeCurative'), 'CORRECTIVE': t('capaLinkWidget.typeCorrective'), 'PREVENTIVE': t('capaLinkWidget.typePreventive'), 'AMELIORATION': t('capaLinkWidget.typeAmelioration')};
+Map<int, String> get _capaPriorityLabels => {1: t('capaLinkWidget.prioriteUrgente'), 2: t('capaLinkWidget.prioriteHaute'), 3: t('capaLinkWidget.prioriteMoyenne'), 4: t('capaLinkWidget.prioriteFaible')};
 
 // Retour de statut vers le module source (point 10 du cahier des charges) —
 // le module d'origine doit refléter automatiquement où en est sa CAPA,
@@ -15,13 +16,13 @@ const _capaPriorityLabels = {1: 'Urgente', 2: 'Haute', 3: 'Moyenne', 4: 'Faible'
   if (action == null) return ('—', QhseColors.textSecondary);
   final status = action['status'];
   final eff = action['effectivenessResult'];
-  if (status == 'CLOSED') return ('CAPA clôturée', QhseColors.green);
-  if (eff == 'INEFFICACE') return ('CAPA inefficace — nouvelle action nécessaire', QhseColors.red);
-  if (eff == 'EFFICACE') return ('CAPA efficace', QhseColors.green);
-  if (['COMPLETED', 'EFFECTIVENESS_CHECK', 'VALIDATED'].contains(status)) return ('Action réalisée — efficacité à vérifier', QhseColors.amber);
-  if (['CANCELLED', 'REJECTED'].contains(status)) return ('CAPA annulée', QhseColors.textSecondary);
-  if (['DRAFT', 'TO_ANALYZE', 'PLANNED', 'ASSIGNED'].contains(status)) return ('CAPA ouverte', QhseColors.blue);
-  return ('Traitement en cours', QhseColors.blue);
+  if (status == 'CLOSED') return (t('capaLinkWidget.capaCloturee'), QhseColors.green);
+  if (eff == 'INEFFICACE') return (t('capaLinkWidget.capaInefficace'), QhseColors.red);
+  if (eff == 'EFFICACE') return (t('capaLinkWidget.capaEfficace'), QhseColors.green);
+  if (['COMPLETED', 'EFFECTIVENESS_CHECK', 'VALIDATED'].contains(status)) return (t('capaLinkWidget.actionRealiseeEfficaciteAVerifier'), QhseColors.amber);
+  if (['CANCELLED', 'REJECTED'].contains(status)) return (t('capaLinkWidget.capaAnnulee'), QhseColors.textSecondary);
+  if (['DRAFT', 'TO_ANALYZE', 'PLANNED', 'ASSIGNED'].contains(status)) return (t('capaLinkWidget.capaOuverte'), QhseColors.blue);
+  return (t('capaLinkWidget.traitementEnCours'), QhseColors.blue);
 }
 
 class CapaStatutChip extends StatelessWidget {
@@ -95,16 +96,16 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
     final attachments = List.from(p['attachments'] ?? []);
     List<String> selected = attachments.map<String>((a) => '${a['id']}').toList();
     await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-      title: const Text('Créer une CAPA à partir de cette donnée ?'),
+      title: Text(t('capaLinkWidget.creerCapaTitre')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _confirmRow('Module source', widget.sourceModule),
-        _confirmRow('Type proposé', _capaTypeLabels[p!['actionType']] ?? '${p['actionType'] ?? '—'}'),
-        _confirmRow('Priorité proposée', _capaPriorityLabels[p['priority']] ?? '—'),
-        _confirmRow('Criticité', '${p['criticite'] ?? '—'}'),
-        _confirmRow('Échéance proposée', p['dueDate'] != null ? '${p['dueDate']}'.substring(0, 10) : '—'),
+        _confirmRow(t('capaLinkWidget.moduleSource'), widget.sourceModule),
+        _confirmRow(t('capaLinkWidget.typePropose'), _capaTypeLabels[p!['actionType']] ?? '${p['actionType'] ?? '—'}'),
+        _confirmRow(t('capaLinkWidget.prioritePropose'), _capaPriorityLabels[p['priority']] ?? '—'),
+        _confirmRow(t('capaLinkWidget.criticite'), '${p['criticite'] ?? '—'}'),
+        _confirmRow(t('capaLinkWidget.echeanceProposee'), p['dueDate'] != null ? '${p['dueDate']}'.substring(0, 10) : '—'),
         if (attachments.isNotEmpty) ...[
           const SizedBox(height: 12),
-          const Text('Pièces jointes disponibles depuis la source', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(t('capaLinkWidget.piecesJointesDisponibles'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           ...attachments.map((a) => CheckboxListTile(
                 dense: true, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading,
                 value: selected.contains('${a['id']}'), title: Text('${a['nom']}', style: const TextStyle(fontSize: 12)),
@@ -112,10 +113,10 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
               )),
         ],
         const SizedBox(height: 10),
-        Text("Informations récupérées automatiquement depuis la source — modifiables à l'étape suivante.", style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+        Text(t('capaLinkWidget.infosRecupereesAutomatiquement'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
       ])),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(t('capaLinkWidget.annuler'))),
         FilledButton(onPressed: () {
           Navigator.pop(c);
           openForm({
@@ -124,7 +125,7 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
             'description': p!['description'], 'actionType': p['actionType'], 'criticite': p['criticite'],
             'priority': p['priority'], 'workUnitId': p['workUnitId'], 'responsibleId': p['responsibleId'], 'dueDate': p['dueDate'],
           }, selected);
-        }, child: const Text('Créer la CAPA')),
+        }, child: Text(t('capaLinkWidget.creerLaCapa'))),
       ],
     )));
   }
@@ -142,8 +143,8 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
     padding: const EdgeInsets.only(bottom: 16),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Actions CAPA associées (${links.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        TextButton.icon(onPressed: checking ? null : checkAndOpen, icon: const Icon(Icons.add, size: 16), label: Text(checking ? '…' : 'Créer une CAPA')),
+        Text(t('capaLinkWidget.titreSection', {'count': '${links.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        TextButton.icon(onPressed: checking ? null : checkAndOpen, icon: const Icon(Icons.add, size: 16), label: Text(checking ? '…' : t('capaLinkWidget.creerUneCapa'))),
       ]),
       if (duplicates != null && duplicates!.isNotEmpty)
         Container(
@@ -151,17 +152,17 @@ class _CapaLinksSectionState extends State<CapaLinksSection> {
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(color: QhseColors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Une action similaire existe déjà : ${duplicates!.map((d) => d['code']).join(', ')}', style: TextStyle(color: QhseColors.amber, fontSize: 12)),
+            Text(t('capaLinkWidget.actionSimilaireExisteDeja', {'codes': duplicates!.map((d) => d['code']).join(', ')}), style: TextStyle(color: QhseColors.amber, fontSize: 12)),
             Row(children: [
-              TextButton(onPressed: () => setState(() => duplicates = null), child: const Text('Annuler')),
-              TextButton(onPressed: () { setState(() => duplicates = null); showConfirm(); }, child: const Text('Créer quand même')),
+              TextButton(onPressed: () => setState(() => duplicates = null), child: Text(t('capaLinkWidget.annuler'))),
+              TextButton(onPressed: () { setState(() => duplicates = null); showConfirm(); }, child: Text(t('capaLinkWidget.creerQuandMeme'))),
             ]),
           ]),
         ),
       if (loading)
         const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator())
       else if (links.isEmpty)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune CAPA associée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('capaLinkWidget.aucuneCapaAssociee'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
       else
         ...links.map((l) => Card(child: ListTile(
               dense: true,
@@ -198,7 +199,7 @@ class _CapaCommonFormPageState extends State<CapaCommonFormPage> {
   @override
   void initState() {
     super.initState();
-    title.text = 'CAPA commune — ${widget.sources.length} source${widget.sources.length > 1 ? 's' : ''}';
+    title.text = t('capaLinkWidget.capaCommuneTitreDefaut', {'count': '${widget.sources.length}', 's': widget.sources.length > 1 ? 's' : ''});
     loadLists();
   }
 
@@ -217,7 +218,7 @@ class _CapaCommonFormPageState extends State<CapaCommonFormPage> {
 
   Future<void> submit() async {
     if (title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('capaLinkWidget.titreObligatoire'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -235,7 +236,7 @@ class _CapaCommonFormPageState extends State<CapaCommonFormPage> {
       if (e.networkError) {
         await SyncQueue.enqueue('capaCreateCommon', 'CREATE', payload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : CAPA commune enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('capaLinkWidget.enregistreeHorsLigne')), duration: const Duration(seconds: 4)));
           Navigator.pop(context, true);
         }
       } else {
@@ -251,7 +252,7 @@ class _CapaCommonFormPageState extends State<CapaCommonFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text('CAPA commune (${widget.sources.length} source${widget.sources.length > 1 ? 's' : ''})')),
+    appBar: AppBar(title: Text(t('capaLinkWidget.capaCommuneAppBar', {'count': '${widget.sources.length}', 's': widget.sources.length > 1 ? 's' : ''}))),
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
@@ -259,49 +260,49 @@ class _CapaCommonFormPageState extends State<CapaCommonFormPage> {
               margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(color: QhseColors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Sources sélectionnées', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                Text(t('capaLinkWidget.sourcesSelectionnees'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 const SizedBox(height: 4),
                 ...widget.sources.map((s) => Text('• ${s['label']}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
               ]),
             ),
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre de la CAPA commune')),
+            TextField(controller: title, decoration: InputDecoration(labelText: t('capaLinkWidget.titreDeLaCapaCommune'))),
             const SizedBox(height: 12),
-            TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),
+            TextField(controller: description, maxLines: 3, decoration: InputDecoration(labelText: t('capaLinkWidget.description'))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: actionType, isExpanded: true, decoration: const InputDecoration(labelText: "Type d'action"),
+              value: actionType, isExpanded: true, decoration: InputDecoration(labelText: t('capaLinkWidget.typeAction')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ..._capaTypeLabels.entries.map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))],
               onChanged: (v) => setState(() => actionType = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: criticite, isExpanded: true, decoration: const InputDecoration(labelText: 'Criticité'),
-              items: const [DropdownMenuItem<String>(value: null, child: Text('—')), DropdownMenuItem(value: 'NON_CRITIQUE', child: Text('Non critique')), DropdownMenuItem(value: 'MINEURE', child: Text('Mineure')), DropdownMenuItem(value: 'MAJEURE', child: Text('Majeure')), DropdownMenuItem(value: 'CRITIQUE', child: Text('Critique'))],
+              value: criticite, isExpanded: true, decoration: InputDecoration(labelText: t('capaLinkWidget.criticite')),
+              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), DropdownMenuItem(value: 'NON_CRITIQUE', child: Text(t('capaLinkWidget.criticiteNonCritique'))), DropdownMenuItem(value: 'MINEURE', child: Text(t('capaLinkWidget.criticiteMineure'))), DropdownMenuItem(value: 'MAJEURE', child: Text(t('capaLinkWidget.criticiteMajeure'))), DropdownMenuItem(value: 'CRITIQUE', child: Text(t('capaLinkWidget.criticiteCritique')))],
               onChanged: (v) => setState(() => criticite = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              value: priority, decoration: const InputDecoration(labelText: 'Priorité'),
-              items: const [DropdownMenuItem(value: 1, child: Text('Urgente')), DropdownMenuItem(value: 2, child: Text('Haute')), DropdownMenuItem(value: 3, child: Text('Moyenne')), DropdownMenuItem(value: 4, child: Text('Faible'))],
+              value: priority, decoration: InputDecoration(labelText: t('capaLinkWidget.priorite')),
+              items: [DropdownMenuItem(value: 1, child: Text(t('capaLinkWidget.prioriteUrgente'))), DropdownMenuItem(value: 2, child: Text(t('capaLinkWidget.prioriteHaute'))), DropdownMenuItem(value: 3, child: Text(t('capaLinkWidget.prioriteMoyenne'))), DropdownMenuItem(value: 4, child: Text(t('capaLinkWidget.prioriteFaible')))],
               onChanged: (v) => setState(() => priority = v ?? 2),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: responsibleId, isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable'),
+              value: responsibleId, isExpanded: true, decoration: InputDecoration(labelText: t('capaLinkWidget.responsable')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => responsibleId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail / service'),
+              value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('capaLinkWidget.uniteDeTravailService')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
               onChanged: (v) => setState(() => workUnitId = v),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dueDate != null ? 'Échéance : ${dueDate!.toIso8601String().substring(0, 10)}' : 'Échéance')),
+            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dueDate != null ? t('capaLinkWidget.echeance', {'date': dueDate!.toIso8601String().substring(0, 10)}) : t('capaLinkWidget.echeanceLabel'))),
             if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : 'Créer la CAPA commune'))),
+            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? t('capaLinkWidget.envoiEnCours') : t('capaLinkWidget.creerLaCapaCommune')))),
           ]),
   );
 }
