@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'epi_epc_pages.dart';
 
 class EpiPage extends StatefulWidget {
@@ -17,7 +18,10 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
   String? error;
   late final TabController _tabController;
 
-  static const _tabs = ['Stock EPI', 'Bibliothèque EPC', 'Catégories', 'Attribution', 'Inspections', 'Maintenance EPC', 'Matrice Poste/Risque', 'Personnel', 'Renouvellements'];
+  static List<String> get _tabs => [
+    t('epiPageFlt.tabStockEpi'), t('epiPageFlt.tabBibliothequeEpc'), t('epiPageFlt.tabCategories'), t('epiPageFlt.tabAttribution'),
+    t('epiPageFlt.tabInspections'), t('epiPageFlt.tabMaintenanceEpc'), t('epiPageFlt.tabMatricePosteRisque'), t('epiPageFlt.tabPersonnel'), t('epiPageFlt.tabRenouvellements'),
+  ];
 
   @override
   void initState() {
@@ -37,7 +41,7 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
       dashboard = Map<String, dynamic>.from(d);
       renewals = List.from(r);
     } catch (e) {
-      error = 'Impossible de charger les données EPI';
+      error = t('epiPageFlt.erreurChargement');
     }
     setState(() => loading = false);
   }
@@ -47,12 +51,12 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
     if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Gestion EPI/EPC')),
+        appBar: AppBar(title: Text(t('epiPageFlt.titre'))),
         body: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(error!, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: load, child: const Text('Réessayer')),
+            OutlinedButton(onPressed: load, child: Text(t('epiPageFlt.reessayer'))),
           ]),
         ),
       );
@@ -64,16 +68,16 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
     final annual = stock.where((e) => e['frequency'] == 'ANNUAL').toList();
     final enRupture = stock.where((e) => ((e['stock'] ?? 0) as num) <= ((e['minStock'] ?? 0) as num)).length;
     final kpis = [
-      KpiStat('EPI suivis', '${stock.length}', color: QhseColors.blue, icon: Icons.inventory_2_outlined),
-      KpiStat('En rupture', '$enRupture', color: enRupture > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
-      KpiStat('Renouvellements', '${renewals.length}', color: QhseColors.amber, icon: Icons.event_repeat),
-      KpiStat('Effectif du jour', '${headcount ?? '—'}', color: QhseColors.blue, icon: Icons.groups_outlined),
+      KpiStat(t('epiPageFlt.kpiEpiSuivis'), '${stock.length}', color: QhseColors.blue, icon: Icons.inventory_2_outlined),
+      KpiStat(t('epiPageFlt.kpiEnRupture'), '$enRupture', color: enRupture > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+      KpiStat(t('epiPageFlt.kpiRenouvellements'), '${renewals.length}', color: QhseColors.amber, icon: Icons.event_repeat),
+      KpiStat(t('epiPageFlt.kpiEffectifDuJour'), '${headcount ?? '—'}', color: QhseColors.blue, icon: Icons.groups_outlined),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestion EPI/EPC'),
-        bottom: TabBar(controller: _tabController, isScrollable: true, tabs: _tabs.map((t) => Tab(text: t)).toList()),
+        title: Text(t('epiPageFlt.titre')),
+        bottom: TabBar(controller: _tabController, isScrollable: true, tabs: _tabs.map((tab) => Tab(text: tab)).toList()),
       ),
       body: Column(children: [
         Padding(padding: const EdgeInsets.only(top: 12), child: KpiBar(kpis)),
@@ -84,7 +88,7 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
             DefaultTabController(
               length: 2,
               child: Column(children: [
-                const TabBar(tabs: [Tab(text: 'Catégories EPI'), Tab(text: 'Catégories EPC')]),
+                TabBar(tabs: [Tab(text: t('epiPageFlt.categoriesEpi')), Tab(text: t('epiPageFlt.categoriesEpc'))]),
                 const Expanded(child: TabBarView(children: [
                   CategoryListTab(endpoint: '/epi/epi-categories', label: 'EPI'),
                   CategoryListTab(endpoint: '/epi/epc-categories', label: 'EPC'),
@@ -113,10 +117,10 @@ class _EpiPageState extends State<EpiPage> with SingleTickerProviderStateMixin {
         title: Text('${e['name']}'),
         subtitle: Text(
           e['frequency'] == 'DAILY'
-              ? 'Stock restant : $stock • distribués aujourd\'hui : ${e['dailyDistributed'] ?? 0}'
-              : 'Stock restant : $stock',
+              ? t('epiPageFlt.stockRestantDistribues', {'stock': '$stock', 'distribues': '${e['dailyDistributed'] ?? 0}'})
+              : t('epiPageFlt.stockRestant', {'stock': '$stock'}),
         ),
-        trailing: low ? const Chip(label: Text('Stock bas'), backgroundColor: Color(0xFFFFCDD2)) : null,
+        trailing: low ? Chip(label: Text(t('epiPageFlt.stockBas')), backgroundColor: const Color(0xFFFFCDD2)) : null,
       ),
     );
   }
