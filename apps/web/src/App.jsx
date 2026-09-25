@@ -7072,6 +7072,7 @@ function SecuriteEpiPage() {
 }
 
 function SecuriteHygienePage() {
+  const { t } = useI18n();
   const C = useTheme();
   const visites = useCollection('/business/visites-medicales');
   const risques = useCollection('/business/risques-sanitaires');
@@ -7118,12 +7119,12 @@ function SecuriteHygienePage() {
   const tmsFiltered = tab === 'ergonomie' && search.trim() ? tmsSignalements.filter((t) => norm([t.zoneCorporelle, t.poste, t.activite].join(' ')).includes(norm(search))) : tmsSignalements;
   const risquesCritiques = risqueList.filter((r) => r.criticite >= 12 && r.statut === 'ACTIVE').length;
   const niveauColor = (c) => (c >= 12 ? C.red : c >= 6 ? C.amber : C.green);
-  const niveauLabel = (c) => (c >= 12 ? 'Critique' : c >= 6 ? 'Élevé' : 'Faible/Modéré');
+  const niveauLabel = (c) => (c >= 12 ? t('hygiene.niveauCritique') : c >= 6 ? t('hygiene.niveauEleve') : t('hygiene.niveauFaibleModere'));
   const scoreErgoColor = { FAIBLE: C.green, MODERE: C.amber, ELEVE: C.red, CRITIQUE: C.red };
-  const scoreErgoLabel = { FAIBLE: 'Faible', MODERE: 'Modéré', ELEVE: 'Élevé', CRITIQUE: 'Critique' };
+  const scoreErgoLabel = { FAIBLE: t('hygiene.scoreErgoFaible'), MODERE: t('hygiene.scoreErgoModere'), ELEVE: t('hygiene.scoreErgoEleve'), CRITIQUE: t('hygiene.scoreErgoCritique') };
   const parZoneCorporelle = groupCount(tmsSignalements, (t) => t.zoneCorporelle);
   const alerteNiveauColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber };
-  const indiceLevel = indice.indice == null ? null : indice.indice >= 90 ? { label: 'Excellent', color: C.green } : indice.indice >= 75 ? { label: 'Bon', color: C.green } : indice.indice >= 60 ? { label: 'À améliorer', color: C.amber } : indice.indice >= 40 ? { label: 'Insuffisant', color: C.red } : { label: 'Critique', color: C.red };
+  const indiceLevel = indice.indice == null ? null : indice.indice >= 90 ? { label: t('hygiene.indiceExcellent'), color: C.green } : indice.indice >= 75 ? { label: t('hygiene.indiceBon'), color: C.green } : indice.indice >= 60 ? { label: t('hygiene.indiceAmeliorer'), color: C.amber } : indice.indice >= 40 ? { label: t('hygiene.indiceInsuffisant'), color: C.red } : { label: t('hygiene.indiceCritique'), color: C.red };
 
   async function creerFacteur() {
     if (!nouveauFacteur.trim()) return;
@@ -7160,7 +7161,7 @@ function SecuriteHygienePage() {
       {showExpositionForm && <PenibiliteExpositionForm facteurs={facteurs} onClose={() => setShowExpositionForm(false)} onCreated={expositionsQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['medecine', 'Médecine du travail'], ['risques', 'Risques sanitaires'], ['ergonomie', 'Ergonomie & TMS'], ['pilotage', 'Pilotage']].map(([id, label]) => (
+        {[['medecine', t('hygiene.tabMedecine')], ['risques', t('hygiene.tabRisques')], ['ergonomie', t('hygiene.tabErgonomie')], ['pilotage', t('hygiene.tabPilotage')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -7169,21 +7170,21 @@ function SecuriteHygienePage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle visite</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('hygiene.nouvelleVisite')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Visites enregistrées" value={list.length} color={C.blue} icon={HeartPulse} />
-            <KpiCard label="En retard" value={enRetard} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="Aptitudes avec réserves" value={avecReserves} color={C.amber} icon={HeartPulse} />
-            <KpiCard label="Inaptes" value={inaptes} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('hygiene.kpiVisites')} value={list.length} color={C.blue} icon={HeartPulse} />
+            <KpiCard label={t('hygiene.kpiEnRetard')} value={enRetard} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('hygiene.kpiAptitudesReserves')} value={avecReserves} color={C.amber} icon={HeartPulse} />
+            <KpiCard label={t('hygiene.kpiInaptes')} value={inaptes} color={C.red} icon={AlertTriangle} />
           </div>
           <div className="flex justify-end gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un employé..." className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={exportVisitesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('hygiene.rechercherEmployePlaceholder')} className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportVisitesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('hygiene.excel')}</button>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Répartition des aptitudes">{parAptitude.length ? <DonutChart data={parAptitude} colors={[C.green, C.amber, C.red]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune aptitude renseignée</p>}</Panel>
-            <Panel title={search.trim() ? `Résultats de recherche (${sorted.length})` : 'Prochaines visites par employé'}>
+            <Panel title={t('hygiene.parAptitudeTitle')}>{parAptitude.length ? <DonutChart data={parAptitude} colors={[C.green, C.amber, C.red]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('hygiene.aucuneAptitude')}</p>}</Panel>
+            <Panel title={search.trim() ? t('hygiene.resultatsRecherche', { count: String(sorted.length) }) : t('hygiene.prochainesVisitesTitle')}>
               {sorted.length ? (
                 <div className="space-y-2">
                   {sorted.map((v) => {
@@ -7192,12 +7193,12 @@ function SecuriteHygienePage() {
                     return (
                       <div key={v.id} className="flex items-center justify-between text-sm cursor-pointer" onClick={() => setSelected(v)}>
                         <span style={{ color: C.text }}>{v.employeNom}</span>
-                        <span style={{ color: late ? C.red : C.green }}>{v.prochaineVisite ? (late ? `${Math.abs(jours)} j de retard` : `dans ${jours} j`) : '—'}</span>
+                        <span style={{ color: late ? C.red : C.green }}>{v.prochaineVisite ? (late ? t('hygiene.joursRetard', { count: String(Math.abs(jours)) }) : t('hygiene.dansJours', { count: String(jours) })) : '—'}</span>
                       </div>
                     );
                   })}
                 </div>
-              ) : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune visite enregistrée</p>}
+              ) : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('hygiene.aucuneVisite')}</p>}
             </Panel>
           </div>
         </div>
@@ -7207,27 +7208,27 @@ function SecuriteHygienePage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowRisqueForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Évaluer un risque</button>
+            <button onClick={() => setShowRisqueForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('hygiene.evaluerRisque')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Risques sanitaires" value={risqueList.length} color={C.blue} icon={HeartPulse} />
-            <KpiCard label="Critiques" value={risquesCritiques} color={risquesCritiques > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Personnes exposées" value={risqueList.reduce((s, r) => s + (r.nombrePersonnesExposees || 0), 0)} color={C.amber} icon={ClipboardList} />
+            <KpiCard label={t('hygiene.kpiRisquesSanitaires')} value={risqueList.length} color={C.blue} icon={HeartPulse} />
+            <KpiCard label={t('hygiene.kpiCritiques')} value={risquesCritiques} color={risquesCritiques > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('hygiene.kpiPersonnesExposees')} value={risqueList.reduce((s, r) => s + (r.nombrePersonnesExposees || 0), 0)} color={C.amber} icon={ClipboardList} />
           </div>
           <div className="flex justify-end gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un risque sanitaire..." className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={exportRisquesSanitairesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('hygiene.rechercherRisquePlaceholder')} className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportRisquesSanitairesExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('hygiene.excel')}</button>
           </div>
-          <Panel title={search.trim() ? `Résultats de recherche (${risqueFiltered.length})` : 'Évaluation des risques sanitaires'}>
+          <Panel title={search.trim() ? t('hygiene.resultatsRecherche', { count: String(risqueFiltered.length) }) : t('hygiene.evaluationRisquesTitle')}>
             {risqueFiltered.length
-              ? <DataTable columns={['Danger', 'Catégorie', 'Poste/Zone', 'Personnes exposées', 'Criticité', 'Statut']}
+              ? <DataTable columns={[t('hygiene.colDanger'), t('hygiene.colCategorie'), t('hygiene.colPosteZone'), t('hygiene.colPersonnesExposees'), t('hygiene.colCriticite'), t('hygiene.colStatut')]}
                   rows={risqueFiltered.map((r) => [
                     r.danger, r.categorie || '—', [r.poste, r.zone].filter(Boolean).join(' / ') || '—', r.nombrePersonnesExposees ?? '—',
                     <span style={{ color: niveauColor(r.criticite), fontWeight: 600 }}>{r.criticite} ({niveauLabel(r.criticite)})</span>,
                     <StatusChip statut={r.statut === 'ACTIVE' ? 'Actif' : r.statut === 'MAITRISE' ? 'Maîtrisé' : 'Clôturé'} />,
                   ])}
                   onRowClick={(i) => setDetailRisque(risqueFiltered[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucun risque sanitaire évalué pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('hygiene.aucunResultatRecherche') : t('hygiene.aucunRisqueEvalue')}</p>}
           </Panel>
         </div>
       )}
@@ -7237,17 +7238,17 @@ function SecuriteHygienePage() {
           <div className="flex items-center justify-between">
             <LiveBadge />
             <div className="flex gap-2">
-              <button onClick={() => setShowTmsForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.amber, color: '#3a2600' }}>+ Signaler une situation TMS</button>
-              <button onClick={() => setShowErgonomieForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Analyser un poste</button>
+              <button onClick={() => setShowTmsForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.amber, color: '#3a2600' }}>{t('hygiene.signalerTms')}</button>
+              <button onClick={() => setShowErgonomieForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('hygiene.analyserPoste')}</button>
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Postes analysés" value={ergonomieList.length} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="Postes critiques/élevés" value={ergonomieList.filter((e) => e.scoreErgonomique === 'CRITIQUE' || e.scoreErgonomique === 'ELEVE').length} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="Signalements TMS" value={tmsSignalements.length} color={C.amber} icon={HeartPulse} />
+            <KpiCard label={t('hygiene.kpiPostesAnalyses')} value={ergonomieList.length} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('hygiene.kpiPostesCritiques')} value={ergonomieList.filter((e) => e.scoreErgonomique === 'CRITIQUE' || e.scoreErgonomique === 'ELEVE').length} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('hygiene.kpiSignalementsTms')} value={tmsSignalements.length} color={C.amber} icon={HeartPulse} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Analyses ergonomiques">
+            <Panel title={t('hygiene.analysesErgonomiquesTitle')}>
               {ergonomieList.length
                 ? <div className="space-y-2">{ergonomieList.map((e) => (
                     <div key={e.id} onClick={() => setSelectedErgonomie(e)} className="flex justify-between items-center text-sm py-1.5 cursor-pointer" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -7255,21 +7256,21 @@ function SecuriteHygienePage() {
                       <span style={{ color: scoreErgoColor[e.scoreErgonomique] }}>{scoreErgoLabel[e.scoreErgonomique]}</span>
                     </div>
                   ))}</div>
-                : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun poste analysé pour le moment</p>}
+                : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('hygiene.aucunPosteAnalyse')}</p>}
             </Panel>
-            <Panel title="TMS par zone corporelle">
-              {parZoneCorporelle.length ? <DonutChart data={parZoneCorporelle} colors={[C.red, '#F97316', C.amber, '#8B5CF6', C.blue, C.green, '#EC4899', '#14B8A6', '#6366F1']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun signalement pour le moment</p>}
+            <Panel title={t('hygiene.tmsParZoneTitle')}>
+              {parZoneCorporelle.length ? <DonutChart data={parZoneCorporelle} colors={[C.red, '#F97316', C.amber, '#8B5CF6', C.blue, C.green, '#EC4899', '#14B8A6', '#6366F1']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('hygiene.aucunSignalement')}</p>}
             </Panel>
           </div>
           {tmsSignalements.length > 0 && (
-            <Panel title={search.trim() ? `Résultats de recherche (${tmsFiltered.length})` : 'Registre des signalements TMS'} right={
+            <Panel title={search.trim() ? t('hygiene.resultatsRecherche', { count: String(tmsFiltered.length) }) : t('hygiene.registreTmsTitle')} right={
               <div className="flex items-center gap-2">
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher (zone, poste, activité...)" className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-                <button onClick={exportTmsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('hygiene.rechercherTmsPlaceholder')} className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+                <button onClick={exportTmsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('hygiene.excel')}</button>
               </div>
             }>
-              <DataTable columns={['Zone corporelle', 'Poste', 'Activité', 'Date', 'Statut']}
-                rows={tmsFiltered.map((t) => [t.zoneCorporelle, t.poste || '—', t.activite || '—', new Date(t.dateSignalement).toLocaleDateString('fr-FR'), t.statut === 'SIGNALE' ? 'Signalé' : t.statut === 'EN_ANALYSE' ? 'En analyse' : 'Traité'])}
+              <DataTable columns={[t('hygiene.colZoneCorporelle'), t('hygiene.colPoste'), t('hygiene.colActivite'), t('hygiene.colDate'), t('hygiene.colStatut')]}
+                rows={tmsFiltered.map((tm) => [tm.zoneCorporelle, tm.poste || '—', tm.activite || '—', new Date(tm.dateSignalement).toLocaleDateString('fr-FR'), tm.statut === 'SIGNALE' ? t('hygiene.statutSignale') : tm.statut === 'EN_ANALYSE' ? t('hygiene.statutEnAnalyse') : t('hygiene.statutTraite')])}
                 onRowClick={(i) => setSelectedTms(tmsFiltered[i])} />
             </Panel>
           )}
@@ -7279,7 +7280,7 @@ function SecuriteHygienePage() {
       {tab === 'pilotage' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Indice Hygiène au travail" subtitle="Moyenne pondérée — pondérations partagées avec les autres indices de l'application.">
+          <Panel title={t('hygiene.indiceTitle')} subtitle={t('hygiene.indiceSubtitle')}>
             <div className="flex items-center gap-6">
               <div>
                 <p className="text-5xl font-bold" style={{ color: indiceLevel?.color || C.text }}>{indice.indice != null ? indice.indice : '—'}<span className="text-lg" style={{ color: C.textMuted }}>/100</span></p>
@@ -7296,7 +7297,7 @@ function SecuriteHygienePage() {
             </div>
           </Panel>
 
-          <Panel title="Alertes automatiques" subtitle={`${alertes.length} point(s) nécessitant l'attention du Responsable QHSE`}>
+          <Panel title={t('hygiene.alertesTitle')} subtitle={t('hygiene.alertesSubtitle', { count: String(alertes.length) })}>
             {alertes.length
               ? <div className="space-y-2">{alertes.map((a, i) => (
                   <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -7304,19 +7305,19 @@ function SecuriteHygienePage() {
                     <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${alerteNiveauColor[a.niveau]}22`, color: alerteNiveauColor[a.niveau] }}>{a.niveau}</span>
                   </div>
                 ))}</div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('hygiene.aucuneAlerte')}</p>}
           </Panel>
 
-          <Panel title="Pénibilité" subtitle="Facteurs configurables — jamais une liste réglementaire unique imposée.">
+          <Panel title={t('hygiene.penibiliteTitle')} subtitle={t('hygiene.penibiliteSubtitle')}>
             <div className="flex gap-2 mb-4">
-              <input value={nouveauFacteur} onChange={(e) => setNouveauFacteur(e.target.value)} placeholder="Nouveau facteur (ex. Travail de nuit)" className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
-              <button onClick={creerFacteur} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>+ Ajouter</button>
-              {facteurs.length > 0 && <button onClick={() => setShowExpositionForm(true)} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Exposition</button>}
+              <input value={nouveauFacteur} onChange={(e) => setNouveauFacteur(e.target.value)} placeholder={t('hygiene.nouveauFacteurPlaceholder')} className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} />
+              <button onClick={creerFacteur} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{t('hygiene.ajouter')}</button>
+              {facteurs.length > 0 && <button onClick={() => setShowExpositionForm(true)} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('hygiene.exposition')}</button>}
             </div>
             {expositions.length
-              ? <DataTable columns={['Facteur', 'Employé', 'Poste', 'Niveau', 'Prochaine réévaluation']}
+              ? <DataTable columns={[t('hygiene.colFacteur'), t('hygiene.colEmploye'), t('hygiene.colPoste'), t('hygiene.colNiveau'), t('hygiene.colProchaineReevaluation')]}
                   rows={expositions.map((ex) => [ex.facteur?.nom || '—', ex.employee ? `${ex.employee.firstName} ${ex.employee.lastName}` : '—', ex.poste || '—', ex.niveauExposition || '—', ex.prochaineReevaluation ? new Date(ex.prochaineReevaluation).toLocaleDateString('fr-FR') : '—'])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{facteurs.length === 0 ? 'Ajoutez un facteur de pénibilité pour commencer' : 'Aucune exposition enregistrée pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{facteurs.length === 0 ? t('hygiene.ajoutezFacteur') : t('hygiene.aucuneExposition')}</p>}
           </Panel>
         </div>
       )}
