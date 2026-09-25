@@ -6,19 +6,20 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api.dart';
+import '../i18n/i18n.dart';
 
 /// Capture la position GPS courante, en gérant les permissions.
 /// Retourne null si le GPS est désactivé/refusé (l'appelant doit gérer ce cas
 /// sans bloquer la déclaration terrain : le GPS reste optionnel).
 Future<Position?> captureGps(BuildContext context) async {
   if (!await Geolocator.isLocationServiceEnabled()) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('GPS désactivé')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('attachmentHelpers.gpsDesactive'))));
     return null;
   }
   var p = await Geolocator.checkPermission();
   if (p == LocationPermission.denied) p = await Geolocator.requestPermission();
   if (p == LocationPermission.denied || p == LocationPermission.deniedForever) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permission GPS refusée')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('attachmentHelpers.gpsPermissionRefusee'))));
     return null;
   }
   return Geolocator.getCurrentPosition();
@@ -45,16 +46,17 @@ Future<void> captureAndLinkPhoto(BuildContext context, Api api, String ownerType
   try {
     final a = await api.post('/attachments/base64', {'fileName': name, 'mimeType': mime, 'base64': base64Encode(bytes!)});
     await api.post('/attachments/link', {'ownerType': ownerType, 'ownerId': ownerId, 'attachmentId': a['id']});
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo ajoutée')));
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('attachmentHelpers.photoAjoutee'))));
   } catch (e) {
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
   }
 }
 
 /// Badge coloré générique pour sévérité/priorité/score (1 à 5+).
-Widget severityChip(int value, {String prefix = 'Sévérité'}) {
+Widget severityChip(int value, {String? prefix}) {
+  final label = prefix ?? t('attachmentHelpers.severite');
   final color = value >= 4 ? Colors.red : (value >= 3 ? Colors.orange : Colors.green);
-  return Chip(label: Text('$prefix $value'), backgroundColor: color.withOpacity(0.15), labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold));
+  return Chip(label: Text('$label $value'), backgroundColor: color.withOpacity(0.15), labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold));
 }
 
 /// Génère un code lisible du type "PREFIX-AAAAMMJJ-HHmmss".
