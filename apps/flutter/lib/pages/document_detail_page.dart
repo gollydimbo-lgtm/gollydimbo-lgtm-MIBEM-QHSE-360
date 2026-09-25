@@ -8,22 +8,26 @@ import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
+import '../i18n/i18n.dart';
 
-const _docStatusLabels = {
-  'DRAFT': 'Brouillon',
-  'REVIEW': 'En vérification',
-  'APPROVED': 'En attente de publication',
-  'ACTIVE': 'En vigueur',
-  'SUPERSEDED': 'Obsolète — NE PAS UTILISER',
-  'ARCHIVED': 'Archivé',
+const _docStatusKeys = {
+  'DRAFT': 'statusDraft',
+  'REVIEW': 'statusReview',
+  'APPROVED': 'statusApproved',
+  'ACTIVE': 'statusActive',
+  'SUPERSEDED': 'statusSuperseded',
+  'ARCHIVED': 'statusArchived',
 };
+String _docStatusLabel(String? k) => k == null ? '—' : t('docDetail.${_docStatusKeys[k] ?? 'statusDraft'}');
 
-const _docCriticiteLabels = {'NON_CRITIQUE': 'Non critique', 'CRITIQUE': 'Critique'};
+const _docCriticiteKeys = {'NON_CRITIQUE': 'critNonCritique', 'CRITIQUE': 'critCritique'};
+String _docCriticiteLabel(String? k) => k == null ? '—' : t('docDetail.${_docCriticiteKeys[k] ?? 'critNonCritique'}');
 
-const _docFrequenceLabels = {
-  'MENSUELLE': 'Mensuelle', 'TRIMESTRIELLE': 'Trimestrielle', 'SEMESTRIELLE': 'Semestrielle',
-  'ANNUELLE': 'Annuelle', 'BIENNALE': 'Biennale', 'PERSONNALISEE': 'Personnalisée',
+const _docFrequenceKeys = {
+  'MENSUELLE': 'freqMensuelle', 'TRIMESTRIELLE': 'freqTrimestrielle', 'SEMESTRIELLE': 'freqSemestrielle',
+  'ANNUELLE': 'freqAnnuelle', 'BIENNALE': 'freqBiennale', 'PERSONNALISEE': 'freqPersonnalisee',
 };
+String _docFrequenceLabel(String? k) => k == null ? '—' : t('docDetail.${_docFrequenceKeys[k] ?? 'freqAnnuelle'}');
 
 Color _docStatusColor(String? s) => {
       'DRAFT': QhseColors.blue,
@@ -94,10 +98,10 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
       context: context,
       builder: (c) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: ctrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Commentaire (optionnel)')),
+        content: TextField(controller: ctrl, maxLines: 3, decoration: InputDecoration(labelText: t('docDetail.commentaireOptionnel'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Confirmer')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('docDetail.annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('docDetail.confirmer'))),
         ],
       ),
     );
@@ -115,12 +119,12 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
   Future<void> submit() => doAction('/documents/${widget.documentId}/submit', {});
 
   Future<void> verify(String decision) async {
-    final comment = await askComment(decision == 'APPROUVE' ? 'Valider la vérification' : 'Demander une modification');
+    final comment = await askComment(decision == 'APPROUVE' ? t('docDetail.validerVerification') : t('docDetail.demanderModification'));
     await doAction('/documents/${widget.documentId}/verify', {'decision': decision, if (comment != null) 'comment': comment});
   }
 
   Future<void> approve(String decision) async {
-    final comment = await askComment(decision == 'APPROUVE' ? 'Approuver et publier' : 'Refuser');
+    final comment = await askComment(decision == 'APPROUVE' ? t('docDetail.approuverEtPublier') : t('docDetail.refuser'));
     await doAction('/documents/${widget.documentId}/approve', {'decision': decision, if (comment != null) 'comment': comment});
   }
 
@@ -138,11 +142,11 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Nouvelle version'),
-        content: TextField(controller: motif, decoration: const InputDecoration(labelText: 'Motif de modification (optionnel)')),
+        title: Text(t('docDetail.nouvelleVersionTitle')),
+        content: TextField(controller: motif, decoration: InputDecoration(labelText: t('docDetail.motifModificationOptionnel'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Envoyer')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('docDetail.annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('docDetail.envoyer'))),
         ],
       ),
     );
@@ -159,9 +163,9 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Diffuser ce document'),
+        title: Text(t('docDetail.diffuserDocumentTitle')),
         content: SizedBox(width: 420, height: 360, child: users.isEmpty
-            ? const Center(child: Text('Aucun utilisateur'))
+            ? Center(child: Text(t('docDetail.aucunUtilisateur')))
             : ListView(children: users.map<Widget>((u) => CheckboxListTile(
                 dense: true,
                 value: selected.contains(u['id']),
@@ -169,8 +173,8 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
                 onChanged: (v) => setD(() { if (v == true) selected.add(u['id']); else selected.remove(u['id']); }),
               )).toList())),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')),
-          FilledButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(c, true), child: const Text('Diffuser')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('docDetail.annuler'))),
+          FilledButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(c, true), child: Text(t('docDetail.diffuser'))),
         ],
       )),
     );
@@ -189,21 +193,21 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
   List<Widget> _actionButtons(String? status) {
     switch (status) {
       case 'DRAFT':
-        return [FilledButton.icon(onPressed: busy ? null : submit, icon: const Icon(Icons.send, size: 16), label: const Text('Soumettre pour vérification'))];
+        return [FilledButton.icon(onPressed: busy ? null : submit, icon: const Icon(Icons.send, size: 16), label: Text(t('docDetail.soumettrePourVerification')))];
       case 'REVIEW':
         return [
-          FilledButton.icon(onPressed: busy ? null : () => verify('APPROUVE'), icon: const Icon(Icons.check, size: 16), label: const Text('Vérifié — conforme')),
-          OutlinedButton.icon(onPressed: busy ? null : () => verify('DEMANDE_MODIFICATION'), icon: const Icon(Icons.edit_note, size: 16), label: const Text('Demander une modification')),
+          FilledButton.icon(onPressed: busy ? null : () => verify('APPROUVE'), icon: const Icon(Icons.check, size: 16), label: Text(t('docDetail.verifieConforme'))),
+          OutlinedButton.icon(onPressed: busy ? null : () => verify('DEMANDE_MODIFICATION'), icon: const Icon(Icons.edit_note, size: 16), label: Text(t('docDetail.demanderModification'))),
         ];
       case 'APPROVED':
         return [
-          FilledButton.icon(onPressed: busy ? null : () => approve('APPROUVE'), icon: const Icon(Icons.verified_outlined, size: 16), label: const Text('Approuver et publier')),
-          OutlinedButton.icon(onPressed: busy ? null : () => approve('REFUSE'), icon: const Icon(Icons.close, size: 16), label: const Text('Refuser')),
+          FilledButton.icon(onPressed: busy ? null : () => approve('APPROUVE'), icon: const Icon(Icons.verified_outlined, size: 16), label: Text(t('docDetail.approuverEtPublier'))),
+          OutlinedButton.icon(onPressed: busy ? null : () => approve('REFUSE'), icon: const Icon(Icons.close, size: 16), label: Text(t('docDetail.refuser'))),
         ];
       case 'ACTIVE':
-        return [OutlinedButton.icon(onPressed: busy ? null : archive, icon: const Icon(Icons.archive_outlined, size: 16), label: const Text('Archiver'))];
+        return [OutlinedButton.icon(onPressed: busy ? null : archive, icon: const Icon(Icons.archive_outlined, size: 16), label: Text(t('docDetail.archiver')))];
       case 'ARCHIVED':
-        return [OutlinedButton.icon(onPressed: busy ? null : reopen, icon: const Icon(Icons.unarchive_outlined, size: 16), label: const Text('Réactiver (retour en brouillon)'))];
+        return [OutlinedButton.icon(onPressed: busy ? null : reopen, icon: const Icon(Icons.unarchive_outlined, size: 16), label: Text(t('docDetail.reactiver')))];
       default:
         return [];
     }
@@ -219,8 +223,8 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Document')), body: const Center(child: CircularProgressIndicator()));
-    if (error != null || doc == null) return Scaffold(appBar: AppBar(title: const Text('Document')), body: Center(child: Text(error ?? 'Introuvable')));
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('docDetail.pageTitleFallback'))), body: const Center(child: CircularProgressIndicator()));
+    if (error != null || doc == null) return Scaffold(appBar: AppBar(title: Text(t('docDetail.pageTitleFallback'))), body: Center(child: Text(error ?? t('docDetail.introuvable'))));
     final d = doc!;
     final status = d['status'] as String?;
     final approvals = List.from(d['approvals'] ?? []);
@@ -240,34 +244,34 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
             child: Row(children: [
               Icon(notUsable ? Icons.block : Icons.info_outline, color: statusColor),
               const SizedBox(width: 8),
-              Expanded(child: Text(_docStatusLabels[status] ?? status ?? '—', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold))),
+              Expanded(child: Text(_docStatusLabel(status), style: TextStyle(color: statusColor, fontWeight: FontWeight.bold))),
             ]),
           ),
           const SizedBox(height: 12),
           Text('${d['title']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           if (d['description'] != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('${d['description']}')),
           const SizedBox(height: 12),
-          _metaRow('Type', d['documentType']),
-          _metaRow('Catégorie', d['category']),
-          _metaRow('Domaine / Service', [d['domaine'], d['service']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
-          _metaRow('Site', d['siteId']),
-          _metaRow('Version courante', 'v${d['currentVersion']}'),
-          _metaRow('Criticité', _docCriticiteLabels[d['criticite']] ?? d['criticite']),
-          _metaRow('Fréquence de révision', _docFrequenceLabels[d['frequenceRevision']] ?? d['frequenceRevision']),
-          _metaRow('Responsable', userName(d['responsibleId'])),
-          _metaRow('Vérificateur', userName(d['verificateurId'])),
-          _metaRow('Approbateur', userName(d['approbateurId'])),
-          _metaRow('Entrée en vigueur', d['dateEntreeVigueur'] != null ? '${d['dateEntreeVigueur']}'.substring(0, 10) : '—'),
-          _metaRow('Prochaine révision', d['nextReviewAt'] != null ? '${d['nextReviewAt']}'.substring(0, 10) : '—'),
-          if (d['external'] == true) _metaRow('Organisme source (externe)', d['sourceOrganisme']),
+          _metaRow(t('docDetail.metaType'), d['documentType']),
+          _metaRow(t('docDetail.metaCategorie'), d['category']),
+          _metaRow(t('docDetail.metaDomaineService'), [d['domaine'], d['service']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
+          _metaRow(t('docDetail.metaSite'), d['siteId']),
+          _metaRow(t('docDetail.metaVersionCourante'), 'v${d['currentVersion']}'),
+          _metaRow(t('docDetail.metaCriticite'), _docCriticiteLabel(d['criticite'])),
+          _metaRow(t('docDetail.metaFrequenceRevision'), _docFrequenceLabel(d['frequenceRevision'])),
+          _metaRow(t('docDetail.metaResponsable'), userName(d['responsibleId'])),
+          _metaRow(t('docDetail.metaVerificateur'), userName(d['verificateurId'])),
+          _metaRow(t('docDetail.metaApprobateur'), userName(d['approbateurId'])),
+          _metaRow(t('docDetail.metaEntreeVigueur'), d['dateEntreeVigueur'] != null ? '${d['dateEntreeVigueur']}'.substring(0, 10) : '—'),
+          _metaRow(t('docDetail.metaProchaineRevision'), d['nextReviewAt'] != null ? '${d['nextReviewAt']}'.substring(0, 10) : '—'),
+          if (d['external'] == true) _metaRow(t('docDetail.metaOrganismeSource'), d['sourceOrganisme']),
 
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, children: _actionButtons(status)),
 
           const SizedBox(height: 20),
-          const Text('Historique des approbations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('docDetail.historiqueApprobationsTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           if (approvals.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune décision enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('docDetail.aucuneDecision'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...approvals.map((a) => Card(child: ListTile(
                   dense: true,
@@ -277,50 +281,50 @@ class _DocumentDetailPageState extends State<DocumentDetailPage> {
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('Diffusion', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            TextButton.icon(onPressed: busy ? null : diffuse, icon: const Icon(Icons.send, size: 16), label: const Text('Diffuser')),
+            Text(t('docDetail.diffusionTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton.icon(onPressed: busy ? null : diffuse, icon: const Icon(Icons.send, size: 16), label: Text(t('docDetail.diffuser'))),
           ]),
           if (diffusions.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune diffusion', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('docDetail.aucuneDiffusion'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...diffusions.map((diff) {
               final recipients = List.from(diff['recipients'] ?? []);
               return Card(child: Padding(padding: const EdgeInsets.all(8), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Diffusion v${diff['version']} — ${diff['createdAt'] != null ? '${diff['createdAt']}'.substring(0, 10) : '—'}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                Text(t('docDetail.diffusionVersionDate', {'version': '${diff['version']}', 'date': diff['createdAt'] != null ? '${diff['createdAt']}'.substring(0, 10) : '—'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 ...recipients.map((r) => Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Row(children: [
                       Expanded(child: Text('${r['label'] ?? userName(r['userId'])}', style: const TextStyle(fontSize: 12))),
-                      Text(r['statutLecture'] == 'LU' ? 'Lu' : 'Non lu', style: TextStyle(fontSize: 11, color: r['statutLecture'] == 'LU' ? QhseColors.green : QhseColors.amber)),
-                      if (r['statutLecture'] != 'LU') IconButton(icon: const Icon(Icons.check_circle_outline, size: 18), tooltip: 'Marquer lu', onPressed: () => accuse(r['id'])),
+                      Text(r['statutLecture'] == 'LU' ? t('docDetail.lu') : t('docDetail.nonLu'), style: TextStyle(fontSize: 11, color: r['statutLecture'] == 'LU' ? QhseColors.green : QhseColors.amber)),
+                      if (r['statutLecture'] != 'LU') IconButton(icon: const Icon(Icons.check_circle_outline, size: 18), tooltip: t('docDetail.marquerLu'), onPressed: () => accuse(r['id'])),
                     ]))),
               ])));
             }),
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('Fichier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            TextButton.icon(onPressed: busy ? null : newVersion, icon: const Icon(Icons.upload_file, size: 16), label: const Text('Nouvelle version')),
+            Text(t('docDetail.fichierTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton.icon(onPressed: busy ? null : newVersion, icon: const Icon(Icons.upload_file, size: 16), label: Text(t('docDetail.nouvelleVersionTitle'))),
           ]),
-          Text('Toute nouvelle version repasse le document en brouillon (nouveau circuit de validation).', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+          Text(t('docDetail.nouvelleVersionNote'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
 
           const SizedBox(height: 20),
-          const Text('QR code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('docDetail.qrCodeTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           Row(children: [
             Expanded(child: Text('${d['qrToken'] ?? '—'}', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary), overflow: TextOverflow.ellipsis)),
-            IconButton(icon: const Icon(Icons.copy, size: 18), tooltip: 'Copier', onPressed: () {
+            IconButton(icon: const Icon(Icons.copy, size: 18), tooltip: t('docDetail.copier'), onPressed: () {
               Clipboard.setData(ClipboardData(text: '${d['qrToken'] ?? ''}'));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jeton QR copié')));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('docDetail.jetonQrCopie'))));
             }),
-            IconButton(icon: const Icon(Icons.refresh, size: 18), tooltip: 'Régénérer', onPressed: busy ? null : regenerateQr),
+            IconButton(icon: const Icon(Icons.refresh, size: 18), tooltip: t('docDetail.regenerer'), onPressed: busy ? null : regenerateQr),
           ]),
 
           if (links.isNotEmpty) ...[
             const SizedBox(height: 20),
-            const Text('Utilisé par', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            ...links.map((l) => Card(child: ListTile(dense: true, title: Text('${l['sourceModule']}'), subtitle: Text('${l['relationType'] ?? 'ASSOCIE'}')))),
+            Text(t('docDetail.utilisePar'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ...links.map((l) => Card(child: ListTile(dense: true, title: Text('${l['sourceModule']}'), subtitle: Text('${l['relationType'] ?? t('docDetail.associe')}')))),
           ],
 
           const SizedBox(height: 20),
-          CapaLinksSection(sourceModule: 'DOCUMENT', sourceEntityId: d['id'], prefill: {'title': 'Réviser — ${d['title'] ?? ''}', 'source': 'Documentation GED'}),
+          CapaLinksSection(sourceModule: 'DOCUMENT', sourceEntityId: d['id'], prefill: {'title': t('docDetail.reviserPrefix', {'title': '${d['title'] ?? ''}'}), 'source': t('docDetail.sourceDocumentationGed')}),
         ]),
       ),
     );
@@ -385,7 +389,7 @@ class _DocumentFormPageState extends State<DocumentFormPage> {
 
   Future<void> submit() async {
     if (title.text.trim().isEmpty || category.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre et la catégorie sont obligatoires')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('docDetail.titreCategorieObligatoires'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -418,7 +422,7 @@ class _DocumentFormPageState extends State<DocumentFormPage> {
       if (e.networkError) {
         await SyncQueue.enqueue('document', 'CREATE', payload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : document enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('docDetail.documentHorsLigne')), duration: const Duration(seconds: 4)));
           Navigator.pop(context, true);
         }
       } else {
@@ -434,15 +438,15 @@ class _DocumentFormPageState extends State<DocumentFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Nouveau document')),
+    appBar: AppBar(title: Text(t('docDetail.nouveauDocumentTitle'))),
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'Titre *')),
+            TextField(controller: title, decoration: InputDecoration(labelText: t('docDetail.titre'))),
             const SizedBox(height: 12),
-            TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),
+            TextField(controller: description, maxLines: 3, decoration: InputDecoration(labelText: t('docDetail.description'))),
             const SizedBox(height: 12),
-            TextField(controller: category, decoration: const InputDecoration(labelText: 'Catégorie *')),
+            TextField(controller: category, decoration: InputDecoration(labelText: t('docDetail.categorie'))),
             if (categories.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: 6), child: Wrap(spacing: 6, children: categories.map<Widget>((cat) => ActionChip(
                     label: Text('${cat['name']}', style: const TextStyle(fontSize: 11)),
@@ -450,12 +454,12 @@ class _DocumentFormPageState extends State<DocumentFormPage> {
                   )).toList())),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: documentGroup, isExpanded: true, decoration: const InputDecoration(labelText: 'Groupe documentaire'),
+              value: documentGroup, isExpanded: true, decoration: InputDecoration(labelText: t('docDetail.groupeDocumentaire')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...groups.map<DropdownMenuItem<String>>((g) => DropdownMenuItem<String>(value: '$g', child: Text('$g')))],
               onChanged: (v) => setState(() => documentGroup = v),
             ),
             const SizedBox(height: 12),
-            TextField(controller: documentType, decoration: const InputDecoration(labelText: 'Type de document')),
+            TextField(controller: documentType, decoration: InputDecoration(labelText: t('docDetail.typeDeDocument'))),
             if (types.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: 6), child: Wrap(spacing: 6, children: types.map<Widget>((t) => ActionChip(
                     label: Text('${t['name']}', style: const TextStyle(fontSize: 11)),
@@ -463,71 +467,71 @@ class _DocumentFormPageState extends State<DocumentFormPage> {
                   )).toList())),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: domaine, decoration: const InputDecoration(labelText: 'Domaine'))),
+              Expanded(child: TextField(controller: domaine, decoration: InputDecoration(labelText: t('docDetail.domaine')))),
               const SizedBox(width: 8),
-              Expanded(child: TextField(controller: service, decoration: const InputDecoration(labelText: 'Service'))),
+              Expanded(child: TextField(controller: service, decoration: InputDecoration(labelText: t('docDetail.service')))),
             ]),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: activite, decoration: const InputDecoration(labelText: 'Activité'))),
+              Expanded(child: TextField(controller: activite, decoration: InputDecoration(labelText: t('docDetail.activite')))),
               const SizedBox(width: 8),
-              Expanded(child: TextField(controller: siteId, decoration: const InputDecoration(labelText: 'Site'))),
+              Expanded(child: TextField(controller: siteId, decoration: InputDecoration(labelText: t('docDetail.site')))),
             ]),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail'),
+              value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('docDetail.uniteDeTravail')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
               onChanged: (v) => setState(() => workUnitId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: responsibleId, isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable'),
+              value: responsibleId, isExpanded: true, decoration: InputDecoration(labelText: t('docDetail.responsable')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => responsibleId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: verificateurId, isExpanded: true, decoration: const InputDecoration(labelText: 'Vérificateur'),
+              value: verificateurId, isExpanded: true, decoration: InputDecoration(labelText: t('docDetail.verificateur')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => verificateurId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: approbateurId, isExpanded: true, decoration: const InputDecoration(labelText: 'Approbateur'),
+              value: approbateurId, isExpanded: true, decoration: InputDecoration(labelText: t('docDetail.approbateur')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => approbateurId = v),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dateEntreeVigueur != null ? "Entrée en vigueur : ${dateEntreeVigueur!.toIso8601String().substring(0, 10)}" : "Date d'entrée en vigueur")),
+            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dateEntreeVigueur != null ? t('docDetail.entreeVigueurDate', {'date': dateEntreeVigueur!.toIso8601String().substring(0, 10)}) : t('docDetail.dateEntreeVigueur'))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: frequenceRevision, isExpanded: true, decoration: const InputDecoration(labelText: 'Fréquence de révision'),
-              items: _docFrequenceLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+              value: frequenceRevision, isExpanded: true, decoration: InputDecoration(labelText: t('docDetail.frequenceRevision')),
+              items: _docFrequenceKeys.keys.map((k) => DropdownMenuItem(value: k, child: Text(_docFrequenceLabel(k)))).toList(),
               onChanged: (v) => setState(() => frequenceRevision = v ?? 'ANNUELLE'),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: criticite, isExpanded: true, decoration: const InputDecoration(labelText: 'Criticité'),
-              items: _docCriticiteLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+              value: criticite, isExpanded: true, decoration: InputDecoration(labelText: t('docDetail.criticite')),
+              items: _docCriticiteKeys.keys.map((k) => DropdownMenuItem(value: k, child: Text(_docCriticiteLabel(k)))).toList(),
               onChanged: (v) => setState(() => criticite = v ?? 'NON_CRITIQUE'),
             ),
             const SizedBox(height: 12),
-            TextField(controller: motifCreation, maxLines: 2, decoration: const InputDecoration(labelText: 'Motif de création')),
+            TextField(controller: motifCreation, maxLines: 2, decoration: InputDecoration(labelText: t('docDetail.motifCreation'))),
             const SizedBox(height: 12),
-            TextField(controller: referencesReglementaires, maxLines: 2, decoration: const InputDecoration(labelText: 'Références réglementaires')),
+            TextField(controller: referencesReglementaires, maxLines: 2, decoration: InputDecoration(labelText: t('docDetail.referencesReglementaires'))),
             const SizedBox(height: 12),
-            TextField(controller: referencesNormatives, maxLines: 2, decoration: const InputDecoration(labelText: 'Références normatives')),
+            TextField(controller: referencesNormatives, maxLines: 2, decoration: InputDecoration(labelText: t('docDetail.referencesNormatives'))),
             const SizedBox(height: 12),
-            TextField(controller: motsCles, decoration: const InputDecoration(labelText: 'Mots-clés')),
+            TextField(controller: motsCles, decoration: InputDecoration(labelText: t('docDetail.motsCles'))),
             const SizedBox(height: 4),
-            CheckboxListTile(contentPadding: EdgeInsets.zero, value: external, title: const Text('Document externe', style: TextStyle(fontSize: 13)), onChanged: (v) => setState(() => external = v ?? false)),
-            if (external) TextField(controller: sourceOrganisme, decoration: const InputDecoration(labelText: 'Organisme source')),
-            CheckboxListTile(contentPadding: EdgeInsets.zero, value: diffusionAccuseRequis, title: const Text('Accusé de lecture requis à la diffusion', style: TextStyle(fontSize: 13)), onChanged: (v) => setState(() => diffusionAccuseRequis = v ?? false)),
+            CheckboxListTile(contentPadding: EdgeInsets.zero, value: external, title: Text(t('docDetail.documentExterne'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setState(() => external = v ?? false)),
+            if (external) TextField(controller: sourceOrganisme, decoration: InputDecoration(labelText: t('docDetail.organismeSource'))),
+            CheckboxListTile(contentPadding: EdgeInsets.zero, value: diffusionAccuseRequis, title: Text(t('docDetail.accuseRequisDiffusion'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setState(() => diffusionAccuseRequis = v ?? false)),
             const SizedBox(height: 8),
-            OutlinedButton.icon(onPressed: pickFile, icon: const Icon(Icons.attach_file), label: Text(pickedFileName ?? 'Joindre un fichier (optionnel)')),
+            OutlinedButton.icon(onPressed: pickFile, icon: const Icon(Icons.attach_file), label: Text(pickedFileName ?? t('docDetail.joindreFichierOptionnel'))),
             if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : 'Enregistrer'))),
+            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? t('docDetail.envoiEnCours') : t('docDetail.enregistrer')))),
           ]),
   );
 }
