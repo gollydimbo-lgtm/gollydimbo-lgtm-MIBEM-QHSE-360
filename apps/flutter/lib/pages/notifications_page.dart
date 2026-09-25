@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 // Cloche de notifications — chantier "calendrier centralisé / notifications
 // actives" de l'audit. Liste unifiée de toutes les échéances/alertes déjà
@@ -62,18 +63,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Widget build(BuildContext c) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(t('notificationsPage.titre')),
         actions: [
-          IconButton(icon: const Icon(Icons.done_all), tooltip: 'Tout marquer lu', onPressed: _marquerToutesLues),
-          IconButton(icon: const Icon(Icons.refresh), tooltip: 'Actualiser', onPressed: _load),
+          IconButton(icon: const Icon(Icons.done_all), tooltip: t('notificationsPage.toutMarquerLu'), onPressed: _marquerToutesLues),
+          IconButton(icon: const Icon(Icons.refresh), tooltip: t('notificationsPage.actualiser'), onPressed: _load),
         ],
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null
-              ? Center(child: Text('Erreur : $error', style: TextStyle(color: QhseColors.red)))
+              ? Center(child: Text(t('notificationsPage.erreur', {'error': '$error'}), style: TextStyle(color: QhseColors.red)))
               : items.isEmpty
-                  ? Center(child: Text('Aucune notification.', style: TextStyle(color: QhseColors.textSecondary)))
+                  ? Center(child: Text(t('notificationsPage.aucuneNotification'), style: TextStyle(color: QhseColors.textSecondary)))
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.separated(
