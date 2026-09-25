@@ -3,13 +3,15 @@ import '../services/api.dart';
 import '../theme.dart';
 import 'haccp_page.dart';
 import 'haccp_ccp_detail_page.dart';
+import '../i18n/i18n.dart';
 
-const _hazardTypeLabels = {
-  'BIOLOGIQUE': 'Biologique',
-  'CHIMIQUE': 'Chimique',
-  'PHYSIQUE': 'Physique',
-  'ALLERGENE': 'Allergène',
+const _hazardTypeKeys = {
+  'BIOLOGIQUE': 'hazardBiologique',
+  'CHIMIQUE': 'hazardChimique',
+  'PHYSIQUE': 'hazardPhysique',
+  'ALLERGENE': 'hazardAllergene',
 };
+String _hazardTypeLabel(String? k) => k == null ? '—' : t('haccpStudy.${_hazardTypeKeys[k] ?? 'hazardBiologique'}');
 
 /// Fiche complète d'une étude HACCP : informations générales, équipe,
 /// diagramme de flux (étapes réordonnables), analyse des dangers par étape
@@ -69,15 +71,15 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
     final declencheur = TextEditingController();
     final description = TextEditingController();
     final ok = await showDialog<bool>(context: context, builder: (dc) => AlertDialog(
-      title: const Text('Nouvelle révision du plan HACCP'),
+      title: Text(t('haccpStudy.nouvelleRevisionTitle')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: declencheur, decoration: const InputDecoration(labelText: 'Déclencheur *')),
+        TextField(controller: declencheur, decoration: InputDecoration(labelText: t('haccpStudy.declencheur'))),
         const SizedBox(height: 10),
-        TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),
+        TextField(controller: description, maxLines: 3, decoration: InputDecoration(labelText: t('haccpStudy.description'))),
       ])),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-        FilledButton(onPressed: declencheur.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: const Text('Enregistrer')),
+        TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpStudy.annuler'))),
+        FilledButton(onPressed: declencheur.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: Text(t('haccpStudy.enregistrer'))),
       ],
     ));
     if (ok != true || declencheur.text.trim().isEmpty) return;
@@ -107,49 +109,49 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: const Text('Modifier l\'étude'),
+        title: Text(t('haccpStudy.modifierEtudeTitle')),
         content: SizedBox(width: 460, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Nom *')),
+          TextField(controller: name, decoration: InputDecoration(labelText: t('haccpStudy.nom'))),
           const SizedBox(height: 10),
-          TextField(controller: code, decoration: const InputDecoration(labelText: 'Code')),
+          TextField(controller: code, decoration: InputDecoration(labelText: t('haccpStudy.code'))),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(child: TextField(controller: activite, decoration: const InputDecoration(labelText: 'Activité'))),
+            Expanded(child: TextField(controller: activite, decoration: InputDecoration(labelText: t('haccpStudy.activite')))),
             const SizedBox(width: 8),
-            Expanded(child: TextField(controller: atelier, decoration: const InputDecoration(labelText: 'Atelier'))),
+            Expanded(child: TextField(controller: atelier, decoration: InputDecoration(labelText: t('haccpStudy.atelier')))),
           ]),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(child: TextField(controller: ligne, decoration: const InputDecoration(labelText: 'Ligne'))),
+            Expanded(child: TextField(controller: ligne, decoration: InputDecoration(labelText: t('haccpStudy.ligne')))),
             const SizedBox(width: 8),
-            Expanded(child: TextField(controller: produit, decoration: const InputDecoration(labelText: 'Produit'))),
+            Expanded(child: TextField(controller: produit, decoration: InputDecoration(labelText: t('haccpStudy.produit')))),
           ]),
           const SizedBox(height: 10),
-          TextField(controller: categorieProduit, decoration: const InputDecoration(labelText: 'Catégorie de produit')),
+          TextField(controller: categorieProduit, decoration: InputDecoration(labelText: t('haccpStudy.categorieProduit'))),
           const SizedBox(height: 10),
-          TextField(controller: descriptionProduit, maxLines: 2, decoration: const InputDecoration(labelText: 'Description du produit')),
+          TextField(controller: descriptionProduit, maxLines: 2, decoration: InputDecoration(labelText: t('haccpStudy.descriptionProduit'))),
           const SizedBox(height: 10),
-          TextField(controller: destination, decoration: const InputDecoration(labelText: 'Destination')),
+          TextField(controller: destination, decoration: InputDecoration(labelText: t('haccpStudy.destination'))),
           const SizedBox(height: 10),
-          TextField(controller: consommateurCible, decoration: const InputDecoration(labelText: 'Consommateur cible')),
+          TextField(controller: consommateurCible, decoration: InputDecoration(labelText: t('haccpStudy.consommateurCible'))),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(child: TextField(controller: conditionsStockage, decoration: const InputDecoration(labelText: 'Conditions de stockage'))),
+            Expanded(child: TextField(controller: conditionsStockage, decoration: InputDecoration(labelText: t('haccpStudy.conditionsStockage')))),
             const SizedBox(width: 8),
-            Expanded(child: TextField(controller: dureeConservation, decoration: const InputDecoration(labelText: 'Durée de conservation'))),
+            Expanded(child: TextField(controller: dureeConservation, decoration: InputDecoration(labelText: t('haccpStudy.dureeConservation')))),
           ]),
           const SizedBox(height: 10),
-          TextField(controller: modeDistribution, decoration: const InputDecoration(labelText: 'Mode de distribution')),
+          TextField(controller: modeDistribution, decoration: InputDecoration(labelText: t('haccpStudy.modeDistribution'))),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable'), value: responsableId,
+            isExpanded: true, decoration: InputDecoration(labelText: t('haccpStudy.responsable')), value: responsableId,
             items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
             onChanged: (v) => setD(() => responsableId = v),
           ),
         ]))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          FilledButton(onPressed: name.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: const Text('Enregistrer')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpStudy.annuler'))),
+          FilledButton(onPressed: name.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: Text(t('haccpStudy.enregistrer'))),
         ],
       )),
     );
@@ -173,11 +175,11 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
 
   Future<void> deleteStudy() async {
     final ok = await showDialog<bool>(context: context, builder: (dc) => AlertDialog(
-      title: const Text('Supprimer cette étude ?'),
-      content: const Text('Cette action supprime aussi l\'équipe, le diagramme de flux, les dangers et les CCP associés.'),
+      title: Text(t('haccpStudy.supprimerEtudeTitle')),
+      content: Text(t('haccpStudy.supprimerEtudeContent')),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-        FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Supprimer')),
+        TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpStudy.annuler'))),
+        FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('haccpStudy.supprimer'))),
       ],
     ));
     if (ok != true) return;
@@ -194,22 +196,22 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: const Text('Ajouter un membre à l\'équipe HACCP'),
+        title: Text(t('haccpStudy.ajouterMembreTitle')),
         content: SizedBox(width: 400, child: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Employé *'), value: employeeId,
+            isExpanded: true, decoration: InputDecoration(labelText: t('haccpStudy.employe')), value: employeeId,
             items: employees.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text('${e['firstName']} ${e['lastName']}'))).toList(),
             onChanged: (v) => setD(() => employeeId = v),
           ),
           const SizedBox(height: 10),
-          TextField(controller: fonction, decoration: const InputDecoration(labelText: 'Fonction')),
+          TextField(controller: fonction, decoration: InputDecoration(labelText: t('haccpStudy.fonction'))),
           const SizedBox(height: 10),
-          TextField(controller: roleEtude, decoration: const InputDecoration(labelText: 'Rôle dans l\'étude')),
-          CheckboxListTile(contentPadding: EdgeInsets.zero, value: formationHaccp, title: const Text('Formé HACCP', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => formationHaccp = v ?? false)),
+          TextField(controller: roleEtude, decoration: InputDecoration(labelText: t('haccpStudy.roleEtude'))),
+          CheckboxListTile(contentPadding: EdgeInsets.zero, value: formationHaccp, title: Text(t('haccpStudy.formeHaccp'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setD(() => formationHaccp = v ?? false)),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          FilledButton(onPressed: employeeId == null ? null : () => Navigator.pop(dc, true), child: const Text('Ajouter')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpStudy.annuler'))),
+          FilledButton(onPressed: employeeId == null ? null : () => Navigator.pop(dc, true), child: Text(t('haccpStudy.ajouter'))),
         ],
       )),
     );
@@ -228,17 +230,17 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
     final description = TextEditingController();
     final zone = TextEditingController();
     final ok = await showDialog<bool>(context: context, builder: (dc) => AlertDialog(
-      title: const Text('Ajouter une étape'),
+      title: Text(t('haccpStudy.ajouterEtapeTitle')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: nom, decoration: const InputDecoration(labelText: 'Nom de l\'étape *')),
+        TextField(controller: nom, decoration: InputDecoration(labelText: t('haccpStudy.nomEtape'))),
         const SizedBox(height: 10),
-        TextField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+        TextField(controller: description, maxLines: 2, decoration: InputDecoration(labelText: t('haccpStudy.description'))),
         const SizedBox(height: 10),
-        TextField(controller: zone, decoration: const InputDecoration(labelText: 'Zone')),
+        TextField(controller: zone, decoration: InputDecoration(labelText: t('haccpStudy.zone'))),
       ])),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-        FilledButton(onPressed: nom.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: const Text('Ajouter')),
+        TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpStudy.annuler'))),
+        FilledButton(onPressed: nom.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: Text(t('haccpStudy.ajouter'))),
       ],
     ));
     if (ok != true || nom.text.trim().isEmpty) return;
@@ -266,42 +268,42 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
     final libelle = TextEditingController();
     final justification = TextEditingController();
     final mesuresExistantes = TextEditingController();
-    String type = _hazardTypeLabels.keys.first;
+    String type = _hazardTypeKeys.keys.first;
     int gravite = 3, probabilite = 3;
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: const Text('Identifier un danger'),
+        title: Text(t('haccpStudy.identifierDangerTitle')),
         content: SizedBox(width: 400, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Type'), value: type,
-            items: _hazardTypeLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            isExpanded: true, decoration: InputDecoration(labelText: t('haccpStudy.type')), value: type,
+            items: _hazardTypeKeys.keys.map((k) => DropdownMenuItem(value: k, child: Text(_hazardTypeLabel(k)))).toList(),
             onChanged: (v) => setD(() => type = v ?? type),
           ),
           const SizedBox(height: 10),
-          TextField(controller: libelle, decoration: const InputDecoration(labelText: 'Danger identifié *')),
+          TextField(controller: libelle, decoration: InputDecoration(labelText: t('haccpStudy.dangerIdentifie'))),
           const SizedBox(height: 10),
-          TextField(controller: justification, maxLines: 2, decoration: const InputDecoration(labelText: 'Justification')),
+          TextField(controller: justification, maxLines: 2, decoration: InputDecoration(labelText: t('haccpStudy.justification'))),
           const SizedBox(height: 10),
-          TextField(controller: mesuresExistantes, maxLines: 2, decoration: const InputDecoration(labelText: 'Mesures de maîtrise existantes')),
+          TextField(controller: mesuresExistantes, maxLines: 2, decoration: InputDecoration(labelText: t('haccpStudy.mesuresExistantes'))),
           const SizedBox(height: 10),
           Row(children: [
             Expanded(child: DropdownButtonFormField<int>(
-              decoration: const InputDecoration(labelText: 'Gravité (1-5)'), value: gravite,
+              decoration: InputDecoration(labelText: t('haccpStudy.gravite')), value: gravite,
               items: List.generate(5, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text('$v'))).toList(),
               onChanged: (v) => setD(() => gravite = v ?? gravite),
             )),
             const SizedBox(width: 10),
             Expanded(child: DropdownButtonFormField<int>(
-              decoration: const InputDecoration(labelText: 'Probabilité (1-5)'), value: probabilite,
+              decoration: InputDecoration(labelText: t('haccpStudy.probabilite')), value: probabilite,
               items: List.generate(5, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text('$v'))).toList(),
               onChanged: (v) => setD(() => probabilite = v ?? probabilite),
             )),
           ]),
         ]))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          FilledButton(onPressed: libelle.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: const Text('Enregistrer')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpStudy.annuler'))),
+          FilledButton(onPressed: libelle.text.trim().isEmpty ? null : () => Navigator.pop(dc, true), child: Text(t('haccpStudy.enregistrer'))),
         ],
       )),
     );
@@ -327,29 +329,29 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: const Text('Créer un point de maîtrise'),
+        title: Text(t('haccpStudy.creerPointMaitriseTitle')),
         content: SizedBox(width: 400, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
-            decoration: const InputDecoration(labelText: 'Type'), value: type,
-            items: const [DropdownMenuItem(value: 'CCP', child: Text('CCP — point critique')), DropdownMenuItem(value: 'CP', child: Text('CP — point de vigilance'))],
+            decoration: InputDecoration(labelText: t('haccpStudy.type')), value: type,
+            items: [DropdownMenuItem(value: 'CCP', child: Text(t('haccpStudy.ccpPointCritique'))), DropdownMenuItem(value: 'CP', child: Text(t('haccpStudy.cpPointVigilance')))],
             onChanged: (v) => setD(() => type = v ?? type),
           ),
           const SizedBox(height: 10),
-          TextField(controller: dangerMaitrise, decoration: const InputDecoration(labelText: 'Danger maîtrisé')),
+          TextField(controller: dangerMaitrise, decoration: InputDecoration(labelText: t('haccpStudy.dangerMaitrise'))),
           const SizedBox(height: 10),
-          TextField(controller: parametre, decoration: const InputDecoration(labelText: 'Paramètre surveillé')),
+          TextField(controller: parametre, decoration: InputDecoration(labelText: t('haccpStudy.parametreSurveille'))),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(child: TextField(controller: limiteCritique, decoration: const InputDecoration(labelText: 'Limite critique'))),
+            Expanded(child: TextField(controller: limiteCritique, decoration: InputDecoration(labelText: t('haccpStudy.limiteCritique')))),
             const SizedBox(width: 8),
-            Expanded(child: TextField(controller: unite, decoration: const InputDecoration(labelText: 'Unité'))),
+            Expanded(child: TextField(controller: unite, decoration: InputDecoration(labelText: t('haccpStudy.unite')))),
           ]),
           const SizedBox(height: 10),
-          TextField(controller: frequence, decoration: const InputDecoration(labelText: 'Fréquence de surveillance')),
+          TextField(controller: frequence, decoration: InputDecoration(labelText: t('haccpStudy.frequenceSurveillance'))),
         ]))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('Créer')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('haccpStudy.annuler'))),
+          FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(t('haccpStudy.creer'))),
         ],
       )),
     );
@@ -373,24 +375,24 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
 
   List<Widget> _workflowButtons(String? status) {
     final buttons = <Widget>[
-      OutlinedButton.icon(onPressed: busy ? null : editStudy, icon: const Icon(Icons.edit, size: 16), label: const Text('Modifier')),
+      OutlinedButton.icon(onPressed: busy ? null : editStudy, icon: const Icon(Icons.edit, size: 16), label: Text(t('haccpStudy.modifier'))),
     ];
     // Boutons soumis à Api.canManage (RBAC, finding #1) : le backend exige
     // ADMINISTRATEUR/RESPONSABLE_QHSE sur /validate et sur la suppression.
     if ((status == 'BROUILLON' || status == 'EN_VALIDATION') && Api.canManage) {
-      buttons.add(FilledButton.icon(onPressed: busy ? null : validate, icon: const Icon(Icons.check, size: 16), label: Text(status == 'BROUILLON' ? 'Soumettre pour validation' : 'Valider')));
+      buttons.add(FilledButton.icon(onPressed: busy ? null : validate, icon: const Icon(Icons.check, size: 16), label: Text(status == 'BROUILLON' ? t('haccpStudy.soumettrePourValidation') : t('haccpStudy.valider'))));
     }
-    buttons.add(OutlinedButton.icon(onPressed: busy ? null : revise, icon: const Icon(Icons.history_edu, size: 16), label: const Text('Nouvelle révision')));
+    buttons.add(OutlinedButton.icon(onPressed: busy ? null : revise, icon: const Icon(Icons.history_edu, size: 16), label: Text(t('haccpStudy.nouvelleRevision'))));
     if (Api.canManage) {
-      buttons.add(TextButton.icon(onPressed: busy ? null : deleteStudy, icon: Icon(Icons.delete_outline, size: 16, color: QhseColors.red), label: Text('Supprimer', style: TextStyle(color: QhseColors.red))));
+      buttons.add(TextButton.icon(onPressed: busy ? null : deleteStudy, icon: Icon(Icons.delete_outline, size: 16, color: QhseColors.red), label: Text(t('haccpStudy.supprimer'), style: TextStyle(color: QhseColors.red))));
     }
     return buttons;
   }
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Étude HACCP')), body: const Center(child: CircularProgressIndicator()));
-    if (study == null) return Scaffold(appBar: AppBar(title: const Text('Étude HACCP')), body: Center(child: Text(error ?? 'Introuvable')));
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('haccpStudy.pageTitleFallback'))), body: const Center(child: CircularProgressIndicator()));
+    if (study == null) return Scaffold(appBar: AppBar(title: Text(t('haccpStudy.pageTitleFallback'))), body: Center(child: Text(error ?? t('haccpStudy.introuvable'))));
     final s = study!;
     final status = s['status'] as String?;
     final sColor = haccpStudyStatusColor(status);
@@ -414,26 +416,26 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
             ]),
           ),
           const SizedBox(height: 12),
-          _metaRow('Produit', s['produit']),
-          _metaRow('Catégorie de produit', s['categorieProduit']),
-          _metaRow('Activité / atelier / ligne', [s['activite'], s['atelier'], s['ligne']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
-          _metaRow('Destination', s['destination']),
-          _metaRow('Consommateur cible', s['consommateurCible']),
-          _metaRow('Conditions de stockage', s['conditionsStockage']),
-          _metaRow('Durée de conservation', s['dureeConservation']),
-          _metaRow('Responsable', userName(s['responsableId'])),
-          _metaRow('Prochaine révision', s['prochaineRevision'] != null ? haccpFmtDate(s['prochaineRevision']) : '—'),
+          _metaRow(t('haccpStudy.metaProduit'), s['produit']),
+          _metaRow(t('haccpStudy.metaCategorieProduit'), s['categorieProduit']),
+          _metaRow(t('haccpStudy.metaActiviteAtelierLigne'), [s['activite'], s['atelier'], s['ligne']].where((x) => x != null && '$x'.isNotEmpty).join(' / ')),
+          _metaRow(t('haccpStudy.metaDestination'), s['destination']),
+          _metaRow(t('haccpStudy.metaConsommateurCible'), s['consommateurCible']),
+          _metaRow(t('haccpStudy.metaConditionsStockage'), s['conditionsStockage']),
+          _metaRow(t('haccpStudy.metaDureeConservation'), s['dureeConservation']),
+          _metaRow(t('haccpStudy.metaResponsable'), userName(s['responsableId'])),
+          _metaRow(t('haccpStudy.metaProchaineRevision'), s['prochaineRevision'] != null ? haccpFmtDate(s['prochaineRevision']) : '—'),
 
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, children: _workflowButtons(status)),
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Équipe HACCP (${team.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            TextButton.icon(onPressed: addTeamMember, icon: const Icon(Icons.person_add_alt, size: 16), label: const Text('Ajouter')),
+            Text(t('haccpStudy.equipeTitle', {'count': '${team.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            TextButton.icon(onPressed: addTeamMember, icon: const Icon(Icons.person_add_alt, size: 16), label: Text(t('haccpStudy.ajouter'))),
           ]),
           if (team.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucun membre', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('haccpStudy.aucunMembre'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...team.map((m) => Card(child: ListTile(
                   dense: true,
@@ -445,11 +447,11 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
 
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Diagramme de flux (${steps.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            TextButton.icon(onPressed: addStep, icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter une étape')),
+            Text(t('haccpStudy.diagrammeFluxTitle', {'count': '${steps.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            TextButton.icon(onPressed: addStep, icon: const Icon(Icons.add, size: 16), label: Text(t('haccpStudy.ajouterEtape'))),
           ]),
           if (steps.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune étape', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('haccpStudy.aucuneEtape'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
           else
             ...steps.asMap().entries.map((entry) {
               final i = entry.key;
@@ -468,13 +470,13 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
                       IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => deleteStep(step['id'])),
                     ]),
                     if (step['description'] != null) Padding(padding: const EdgeInsets.only(left: 32, top: 2), child: Text('${step['description']}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
-                    if (step['zone'] != null) Padding(padding: const EdgeInsets.only(left: 32, top: 2), child: Text('Zone : ${step['zone']}', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
+                    if (step['zone'] != null) Padding(padding: const EdgeInsets.only(left: 32, top: 2), child: Text(t('haccpStudy.zonePrefix', {'zone': '${step['zone']}'}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))),
                     const SizedBox(height: 8),
                     Padding(
                       padding: const EdgeInsets.only(left: 32),
                       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        Text('Dangers (${hazards.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        TextButton.icon(onPressed: () => addHazard(step['id']), icon: const Icon(Icons.add, size: 14), label: const Text('Ajouter', style: TextStyle(fontSize: 12))),
+                        Text(t('haccpStudy.dangersTitle', {'count': '${hazards.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        TextButton.icon(onPressed: () => addHazard(step['id']), icon: const Icon(Icons.add, size: 14), label: Text(t('haccpStudy.ajouter'), style: const TextStyle(fontSize: 12))),
                       ]),
                     ),
                     ...hazards.map<Widget>((hz) {
@@ -486,13 +488,13 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
                           decoration: BoxDecoration(color: QhseColors.cardAlt, borderRadius: BorderRadius.circular(8)),
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Row(children: [
-                              Expanded(child: Text('${_hazardTypeLabels[hz['type']] ?? hz['type']} — ${hz['libelle']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                              Expanded(child: Text('${_hazardTypeLabel(hz['type'])} — ${hz['libelle']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                               if (hz['niveauRisque'] != null) haccpChip(haccpNiveauRisqueLabels[hz['niveauRisque']] ?? '${hz['niveauRisque']}', haccpNiveauRisqueColor(hz['niveauRisque'])),
                               IconButton(icon: const Icon(Icons.delete_outline, size: 16), onPressed: () => deleteHazard(hz['id'])),
                             ]),
                             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text('CCP/CP (${ccps.length})', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
-                              TextButton(onPressed: () => addCcp(hz['id']), child: const Text('+ point de maîtrise', style: TextStyle(fontSize: 11))),
+                              Text(t('haccpStudy.ccpCpTitle', {'count': '${ccps.length}'}), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+                              TextButton(onPressed: () => addCcp(hz['id']), child: Text(t('haccpStudy.pointDeMaitrise'), style: const TextStyle(fontSize: 11))),
                             ]),
                             ...ccps.map<Widget>((ccp) => ListTile(
                                   dense: true, contentPadding: EdgeInsets.zero, minLeadingWidth: 0,
@@ -512,7 +514,7 @@ class _HaccpStudyDetailPageState extends State<HaccpStudyDetailPage> {
 
           if (revisions.isNotEmpty) ...[
             const SizedBox(height: 20),
-            Text('Historique des révisions (${revisions.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(t('haccpStudy.historiqueRevisionsTitle', {'count': '${revisions.length}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ...revisions.map((r) => Card(child: ListTile(
                   dense: true,
                   title: Text('v${r['version']} — ${r['declencheur']}'),
