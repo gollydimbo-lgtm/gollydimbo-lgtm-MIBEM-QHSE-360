@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 
 // Finding #23 — même logique que le panneau web ValidationWorkflowPanel :
 // workflow optionnel et non régressif (validationStatus par défaut
@@ -21,8 +22,8 @@ class _ValidationWorkflowSectionState extends State<ValidationWorkflowSection> {
   bool busy = false;
   final commentaireCtrl = TextEditingController();
 
-  static const Map<String, String> labels = {
-    'APPROUVEE': 'Approuvée', 'SOUMISE': 'Soumise à validation', 'REJETEE': 'Rejetée', 'VALIDEE': 'Validée',
+  static Map<String, String> get labels => {
+    'APPROUVEE': t('validationHistory.statutApprouvee'), 'SOUMISE': t('validationHistory.statutSoumise'), 'REJETEE': t('validationHistory.statutRejetee'), 'VALIDEE': t('validationHistory.statutValidee'),
   };
   static const Map<String, Color> colors = {
     'APPROUVEE': QhseColors.green, 'SOUMISE': QhseColors.amber, 'REJETEE': QhseColors.red, 'VALIDEE': QhseColors.green,
@@ -45,22 +46,22 @@ class _ValidationWorkflowSectionState extends State<ValidationWorkflowSection> {
     final color = colors[status] ?? QhseColors.textSecondary;
     return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        const Text('Validation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(t('validationHistory.validation'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const Spacer(),
         Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(999)), child: Text(labels[status] ?? status, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600))),
       ]),
       if (status != 'SOUMISE') ...[
         const SizedBox(height: 8),
-        Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: busy ? null : () => run('soumettre'), child: Text(busy ? '…' : 'Soumettre pour validation'))),
+        Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: busy ? null : () => run('soumettre'), child: Text(busy ? '…' : t('validationHistory.soumettrePourValidation')))),
       ],
       if (status == 'SOUMISE') ...[
         const SizedBox(height: 8),
-        TextField(controller: commentaireCtrl, decoration: const InputDecoration(labelText: 'Commentaire (optionnel)', isDense: true)),
+        TextField(controller: commentaireCtrl, decoration: InputDecoration(labelText: t('validationHistory.commentaireOptionnel'), isDense: true)),
         const SizedBox(height: 8),
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          TextButton(onPressed: busy ? null : () => run('rejeter', {'commentaire': commentaireCtrl.text.trim().isEmpty ? null : commentaireCtrl.text.trim()}), child: Text('Rejeter', style: TextStyle(color: QhseColors.red))),
+          TextButton(onPressed: busy ? null : () => run('rejeter', {'commentaire': commentaireCtrl.text.trim().isEmpty ? null : commentaireCtrl.text.trim()}), child: Text(t('validationHistory.rejeter'), style: TextStyle(color: QhseColors.red))),
           const SizedBox(width: 8),
-          FilledButton(onPressed: busy ? null : () => run('approuver', {'commentaire': commentaireCtrl.text.trim().isEmpty ? null : commentaireCtrl.text.trim()}), child: const Text('Approuver')),
+          FilledButton(onPressed: busy ? null : () => run('approuver', {'commentaire': commentaireCtrl.text.trim().isEmpty ? null : commentaireCtrl.text.trim()}), child: Text(t('validationHistory.approuver'))),
         ]),
       ],
     ])));
@@ -97,13 +98,13 @@ class _HistorySectionState extends State<HistorySection> {
   @override
   Widget build(BuildContext context) {
     return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Historique', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+      Text(t('validationHistory.historique'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
       const SizedBox(height: 8),
       if (loading) const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
-      else if (error != null) Text('Historique indisponible', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
-      else if (entries.isEmpty) Text('Aucune modification enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
+      else if (error != null) Text(t('validationHistory.historiqueIndisponible'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
+      else if (entries.isEmpty) Text(t('validationHistory.aucuneModification'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12))
       else ...entries.map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Text('${e['action'] ?? ''} — ${e['userId'] ?? 'système'}', style: const TextStyle(fontSize: 12))),
+            Expanded(child: Text('${e['action'] ?? ''} — ${e['userId'] ?? t('validationHistory.systeme')}', style: const TextStyle(fontSize: 12))),
             Text(e['createdAt'] != null ? DateTime.parse(e['createdAt']).toLocal().toString().substring(0, 16) : '—', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
           ]))),
     ])));
