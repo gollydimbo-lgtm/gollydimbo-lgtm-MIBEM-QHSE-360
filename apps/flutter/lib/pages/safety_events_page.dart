@@ -2,22 +2,23 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'attachment_helpers.dart';
 import 'capa_link_widget.dart';
 import 'attachments_widget.dart';
 import 'load_error_view.dart';
 import 'validation_history_widgets.dart';
 
-const _types = {
-  'ACCIDENT': ('Accident', Icons.local_hospital, Colors.red),
-  'INCIDENT': ('Incident', Icons.report_problem, Colors.deepOrange),
-  'PRESQU_ACCIDENT': ('Presqu\'accident', Icons.warning_amber, Colors.orange),
-  'SITUATION_DANGEREUSE': ('Situation dangereuse', Icons.dangerous, Colors.amber),
+Map<String, (String, IconData, Color)> _types() => {
+  'ACCIDENT': (t('safetyEventsPage.types.accident'), Icons.local_hospital, Colors.red),
+  'INCIDENT': (t('safetyEventsPage.types.incident'), Icons.report_problem, Colors.deepOrange),
+  'PRESQU_ACCIDENT': (t('safetyEventsPage.types.presquAccident'), Icons.warning_amber, Colors.orange),
+  'SITUATION_DANGEREUSE': (t('safetyEventsPage.types.situationDangereuse'), Icons.dangerous, Colors.amber),
 };
-const Map<String, String> kStatutLabels = {
-  'DECLARE': 'Déclaré', 'SECURISE': 'Sécurisé', 'INVESTIGATION': 'En investigation', 'ANALYSE_CAUSES': 'Analyse des causes',
-  'ACTIONS_DEFINIES': 'Actions définies', 'ACTIONS_EN_COURS': 'Actions en cours', 'VERIFICATION': "Vérification d'efficacité",
-  'VALIDE': 'Validé', 'CLOTURE': 'Clôturé',
+Map<String, String> _statutLabels() => {
+  'DECLARE': t('safetyEventsPage.statuts.declare'), 'SECURISE': t('safetyEventsPage.statuts.securise'), 'INVESTIGATION': t('safetyEventsPage.statuts.investigation'), 'ANALYSE_CAUSES': t('safetyEventsPage.statuts.analyseCauses'),
+  'ACTIONS_DEFINIES': t('safetyEventsPage.statuts.actionsDefinies'), 'ACTIONS_EN_COURS': t('safetyEventsPage.statuts.actionsEnCours'), 'VERIFICATION': t('safetyEventsPage.statuts.verification'),
+  'VALIDE': t('safetyEventsPage.statuts.valide'), 'CLOTURE': t('safetyEventsPage.statuts.cloture'),
 };
 Color _niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
 
@@ -66,22 +67,22 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dc) => StatefulBuilder(builder: (dc, setD) => AlertDialog(
-        title: Text(editing ? 'Modifier les heures travaillées' : 'Nouvelles heures travaillées'),
+        title: Text(editing ? t('safetyEventsPage.heures.titreModifier') : t('safetyEventsPage.heures.titreNouveau')),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
             Expanded(child: OutlinedButton(
               onPressed: () async { final d = await showDatePicker(context: dc, initialDate: periodStart, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setD(() => periodStart = d); },
-              child: Text('Début : ${periodStart.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 12)),
+              child: Text(t('safetyEventsPage.heures.debut', {'date': periodStart.toIso8601String().substring(0, 10)}), style: const TextStyle(fontSize: 12)),
             )),
             const SizedBox(width: 8),
             Expanded(child: OutlinedButton(
               onPressed: () async { final d = await showDatePicker(context: dc, initialDate: periodEnd, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setD(() => periodEnd = d); },
-              child: Text('Fin : ${periodEnd.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 12)),
+              child: Text(t('safetyEventsPage.heures.fin', {'date': periodEnd.toIso8601String().substring(0, 10)}), style: const TextStyle(fontSize: 12)),
             )),
           ]),
           const SizedBox(height: 8),
-          TextField(controller: hoursCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Heures travaillées (total sur la période)')),
-          TextField(controller: siteCtrl, decoration: const InputDecoration(labelText: 'Site (optionnel)')),
+          TextField(controller: hoursCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('safetyEventsPage.heures.heuresLabel'))),
+          TextField(controller: siteCtrl, decoration: InputDecoration(labelText: t('safetyEventsPage.heures.siteLabel'))),
           if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: TextStyle(color: QhseColors.red, fontSize: 12))),
         ])),
         actions: [
@@ -90,13 +91,13 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
               try { await api.delete('/business/worked-hours/${record['id']}'); if (dc.mounted) Navigator.pop(dc, true); }
               catch (e) { setD(() => error = '$e'); }
             },
-            child: Text('Supprimer', style: TextStyle(color: QhseColors.red)),
+            child: Text(t('safetyEventsPage.supprimer'), style: TextStyle(color: QhseColors.red)),
           ),
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(t('safetyEventsPage.annuler'))),
           FilledButton(
             onPressed: () async {
               final hours = double.tryParse(hoursCtrl.text.replaceAll(',', '.'));
-              if (hours == null) { setD(() => error = 'Heures invalides'); return; }
+              if (hours == null) { setD(() => error = t('safetyEventsPage.heures.invalides')); return; }
               try {
                 final payload = {'periodStart': periodStart.toIso8601String(), 'periodEnd': periodEnd.toIso8601String(), 'hours': hours, 'site': siteCtrl.text.trim()};
                 if (editing) { await api.patch('/business/worked-hours/${record['id']}', payload); }
@@ -104,7 +105,7 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                 if (dc.mounted) Navigator.pop(dc, true);
               } catch (e) { setD(() => error = '$e'); }
             },
-            child: const Text('Enregistrer'),
+            child: Text(t('safetyEventsPage.enregistrer')),
           ),
         ],
       )),
@@ -120,13 +121,13 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Accidents & incidents'),
-          bottom: TabBar(onTap: (i) => setState(() => tabIndex = i), tabs: const [Tab(text: 'Tableau de bord'), Tab(text: 'Registre'), Tab(text: 'Heures travaillées')]),
+          title: Text(t('safetyEventsPage.title')),
+          bottom: TabBar(onTap: (i) => setState(() => tabIndex = i), tabs: [Tab(text: t('safetyEventsPage.tabDashboard')), Tab(text: t('safetyEventsPage.tabRegistre')), Tab(text: t('safetyEventsPage.tabHeures'))]),
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const NewSafetyEventPage())).then((_) => load()),
           icon: const Icon(Icons.add),
-          label: const Text('Déclarer'),
+          label: Text(t('safetyEventsPage.declarer')),
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
@@ -137,18 +138,18 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                   onRefresh: load,
                   child: ListView(padding: const EdgeInsets.all(12), children: [
                     KpiBar([
-                      KpiStat('Événements', '${volume['total'] ?? 0}', color: QhseColors.blue, icon: Icons.report_outlined),
-                      KpiStat('Accidents', '${volume['accidents'] ?? 0}', color: QhseColors.red, icon: Icons.local_hospital_outlined),
-                      KpiStat('Avec arrêt', '${volume['avecArret'] ?? 0}', color: QhseColors.amber, icon: Icons.timer_off_outlined),
-                      KpiStat('Graves (≥4)', '${volume['graves'] ?? 0}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+                      KpiStat(t('safetyEventsPage.kpi.evenements'), '${volume['total'] ?? 0}', color: QhseColors.blue, icon: Icons.report_outlined),
+                      KpiStat(t('safetyEventsPage.kpi.accidents'), '${volume['accidents'] ?? 0}', color: QhseColors.red, icon: Icons.local_hospital_outlined),
+                      KpiStat(t('safetyEventsPage.kpi.avecArret'), '${volume['avecArret'] ?? 0}', color: QhseColors.amber, icon: Icons.timer_off_outlined),
+                      KpiStat(t('safetyEventsPage.kpi.graves'), '${volume['graves'] ?? 0}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
                     ]),
                     const SizedBox(height: 16),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      const Text('Alertes automatiques', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text(t('safetyEventsPage.alertesTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       Text('${alertes.length}', style: TextStyle(color: QhseColors.textSecondary)),
                     ]),
                     const SizedBox(height: 6),
-                    if (alertes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.green)))
+                    if (alertes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('safetyEventsPage.aucuneAlerte'), style: TextStyle(color: QhseColors.green)))
                     else ...alertes.map((a) => Card(child: ListTile(
                           title: Text(a['title'] ?? ''),
                           subtitle: Text(List.from(a['motifs'] ?? []).map((m) => m['label']).join(' · '), style: const TextStyle(fontSize: 11)),
@@ -161,14 +162,14 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                         ))),
                     const SizedBox(height: 16),
                     if (List.from(recidives['parCauseRacine'] ?? []).isNotEmpty || List.from(recidives['parZone'] ?? []).isNotEmpty) ...[
-                      const Text('Risque de récidive détecté', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text(t('safetyEventsPage.recidiveTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       const SizedBox(height: 6),
-                      ...List.from(recidives['parCauseRacine'] ?? []).map((r) => Card(child: ListTile(dense: true, title: Text(r['critere'] ?? ''), subtitle: const Text('Cause racine récurrente', style: TextStyle(fontSize: 11)), trailing: Text('${r['nombre']}×', style: TextStyle(color: QhseColors.amber, fontWeight: FontWeight.bold))))),
+                      ...List.from(recidives['parCauseRacine'] ?? []).map((r) => Card(child: ListTile(dense: true, title: Text(r['critere'] ?? ''), subtitle: Text(t('safetyEventsPage.causeRecurrente'), style: const TextStyle(fontSize: 11)), trailing: Text('${r['nombre']}×', style: TextStyle(color: QhseColors.amber, fontWeight: FontWeight.bold))))),
                       const SizedBox(height: 16),
                     ],
-                    const Text('Pareto des causes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(t('safetyEventsPage.paretoTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     const SizedBox(height: 6),
-                    if (pareto.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune cause racine renseignée', style: TextStyle(color: QhseColors.textSecondary)))
+                    if (pareto.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('safetyEventsPage.aucuneCauseRacine'), style: TextStyle(color: QhseColors.textSecondary)))
                     else ...pareto.map((p) => Card(child: ListTile(
                           title: Text(p['name'] ?? ''),
                           trailing: Text('${p['value']} (${p['pct']}%, cumul ${p['cumulPct']}%)', style: const TextStyle(fontSize: 11)),
@@ -181,7 +182,7 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                     Padding(
                       padding: const EdgeInsets.all(12),
                       child: TextField(
-                        decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 18), hintText: 'Rechercher (titre, type, statut...)', isDense: true, border: OutlineInputBorder()),
+                        decoration: InputDecoration(prefixIcon: const Icon(Icons.search, size: 18), hintText: t('safetyEventsPage.searchHint'), isDense: true, border: const OutlineInputBorder()),
                         onChanged: (v) => setState(() => search = v),
                       ),
                     ),
@@ -189,22 +190,22 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                       final filtered = search.trim().isEmpty
                           ? events
                           : events.where((e) {
-                              final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
-                              return ('${e['title'] ?? ''} ${meta.$1} ${kStatutLabels[e['statut']] ?? ''}').toLowerCase().contains(search.trim().toLowerCase());
+                              final meta = _types()[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
+                              return ('${e['title'] ?? ''} ${meta.$1} ${_statutLabels()[e['statut']] ?? ''}').toLowerCase().contains(search.trim().toLowerCase());
                             }).toList();
                       return filtered.isEmpty
-                          ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? 'Aucun événement déclaré' : 'Aucun résultat pour cette recherche')))])
+                          ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? t('safetyEventsPage.aucunEvenement') : t('safetyEventsPage.aucunResultat'))))])
                           : ListView.builder(
                               padding: const EdgeInsets.all(12),
                               itemCount: filtered.length,
                               itemBuilder: (_, i) {
                                 final e = filtered[i];
-                                final meta = _types[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
+                                final meta = _types()[e['type']] ?? ('${e['type']}', Icons.info, Colors.grey);
                                 return Card(
                                   child: ListTile(
                                     leading: Icon(meta.$2, color: meta.$3, size: 32),
                                     title: Text('${e['title']}'),
-                                    subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])} • ${kStatutLabels[e['statut']] ?? 'Déclaré'}'),
+                                    subtitle: Text('${meta.$1} • ${_date(e['occurredAt'])} • ${_statutLabels()[e['statut']] ?? t('safetyEventsPage.statuts.declare')}'),
                                     trailing: severityChip(e['severity'] ?? 1, prefix: ''),
                                     onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SafetyEventDetailPage(eventId: e['id']))).then((_) => load()),
                                   ),
@@ -217,7 +218,7 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
                 RefreshIndicator(
                   onRefresh: load,
                   child: workedHours.isEmpty
-                      ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucune période enregistrée')))])
+                      ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('safetyEventsPage.aucunePeriode'))))])
                       : ListView.builder(
                           padding: const EdgeInsets.all(12),
                           itemCount: workedHours.length,
@@ -235,7 +236,7 @@ class _SafetyEventsPageState extends State<SafetyEventsPage> {
               ]),
         bottomNavigationBar: tabIndex == 2 ? SafeArea(child: Padding(
           padding: const EdgeInsets.all(12),
-          child: FilledButton.icon(onPressed: () => _showWorkedHoursDialog(), icon: const Icon(Icons.add), label: const Text('Nouvelle période')),
+          child: FilledButton.icon(onPressed: () => _showWorkedHoursDialog(), icon: const Icon(Icons.add), label: Text(t('safetyEventsPage.nouvellePeriode'))),
         )) : null,
       ),
     );
@@ -281,7 +282,7 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
 
   Future<void> submit() async {
     if (title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyEventsPage.titreObligatoire'))));
       return;
     }
     setState(() => busy = true);
@@ -301,12 +302,12 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
     try {
       final r = await api.post('/business/safety-events', payload);
       setState(() => createdId = r['id']);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Déclaration enregistrée')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyEventsPage.declarationEnregistree'))));
     } on ApiException catch (e) {
       if (e.networkError) {
         await SyncQueue.enqueue('safetyEvent', 'CREATE', payload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : déclaration enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyEventsPage.horsLigneMessage')), duration: const Duration(seconds: 4)));
           Navigator.pop(context);
         }
       } else if (mounted) {
@@ -320,29 +321,29 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('Nouvelle déclaration')),
+    appBar: AppBar(title: Text(t('safetyEventsPage.nouvelleDeclarationTitle'))),
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         DropdownButtonFormField<String>(
           value: type,
-          decoration: const InputDecoration(labelText: 'Type d\'événement'),
-          items: _types.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value.$1))).toList(),
+          decoration: InputDecoration(labelText: t('safetyEventsPage.typeLabel')),
+          items: _types().entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value.$1))).toList(),
           onChanged: createdId == null ? (v) => setState(() => type = v!) : null,
         ),
         const SizedBox(height: 12),
-        TextField(controller: title, enabled: createdId == null, decoration: const InputDecoration(labelText: 'Titre / résumé')),
+        TextField(controller: title, enabled: createdId == null, decoration: InputDecoration(labelText: t('safetyEventsPage.titreLabel'))),
         const SizedBox(height: 12),
-        TextField(controller: description, enabled: createdId == null, maxLines: 4, decoration: const InputDecoration(labelText: 'Description, circonstances, témoins...')),
+        TextField(controller: description, enabled: createdId == null, maxLines: 4, decoration: InputDecoration(labelText: t('safetyEventsPage.descriptionLabel'))),
         const SizedBox(height: 12),
-        TextField(controller: zone, enabled: createdId == null, decoration: const InputDecoration(labelText: 'Zone / atelier (optionnel)')),
+        TextField(controller: zone, enabled: createdId == null, decoration: InputDecoration(labelText: t('safetyEventsPage.zoneLabel'))),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           value: typePersonnel, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Type de personnel concerné (optionnel)'),
-          items: const [
-            DropdownMenuItem(value: 'SALARIE', child: Text('Salarié')), DropdownMenuItem(value: 'INTERIMAIRE', child: Text('Intérimaire')),
-            DropdownMenuItem(value: 'SOUS_TRAITANT', child: Text('Sous-traitant')), DropdownMenuItem(value: 'VISITEUR', child: Text('Visiteur')), DropdownMenuItem(value: 'AUTRE', child: Text('Autre')),
+          decoration: InputDecoration(labelText: t('safetyEventsPage.typePersonnelLabel')),
+          items: [
+            DropdownMenuItem(value: 'SALARIE', child: Text(t('safetyEventsPage.personnel.salarie'))), DropdownMenuItem(value: 'INTERIMAIRE', child: Text(t('safetyEventsPage.personnel.interimaire'))),
+            DropdownMenuItem(value: 'SOUS_TRAITANT', child: Text(t('safetyEventsPage.personnel.sousTraitant'))), DropdownMenuItem(value: 'VISITEUR', child: Text(t('safetyEventsPage.personnel.visiteur'))), DropdownMenuItem(value: 'AUTRE', child: Text(t('safetyEventsPage.personnel.autre'))),
           ],
           onChanged: createdId == null ? (v) => setState(() => typePersonnel = v) : null,
         ),
@@ -350,13 +351,13 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
         if (employees.isNotEmpty) ...[
           DropdownButtonFormField<String>(
             value: employeeId, isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Employé concerné (optionnel)'),
+            decoration: InputDecoration(labelText: t('safetyEventsPage.employeLabel')),
             items: employees.map<DropdownMenuItem<String>>((e) => DropdownMenuItem(value: e['id'] as String, child: Text('${e['firstName']} ${e['lastName']}'))).toList(),
             onChanged: createdId == null ? (v) => setState(() => employeeId = v) : null,
           ),
           const SizedBox(height: 12),
           InputDecorator(
-            decoration: const InputDecoration(labelText: 'Témoins (optionnel)', border: OutlineInputBorder()),
+            decoration: InputDecoration(labelText: t('safetyEventsPage.temoinsLabel'), border: const OutlineInputBorder()),
             child: Wrap(spacing: 6, runSpacing: 4, children: employees.map<Widget>((e) {
               final id = e['id'] as String;
               final selected = temoinIds.contains(id);
@@ -369,13 +370,13 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
           ),
         ],
         const SizedBox(height: 12),
-        Text('Sévérité : $severity', style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(t('safetyEventsPage.severiteValeur', {'value': '$severity'}), style: const TextStyle(fontWeight: FontWeight.bold)),
         Slider(value: severity.toDouble(), min: 1, max: 5, divisions: 4, label: '$severity', onChanged: createdId == null ? (v) => setState(() => severity = v.round()) : null),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: createdId == null ? gps : null,
           icon: const Icon(Icons.gps_fixed),
-          label: Text(lat == null ? 'Capturer la position GPS' : 'GPS ${lat!.toStringAsFixed(5)}, ${lon!.toStringAsFixed(5)}'),
+          label: Text(lat == null ? t('safetyEventsPage.capturerGps') : 'GPS ${lat!.toStringAsFixed(5)}, ${lon!.toStringAsFixed(5)}'),
         ),
         const SizedBox(height: 20),
         if (createdId == null)
@@ -384,19 +385,19 @@ class _NewSafetyEventPageState extends State<NewSafetyEventPage> {
             child: FilledButton.icon(
               onPressed: busy ? null : submit,
               icon: const Icon(Icons.send),
-              label: Text(busy ? 'Envoi...' : 'Envoyer la déclaration'),
+              label: Text(busy ? t('safetyEventsPage.envoiEnCours') : t('safetyEventsPage.envoyerDeclaration')),
             ),
           )
         else ...[
-          const Text('✅ Déclaration enregistrée. Vous pouvez joindre une ou plusieurs photos.', style: TextStyle(color: Colors.green)),
+          Text('✅ ${t('safetyEventsPage.declarationEnregistreeMsg')}', style: const TextStyle(color: Colors.green)),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () => captureAndLinkPhoto(context, api, 'SAFETY_EVENT', createdId!),
             icon: const Icon(Icons.camera_alt),
-            label: const Text('Ajouter une photo'),
+            label: Text(t('safetyEventsPage.ajouterPhoto')),
           ),
           const SizedBox(height: 12),
-          FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Terminer')),
+          FilledButton(onPressed: () => Navigator.pop(context), child: Text(t('safetyEventsPage.terminer'))),
         ],
       ],
     ),
@@ -445,7 +446,7 @@ class _SafetyEventDetailPageState extends State<SafetyEventDetailPage> {
     try {
       await api.patch('/business/safety-events/${widget.eventId}', form);
       await load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enregistré')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('safetyEventsPage.enregistreMsg'))));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -453,24 +454,24 @@ class _SafetyEventDetailPageState extends State<SafetyEventDetailPage> {
   }
 
   Future<void> addAction() async {
-    final t = TextEditingController(text: "Action — ${ev?['title']}");
+    final actionTitleCtrl = TextEditingController(text: '${t('safetyEventsPage.actionPrefix')} ${ev?['title']}');
     String? formError;
     bool s = false;
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-        title: const Text('Nouvelle action'),
-        content: TextField(controller: t, decoration: const InputDecoration(labelText: 'Titre')),
+        title: Text(t('safetyEventsPage.nouvelleActionTitle')),
+        content: TextField(controller: actionTitleCtrl, decoration: InputDecoration(labelText: t('safetyEventsPage.actionTitreLabel'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(t('safetyEventsPage.annuler'))),
           FilledButton(onPressed: s ? null : () async {
             setD(() => s = true);
             try {
-              await api.post('/business/actions', {'code': 'ACT-${DateTime.now().millisecondsSinceEpoch}', 'title': t.text, 'priority': 2, 'status': 'OPEN', 'safetyEventId': widget.eventId});
+              await api.post('/business/actions', {'code': 'ACT-${DateTime.now().millisecondsSinceEpoch}', 'title': actionTitleCtrl.text, 'priority': 2, 'status': 'OPEN', 'safetyEventId': widget.eventId});
               if (context.mounted) Navigator.pop(c);
               load();
             } catch (e) { setD(() { s = false; formError = '$e'; }); }
-          }, child: Text(s ? '…' : 'Créer')),
+          }, child: Text(s ? '…' : t('safetyEventsPage.creer'))),
         ],
       )),
     );
@@ -484,64 +485,64 @@ class _SafetyEventDetailPageState extends State<SafetyEventDetailPage> {
   @override
   Widget build(BuildContext context) {
     if (loading || ev == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    final meta = _types[ev!['type']] ?? ('${ev!['type']}', Icons.info, Colors.grey);
+    final meta = _types()[ev!['type']] ?? ('${ev!['type']}', Icons.info, Colors.grey);
     return Scaffold(
       appBar: AppBar(title: Text(ev!['title'] ?? '')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Card(child: ListTile(
           leading: Icon(meta.$2, color: meta.$3, size: 32),
           title: Text('${meta.$1} • ${(ev!['occurredAt'] ?? '').toString().substring(0, 10)}'),
-          subtitle: Text('Sévérité ${ev!['severity']}${ev!['zone'] != null ? ' • ${ev!['zone']}' : ''}'),
+          subtitle: Text('${t('safetyEventsPage.severiteValeur', {'value': '${ev!['severity']}'})}${ev!['zone'] != null ? ' • ${ev!['zone']}' : ''}'),
         )),
         const SizedBox(height: 16),
 
         DropdownButtonFormField<String>(
           value: form['statut'], isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Statut'),
-          items: kStatutLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+          decoration: InputDecoration(labelText: t('safetyEventsPage.statutLabel')),
+          items: _statutLabels().entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
           onChanged: (v) => setState(() => form['statut'] = v),
         ),
         const SizedBox(height: 16),
 
-        const Text('Enquête', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(t('safetyEventsPage.enqueteTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: form['enqueteurId'], isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Enquêteur'),
+          decoration: InputDecoration(labelText: t('safetyEventsPage.enqueteurLabel')),
           items: users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}'))).toList(),
           onChanged: (v) => setState(() => form['enqueteurId'] = v),
         ),
         const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           value: form['methodeAnalyse'], isExpanded: true,
-          decoration: const InputDecoration(labelText: "Méthode d'analyse"),
-          items: const [
-            DropdownMenuItem(value: '5_POURQUOI', child: Text('5 Pourquoi')), DropdownMenuItem(value: 'ARBRE_CAUSES', child: Text('Arbre des causes')),
-            DropdownMenuItem(value: 'ISHIKAWA', child: Text('Ishikawa (5M)')), DropdownMenuItem(value: 'AUTRE', child: Text('Autre')),
+          decoration: InputDecoration(labelText: t('safetyEventsPage.methodeAnalyseLabel')),
+          items: [
+            DropdownMenuItem(value: '5_POURQUOI', child: Text(t('safetyEventsPage.methode.cinqPourquoi'))), DropdownMenuItem(value: 'ARBRE_CAUSES', child: Text(t('safetyEventsPage.methode.arbreCauses'))),
+            DropdownMenuItem(value: 'ISHIKAWA', child: Text(t('safetyEventsPage.methode.ishikawa'))), DropdownMenuItem(value: 'AUTRE', child: Text(t('safetyEventsPage.methode.autre'))),
           ],
           onChanged: (v) => setState(() => form['methodeAnalyse'] = v),
         ),
         const SizedBox(height: 16),
 
-        const Text('Analyse des causes — jamais limitée à « erreur humaine »', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(t('safetyEventsPage.analyseCausesTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 8),
-        _causeField('causeHumaine', 'Facteurs humains'),
-        _causeField('causeMethode', 'Méthodes'),
-        _causeField('causeMachine', 'Machines/équipements'),
-        _causeField('causeMatiere', 'Matières/produits'),
-        _causeField('causeMilieu', 'Milieu/environnement'),
-        _causeField('causeManagement', 'Management/organisation'),
-        _causeField('causeRacine', 'Cause racine retenue'),
+        _causeField('causeHumaine', t('safetyEventsPage.cause.humains')),
+        _causeField('causeMethode', t('safetyEventsPage.cause.methodes')),
+        _causeField('causeMachine', t('safetyEventsPage.cause.machines')),
+        _causeField('causeMatiere', t('safetyEventsPage.cause.matieres')),
+        _causeField('causeMilieu', t('safetyEventsPage.cause.milieu')),
+        _causeField('causeManagement', t('safetyEventsPage.cause.management')),
+        _causeField('causeRacine', t('safetyEventsPage.cause.racine')),
 
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Plan d\'actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          TextButton(onPressed: addAction, child: const Text('+ Action')),
+          Text(t('safetyEventsPage.planActionsTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          TextButton(onPressed: addAction, child: Text(t('safetyEventsPage.ajouterActionBtn'))),
         ]),
-        if (List.from(ev!['actions'] ?? []).isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune action liée', style: TextStyle(color: QhseColors.textSecondary)))
+        if (List.from(ev!['actions'] ?? []).isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('safetyEventsPage.aucuneActionLiee'), style: TextStyle(color: QhseColors.textSecondary)))
         else ...List.from(ev!['actions'] ?? []).map((a) => Card(child: ListTile(dense: true, title: Text(a['title'] ?? ''), trailing: Text(a['status'] ?? '', style: const TextStyle(fontSize: 11))))),
 
         const SizedBox(height: 20),
-        CapaLinksSection(sourceModule: 'SAFETY_EVENT', sourceEntityId: widget.eventId, prefill: {'title': 'Action — ${ev!['title'] ?? ''}', 'source': 'SAFETY_EVENT'}),
+        CapaLinksSection(sourceModule: 'SAFETY_EVENT', sourceEntityId: widget.eventId, prefill: {'title': '${t('safetyEventsPage.actionPrefix')} ${ev!['title'] ?? ''}', 'source': 'SAFETY_EVENT'}),
         const SizedBox(height: 12),
         HistorySection(module: 'SAFETY_EVENT', entityId: widget.eventId),
 
@@ -549,7 +550,7 @@ class _SafetyEventDetailPageState extends State<SafetyEventDetailPage> {
         AttachmentsSection(ownerType: 'SAFETY_EVENT', ownerId: widget.eventId),
 
         const SizedBox(height: 12),
-        FilledButton(onPressed: saving ? null : save, child: Text(saving ? 'Enregistrement…' : 'Enregistrer')),
+        FilledButton(onPressed: saving ? null : save, child: Text(saving ? t('safetyEventsPage.enregistrementEnCours') : t('safetyEventsPage.enregistrer'))),
       ]),
     );
   }
