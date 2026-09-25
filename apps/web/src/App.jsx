@@ -6770,6 +6770,7 @@ function SecuriteAccidentsPage() {
 }
 
 function SecuriteEpiPage() {
+  const { t } = useI18n();
   const C = useTheme();
   const dash = useCollection('/epi/dashboard');
   const renewals = useCollection('/epi/renewals');
@@ -6865,14 +6866,14 @@ function SecuriteEpiPage() {
       {(showTrainingForm || selectedTraining) && <TrainingForm record={selectedTraining} onClose={() => { setShowTrainingForm(false); setSelectedTraining(null); }} onCreated={trainings.reload} />}
       <div className="flex items-center justify-between"><LiveBadge /></div>
       <div className="flex flex-wrap gap-3">
-        <KpiCard label="EPI au catalogue" value={catalogList.length} objectif={`${enRupture} en rupture de stock`} color={enRupture > 0 ? C.red : C.green} icon={ShieldCheck} />
-        <KpiCard label="EPC enregistrés" value={epcs.length} objectif={`${epcNonConformes} non conforme(s)`} color={epcNonConformes > 0 ? C.red : C.green} icon={Cog} />
-        <KpiCard label="Personnel actif" value={activeEmployees} objectif={`${employeeList.length} au total`} color={C.blue} icon={Users} />
-        <KpiCard label="Renouvellements à venir" value={(renewals.data || []).length} color={C.amber} icon={AlertTriangle} />
+        <KpiCard label={t('epi.kpiEpiCatalogue')} value={catalogList.length} objectif={t('epi.kpiEnRupture', { count: String(enRupture) })} color={enRupture > 0 ? C.red : C.green} icon={ShieldCheck} />
+        <KpiCard label={t('epi.kpiEpcEnregistres')} value={epcs.length} objectif={t('epi.kpiEpcNonConforme', { count: String(epcNonConformes) })} color={epcNonConformes > 0 ? C.red : C.green} icon={Cog} />
+        <KpiCard label={t('epi.kpiPersonnelActif')} value={activeEmployees} objectif={t('epi.kpiAuTotal', { count: String(employeeList.length) })} color={C.blue} icon={Users} />
+        <KpiCard label={t('epi.kpiRenouvellementsAVenir')} value={(renewals.data || []).length} color={C.amber} icon={AlertTriangle} />
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {[['dashboard', 'Tableau de bord'], ['stock', 'Stock EPI'], ['epc', 'Bibliothèque EPC'], ['categories', 'Catégories'], ['attribution', 'Attribution'], ['inspections', 'Inspections'], ['maintenance', 'Maintenance EPC'], ['matrice', 'Matrice Poste/Risque'], ['personnel', 'Personnel'], ['renouvellements', 'Renouvellements'], ['formations', 'Formations'], ['audit', "Journal d'audit"]].map(([id, label]) => (
+        {[['dashboard', t('epi.tabDashboard')], ['stock', t('epi.tabStock')], ['epc', t('epi.tabEpc')], ['categories', t('epi.tabCategories')], ['attribution', t('epi.tabAttribution')], ['inspections', t('epi.tabInspections')], ['maintenance', t('epi.tabMaintenance')], ['matrice', t('epi.tabMatrice')], ['personnel', t('epi.tabPersonnel')], ['renouvellements', t('epi.tabRenouvellements')], ['formations', t('epi.tabFormations')], ['audit', t('epi.tabAudit')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -6880,172 +6881,172 @@ function SecuriteEpiPage() {
       {tab === 'dashboard' && (
         <div className="space-y-6">
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="EPI au catalogue" value={catalogList.length} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="EPC enregistrés" value={epcs.length} color={C.blue} icon={Cog} />
-            <KpiCard label="EPI attribués" value={assignmentList.length} objectif="dotations enregistrées" color={C.green} icon={Users} />
-            <KpiCard label="EPI expirés" value={buckets.expired.length} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="EPI à renouveler (90j)" value={buckets.within30.length + buckets.within60.length + buckets.within90.length} color={C.amber} icon={AlertTriangle} />
-            <KpiCard label="Employés non équipés" value={nonEquippedEmployees.length} color={nonEquippedEmployees.length > 0 ? C.red : C.green} icon={Users} />
-            <KpiCard label="Stock EPI critique" value={criticalStockEpi.length} color={criticalStockEpi.length > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="EPC non conformes" value={epcNonConformesList.length} color={epcNonConformesList.length > 0 ? C.red : C.green} icon={ShieldCheck} />
-            <KpiCard label="EPC à inspecter" value={epcToInspect.length} color={epcToInspect.length > 0 ? C.amber : C.green} icon={ClipboardList} />
-            <KpiCard label="Équipements à réformer" value={reformedCount} color={reformedCount > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('epi.kpiEpiCatalogue')} value={catalogList.length} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('epi.kpiEpcEnregistres')} value={epcs.length} color={C.blue} icon={Cog} />
+            <KpiCard label={t('epi.kpiEpiAttribues')} value={assignmentList.length} objectif={t('epi.kpiDotationsEnregistrees')} color={C.green} icon={Users} />
+            <KpiCard label={t('epi.kpiEpiExpires')} value={buckets.expired.length} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('epi.kpiEpiARenouveler90')} value={buckets.within30.length + buckets.within60.length + buckets.within90.length} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label={t('epi.kpiEmployesNonEquipes')} value={nonEquippedEmployees.length} color={nonEquippedEmployees.length > 0 ? C.red : C.green} icon={Users} />
+            <KpiCard label={t('epi.kpiStockCritique')} value={criticalStockEpi.length} color={criticalStockEpi.length > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('epi.kpiEpcNonConformes')} value={epcNonConformesList.length} color={epcNonConformesList.length > 0 ? C.red : C.green} icon={ShieldCheck} />
+            <KpiCard label={t('epi.kpiEpcAInspecter')} value={epcToInspect.length} color={epcToInspect.length > 0 ? C.amber : C.green} icon={ClipboardList} />
+            <KpiCard label={t('epi.kpiEquipementsAReformer')} value={reformedCount} color={reformedCount > 0 ? C.red : C.green} icon={AlertTriangle} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="EPI par catégorie">
-              {catalogList.length ? <DonutChart data={groupCount(catalogList, (e) => e.category?.name || 'Sans catégorie')} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun EPI enregistré</p>}
+            <Panel title={t('epi.parCategorieTitle')}>
+              {catalogList.length ? <DonutChart data={groupCount(catalogList, (e) => e.category?.name || 'Sans catégorie')} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('epi.aucunEpiCategorie')}</p>}
             </Panel>
-            <Panel title="Statut des inspections EPI/EPC">
-              {(epiInspList.length + epcInspList.length) ? <DonutChart data={groupCount([...epiInspList, ...epcInspList], (i) => i.result === 'CONFORME' ? 'Conforme' : i.result === 'NON_CONFORME' ? 'Non conforme' : i.result === 'A_SURVEILLER' ? 'À surveiller' : 'À réformer')} colors={[C.green, C.red, C.amber, '#8B5CF6']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune inspection enregistrée</p>}
+            <Panel title={t('epi.statutInspectionsTitle')}>
+              {(epiInspList.length + epcInspList.length) ? <DonutChart data={groupCount([...epiInspList, ...epcInspList], (i) => i.result === 'CONFORME' ? 'Conforme' : i.result === 'NON_CONFORME' ? 'Non conforme' : i.result === 'A_SURVEILLER' ? 'À surveiller' : 'À réformer')} colors={[C.green, C.red, C.amber, '#8B5CF6']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('epi.aucuneInspectionDonut')}</p>}
             </Panel>
           </div>
-          <p className="text-[11px]" style={{ color: C.textMuted }}>Les pertes et détériorations enregistrées via les mouvements de stock ne sont pas encore comptabilisées séparément ici — dites-moi si vous voulez que je les ajoute.</p>
+          <p className="text-[11px]" style={{ color: C.textMuted }}>{t('epi.noteMouvements')}</p>
         </div>
       )}
 
       {tab === 'formations' && (
-        <Panel title="Formations" right={<button onClick={() => setShowTrainingForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle formation</button>}>
+        <Panel title={t('epi.tabFormations')} right={<button onClick={() => setShowTrainingForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleFormation')}</button>}>
           {trainingsList.length
-            ? <DataTable columns={['Intitulé', 'Formateur', 'Date', 'Statut', 'Expiration', 'Processus']}
-                rows={trainingsList.map((t) => {
-                  const expired = t.expiryAt && new Date(t.expiryAt) < new Date();
+            ? <DataTable columns={[t('epi.colIntitule'), t('epi.colFormateur'), t('epi.colDate'), t('epi.colStatut'), t('epi.colExpiration'), t('epi.colProcessus')]}
+                rows={trainingsList.map((tr) => {
+                  const expired = tr.expiryAt && new Date(tr.expiryAt) < new Date();
                   return [
-                    t.title, t.trainer || '—', new Date(t.scheduledAt).toLocaleDateString('fr-FR'),
-                    t.status === 'DONE' ? 'Réalisée' : t.status === 'CANCELLED' ? 'Annulée' : 'Planifiée',
-                    t.expiryAt ? <span style={{ color: expired ? C.red : C.textMuted }}>{new Date(t.expiryAt).toLocaleDateString('fr-FR')}{expired ? ' (expirée)' : ''}</span> : '—',
-                    t.processus?.nom || '—',
+                    tr.title, tr.trainer || '—', new Date(tr.scheduledAt).toLocaleDateString('fr-FR'),
+                    tr.status === 'DONE' ? t('epi.realisee') : tr.status === 'CANCELLED' ? t('epi.annulee') : t('epi.planifiee'),
+                    tr.expiryAt ? <span style={{ color: expired ? C.red : C.textMuted }}>{new Date(tr.expiryAt).toLocaleDateString('fr-FR')}{expired ? ` ${t('epi.expiree')}` : ''}</span> : '—',
+                    tr.processus?.nom || '—',
                   ];
                 })}
                 onRowClick={(i) => setSelectedTraining(trainingsList[i])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune formation enregistrée pour le moment</p>}
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneFormation')}</p>}
         </Panel>
       )}
 
       {tab === 'audit' && (
-        <Panel title="Journal d'audit — module EPI/EPC" subtitle="200 dernières actions, toutes traçées automatiquement">
+        <Panel title={t('epi.auditTitle')} subtitle={t('epi.auditSubtitle')}>
           {auditLogList.length
-            ? <DataTable columns={['Date', 'Utilisateur', 'Action', 'Module', 'Élément']}
+            ? <DataTable columns={[t('epi.colDate'), t('epi.colUtilisateur'), t('epi.colAction'), t('epi.colModule'), t('epi.colElement')]}
                 rows={auditLogList.map((l) => [
                   new Date(l.createdAt).toLocaleString('fr-FR'),
-                  l.user ? `${l.user.firstName} ${l.user.lastName}` : 'Système',
-                  l.action === 'CREATE' ? 'Création' : l.action === 'UPDATE' ? 'Modification' : 'Suppression',
+                  l.user ? `${l.user.firstName} ${l.user.lastName}` : t('epi.systeme'),
+                  l.action === 'CREATE' ? t('epi.creation') : l.action === 'UPDATE' ? t('epi.modification') : t('epi.suppression'),
                   l.module, l.entityId || '—',
                 ])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune action enregistrée pour le moment</p>}
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneAction')}</p>}
         </Panel>
       )}
 
       {tab === 'stock' && (
-        <Panel title="Catalogue et stock d'EPI" right={<button onClick={() => setShowEpiForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel EPI</button>}>
+        <Panel title={t('epi.stockTitle')} right={<button onClick={() => setShowEpiForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelEpi')}</button>}>
           {stock.length
-            ? <DataTable columns={['EPI', 'Fréquence', 'Stock', "Distribué aujourd'hui"]} rows={stock.map((e) => [e.name, e.frequency === 'DAILY' ? 'Quotidienne' : 'Annuelle', <span style={{ color: e.stock <= 0 ? C.red : C.text }}>{e.stock}</span>, e.dailyDistributed])}
+            ? <DataTable columns={[t('epi.colEpi'), t('epi.colFrequence'), t('epi.colStock'), t('epi.colDistribueAuj')]} rows={stock.map((e) => [e.name, e.frequency === 'DAILY' ? t('epi.quotidienne') : t('epi.annuelle'), <span style={{ color: e.stock <= 0 ? C.red : C.text }}>{e.stock}</span>, e.dailyDistributed])}
                 onRowClick={(i) => setSelectedEpi(stock[i])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun EPI enregistré — utilisez « + Nouvel EPI » pour commencer le catalogue</p>}
-          <p className="text-[11px] mt-3" style={{ color: C.textMuted }}>Le stock affiché est calculé à partir des mouvements (réceptions/distributions) déjà enregistrés dans l'application Windows/Android.</p>
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucunEpiStock')}</p>}
+          <p className="text-[11px] mt-3" style={{ color: C.textMuted }}>{t('epi.noteStock')}</p>
         </Panel>
       )}
 
       {tab === 'epc' && (
-        <Panel title="Bibliothèque des équipements de protection collective" right={<button onClick={() => setShowEpcForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel EPC</button>}>
+        <Panel title={t('epi.epcTitle')} right={<button onClick={() => setShowEpcForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelEpc')}</button>}>
           {epcs.length
-            ? <DataTable columns={['Code', 'Désignation', 'Catégorie', 'Localisation', 'Prochaine inspection', 'Statut']}
+            ? <DataTable columns={[t('epi.colCode'), t('epi.colDesignation'), t('epi.colCategorie'), t('epi.colLocalisation'), t('epi.colProchaineInspection'), t('epi.colStatut')]}
                 rows={epcs.map((e) => [e.code, e.name, e.category?.name || '—', e.location || '—', e.nextInspectionAt ? new Date(e.nextInspectionAt).toLocaleDateString('fr-FR') : '—', <StatusChip statut={e.status === 'ACTIVE' ? 'Conforme' : e.status === 'NON_CONFORME' ? 'Non conforme' : 'Sous surveillance'} />])}
                 onRowClick={(i) => setSelectedEpc(epcs[i])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun EPC enregistré — utilisez « + Nouvel EPC » pour commencer</p>}
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucunEpc')}</p>}
         </Panel>
       )}
 
       {tab === 'categories' && (
         <div className="grid grid-cols-2 gap-4">
-          <Panel title="Catégories EPI" right={<button onClick={() => setCategoryForm({ kind: 'epi', record: null })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Catégorie</button>}>
+          <Panel title={t('epi.categoriesEpi')} right={<button onClick={() => setCategoryForm({ kind: 'epi', record: null })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleCategorie')}</button>}>
             {epiCatList.length
               ? <div className="space-y-1">{epiCatList.map((c) => <div key={c.id} className="flex items-center justify-between text-sm py-1.5 cursor-pointer" style={{ borderTop: `1px solid ${C.border}`, color: C.text }} onClick={() => setCategoryForm({ kind: 'epi', record: c })}>{c.name}</div>)}</div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune catégorie EPI</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneCategorieEpi')}</p>}
           </Panel>
-          <Panel title="Catégories EPC" right={<button onClick={() => setCategoryForm({ kind: 'epc', record: null })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Catégorie</button>}>
+          <Panel title={t('epi.categoriesEpc')} right={<button onClick={() => setCategoryForm({ kind: 'epc', record: null })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleCategorie')}</button>}>
             {epcCatList.length
               ? <div className="space-y-1">{epcCatList.map((c) => <div key={c.id} className="flex items-center justify-between text-sm py-1.5 cursor-pointer" style={{ borderTop: `1px solid ${C.border}`, color: C.text }} onClick={() => setCategoryForm({ kind: 'epc', record: c })}>{c.name}</div>)}</div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune catégorie EPC</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneCategorieEpc')}</p>}
           </Panel>
         </div>
       )}
 
       {tab === 'inspections' && (
         <div className="space-y-4">
-          <Panel title="Inspections EPI" right={<button onClick={() => setShowEpiInspForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle inspection</button>}>
+          <Panel title={t('epi.inspectionsEpiTitle')} right={<button onClick={() => setShowEpiInspForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleInspection')}</button>}>
             {(epiInspections.data || []).length
-              ? <DataTable columns={['EPI', 'Date', 'Résultat', 'Observations', '']} rows={epiInspections.data.map((i) => [
+              ? <DataTable columns={[t('epi.colEpi'), t('epi.colDate'), t('epi.colResultat'), t('epi.colObservations'), '']} rows={epiInspections.data.map((i) => [
                   i.epi?.name || '—', new Date(i.inspectedAt).toLocaleDateString('fr-FR'),
                   <StatusChip statut={i.result === 'CONFORME' ? 'Conforme' : i.result === 'NON_CONFORME' ? 'Non conforme' : i.result} />,
                   i.observations || '—',
                   (i.result === 'NON_CONFORME' || i.result === 'A_REFORMER')
-                    ? <button onClick={(e) => { e.stopPropagation(); setNcPrefill({ title: `EPI non conforme — ${i.epi?.name || ''}`, description: i.observations || '', source: 'EPI', severity: i.result === 'A_REFORMER' ? 3 : 2, epiId: i.epiId }); }} className="text-xs" style={{ color: C.red }}>Créer une NC</button>
+                    ? <button onClick={(e) => { e.stopPropagation(); setNcPrefill({ title: `EPI non conforme — ${i.epi?.name || ''}`, description: i.observations || '', source: 'EPI', severity: i.result === 'A_REFORMER' ? 3 : 2, epiId: i.epiId }); }} className="text-xs" style={{ color: C.red }}>{t('epi.creerNc')}</button>
                     : null,
                 ])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune inspection EPI enregistrée</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneInspectionEpi')}</p>}
           </Panel>
-          <Panel title="Inspections EPC" right={<button onClick={() => setShowEpcInspForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle inspection</button>}>
+          <Panel title={t('epi.inspectionsEpcTitle')} right={<button onClick={() => setShowEpcInspForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleInspection')}</button>}>
             {(epcInspections.data || []).length
-              ? <DataTable columns={['EPC', 'Date', 'Résultat', 'Observations', '']} rows={epcInspections.data.map((i) => [
+              ? <DataTable columns={[t('epi.colEpi'), t('epi.colDate'), t('epi.colResultat'), t('epi.colObservations'), '']} rows={epcInspections.data.map((i) => [
                   i.epc?.name || '—', new Date(i.inspectedAt).toLocaleDateString('fr-FR'),
                   <StatusChip statut={i.result === 'CONFORME' ? 'Conforme' : i.result === 'NON_CONFORME' ? 'Non conforme' : i.result} />,
                   i.observations || '—',
                   (i.result === 'NON_CONFORME' || i.result === 'A_REFORMER')
-                    ? <button onClick={(e) => { e.stopPropagation(); setNcPrefill({ title: `EPC non conforme — ${i.epc?.name || ''}`, description: i.observations || '', source: 'EPC', severity: i.result === 'A_REFORMER' ? 3 : 2, epcId: i.epcId }); }} className="text-xs" style={{ color: C.red }}>Créer une NC</button>
+                    ? <button onClick={(e) => { e.stopPropagation(); setNcPrefill({ title: `EPC non conforme — ${i.epc?.name || ''}`, description: i.observations || '', source: 'EPC', severity: i.result === 'A_REFORMER' ? 3 : 2, epcId: i.epcId }); }} className="text-xs" style={{ color: C.red }}>{t('epi.creerNc')}</button>
                     : null,
                 ])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune inspection EPC enregistrée</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneInspectionEpc')}</p>}
           </Panel>
         </div>
       )}
 
       {tab === 'maintenance' && (
-        <Panel title="Historique de maintenance EPC" right={<button onClick={() => setShowMaintenanceForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle intervention</button>}>
+        <Panel title={t('epi.maintenanceTitle')} right={<button onClick={() => setShowMaintenanceForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleIntervention')}</button>}>
           {(maintenances.data || []).length
-            ? <DataTable columns={['EPC', 'Type', 'Date', 'Description', 'Coût', 'Prochaine échéance']}
+            ? <DataTable columns={[t('epi.colEpc'), t('epi.colType'), t('epi.colDate'), t('epi.colDescription'), t('epi.colCout'), t('epi.colProchaineEcheance')]}
                 rows={maintenances.data.map((m) => [
-                  m.epc?.name || '—', m.type === 'PREVENTIVE' ? 'Préventive' : 'Corrective',
+                  m.epc?.name || '—', m.type === 'PREVENTIVE' ? t('epi.preventive') : t('epi.corrective'),
                   new Date(m.date).toLocaleDateString('fr-FR'), m.description || '—',
                   m.cost != null ? `${m.cost.toLocaleString('fr-FR')} FCFA` : '—',
                   m.nextMaintenanceAt ? new Date(m.nextMaintenanceAt).toLocaleDateString('fr-FR') : '—',
                 ])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune intervention enregistrée — utilisez « + Nouvelle intervention » pour commencer</p>}
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneIntervention')}</p>}
         </Panel>
       )}
 
       {tab === 'matrice' && (
-        <Panel title="Matrice Poste → Danger → Risque → Mesure → EPI/EPC" right={<button onClick={() => setShowMatrixForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle ligne</button>}>
+        <Panel title={t('epi.matriceTitle')} right={<button onClick={() => setShowMatrixForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleLigne')}</button>}>
           {(matrix.data || []).length
-            ? <DataTable columns={['Poste', 'Danger', 'Risque', 'Mesure', 'EPI', 'EPC']}
+            ? <DataTable columns={[t('epi.colPoste'), t('epi.colDanger'), t('epi.colRisque'), t('epi.colMesure'), t('epi.colEpi'), t('epi.colEpc')]}
                 rows={matrix.data.map((m) => [m.jobTitle, m.hazard, m.riskDescription || '—', m.preventionMeasure || '—', m.epi?.name || '—', m.epc?.name || '—'])}
                 onRowClick={(i) => setSelectedMatrix(matrix.data[i])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune ligne enregistrée — utilisez « + Nouvelle ligne » pour commencer la matrice</p>}
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucuneLigneMatrice')}</p>}
         </Panel>
       )}
 
       {tab === 'attribution' && (
-        <Panel title={search.trim() ? `Résultats de recherche (${assignmentFiltered.length})` : 'Registre des dotations'} right={
+        <Panel title={search.trim() ? t('epi.resultatsRecherche', { count: String(assignmentFiltered.length) }) : t('epi.registreDotations')} right={
           <div className="flex items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher (code, employé, EPI...)" className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={exportDotationsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
-            <button onClick={exportDotationsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
-            <button onClick={() => setShowAssignmentForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle dotation</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('epi.rechercherPlaceholder')} className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportDotationsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('epi.excel')}</button>
+            <button onClick={exportDotationsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('epi.csv')}</button>
+            <button onClick={() => setShowAssignmentForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelleDotation')}</button>
           </div>
         }>
           {assignmentFiltered.length
-            ? <DataTable columns={['Code', 'Employé', 'EPI', 'Quantité', 'Date', 'Renouvellement', 'Reçu']}
-                rows={assignmentFiltered.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '—', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '—', <button onClick={(e) => { e.stopPropagation(); setReceiptFor(a); }} className="text-xs" style={{ color: C.blue }}>Voir le reçu</button>])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune dotation enregistrée — utilisez « + Nouvelle dotation » pour commencer'}</p>}
+            ? <DataTable columns={[t('epi.colCode'), t('epi.colEmploye'), t('epi.colEpi'), t('epi.colQuantite'), t('epi.colDate'), t('epi.colRenouvellement'), t('epi.colRecu')]}
+                rows={assignmentFiltered.map((a) => [a.code, `${a.employee?.firstName ?? ''} ${a.employee?.lastName ?? ''}`, a.epi?.name || '—', a.quantity, new Date(a.distributedAt).toLocaleDateString('fr-FR'), a.renewalAt ? new Date(a.renewalAt).toLocaleDateString('fr-FR') : '—', <button onClick={(e) => { e.stopPropagation(); setReceiptFor(a); }} className="text-xs" style={{ color: C.blue }}>{t('epi.voirRecu')}</button>])} />
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('epi.aucunResultatRecherche') : t('epi.aucuneDotation')}</p>}
         </Panel>
       )}
 
       {tab === 'personnel' && (
-        <Panel title="Liste du personnel" right={<button onClick={() => setShowEmpForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvel employé</button>}>
+        <Panel title={t('epi.personnelTitle')} right={<button onClick={() => setShowEmpForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('epi.nouvelEmploye')}</button>}>
           {employeeList.length
-            ? <DataTable columns={['Matricule', 'Nom', 'Département', 'Poste', 'Statut', 'Fiche']}
-                rows={employeeList.map((e) => [e.matricule, `${e.firstName} ${e.lastName}`, e.department || '—', e.position || '—', <StatusChip statut={e.active ? 'Conforme' : 'Non conforme'} />, <button onClick={(ev) => { ev.stopPropagation(); setDossierEmp(e); }} className="text-xs" style={{ color: C.blue }}>Voir la fiche</button>])}
+            ? <DataTable columns={[t('epi.colMatricule'), t('epi.colNom'), t('epi.colDepartement'), t('epi.colPoste2'), t('epi.colStatut'), t('epi.colFiche')]}
+                rows={employeeList.map((e) => [e.matricule, `${e.firstName} ${e.lastName}`, e.department || '—', e.position || '—', <StatusChip statut={e.active ? 'Conforme' : 'Non conforme'} />, <button onClick={(ev) => { ev.stopPropagation(); setDossierEmp(e); }} className="text-xs" style={{ color: C.blue }}>{t('epi.voirFiche')}</button>])}
                 onRowClick={(i) => setSelectedEmp(employeeList[i])} />
-            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun employé enregistré — utilisez « + Nouvel employé » pour commencer</p>}
+            : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('epi.aucunEmploye')}</p>}
         </Panel>
       )}
 
@@ -7057,11 +7058,11 @@ function SecuriteEpiPage() {
             <KpiCard label="Sous 60 jours" value={buckets.within60.length} color={C.amber} icon={Activity} />
             <KpiCard label="Sous 90 jours" value={buckets.within90.length} color={C.blue} icon={ClipboardList} />
           </div>
-          {[['🔴 Expirés', buckets.expired, C.red], ['🔴 À renouveler sous 30 jours', buckets.within30, C.red], ['🟠 À renouveler sous 60 jours', buckets.within60, C.amber], ['🟡 À renouveler sous 90 jours', buckets.within90, C.blue]].map(([title, list, color]) => (
+          {[[`🔴 ${t('epi.expires')}`, buckets.expired, C.red], [`🔴 ${t('epi.sous30j')}`, buckets.within30, C.red], [`🟠 ${t('epi.sous60j')}`, buckets.within60, C.amber], [`🟡 ${t('epi.sous90j')}`, buckets.within90, C.blue]].map(([title, list, color]) => (
             <Panel key={title} title={title}>
               {list.length
-                ? <DataTable columns={['Employé', 'EPI', 'Échéance']} rows={list.map((r) => [`${r.employee?.firstName ?? ''} ${r.employee?.lastName ?? ''}`, r.epi?.name ?? '—', <span style={{ color }}>{new Date(r.renewalAt).toLocaleDateString('fr-FR')}</span>])} />
-                : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucune dotation dans ce palier</p>}
+                ? <DataTable columns={[t('epi.colEmploye'), t('epi.colEpi'), t('epi.colEcheance')]} rows={list.map((r) => [`${r.employee?.firstName ?? ''} ${r.employee?.lastName ?? ''}`, r.epi?.name ?? '—', <span style={{ color }}>{new Date(r.renewalAt).toLocaleDateString('fr-FR')}</span>])} />
+                : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>{t('epi.aucuneDotationPalier')}</p>}
             </Panel>
           ))}
         </div>
