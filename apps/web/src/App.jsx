@@ -9657,6 +9657,7 @@ function CapaDetailModal({ action, onClose, onChanged, onEdit }) {
 }
 
 function CapaPage() {
+  const { t } = useI18n();
   const C = useTheme();
   const actions = useCollection('/business/actions');
   const dashboardQ = useCollection('/business/action-dashboard');
@@ -9671,10 +9672,10 @@ function CapaPage() {
   const [searchResults, setSearchResults] = useState(null);
   useEffect(() => {
     if (!search.trim()) { setSearchResults(null); return; }
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api.get(`/business/actions-search?q=${encodeURIComponent(search.trim())}`).then((r) => setSearchResults(r.filter((a) => !a.parentActionId))).catch(() => setSearchResults([]));
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [search]);
   if (actions.loading || dashboardQ.loading) return <LoadingPanel />;
   if (actions.error) return <ErrorPanel message={actions.error} onRetry={actions.reload} />;
@@ -9689,7 +9690,7 @@ function CapaPage() {
   const criticiteColor = { CRITIQUE: C.red, MAJEURE: C.amber, MINEURE: '#B45309', NON_CRITIQUE: C.green };
   const alerteColor = { CRITIQUE: C.red, URGENT: C.red, ATTENTION: C.amber, INFORMATION: C.blue };
   const niveauColor = { EXCELLENT: C.green, BON: C.green, A_SURVEILLER: C.amber, INSUFFISANT: C.red, CRITIQUE: C.red };
-  const niveauLabel = { EXCELLENT: 'Excellent', BON: 'Bon', A_SURVEILLER: 'À surveiller', INSUFFISANT: 'Insuffisant', CRITIQUE: 'Critique' };
+  const niveauLabel = { EXCELLENT: t('capa.niveauExcellent'), BON: t('capa.niveauBon'), A_SURVEILLER: t('capa.niveauASurveiller'), INSUFFISANT: t('capa.niveauInsuffisant'), CRITIQUE: t('capa.niveauCritique') };
   // Export harmonisé (audit priorité 7, finding #17) — même principe que
   // exportRisquesExcel/exportNcExcel : un tableau, deux formats.
   function actionsExportRows() {
@@ -9707,7 +9708,7 @@ function CapaPage() {
       {viewing && <CapaDetailModal action={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['plan', "Plan d'action"], ['analyses', 'Analyses & tendances']].map(([id, label]) => (
+        {[['apercu', t('capa.tabApercu')], ['plan', t('capa.tabPlan')], ['analyses', t('capa.tabAnalyses')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -9716,33 +9717,33 @@ function CapaPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action CAPA</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('capa.nouvelleAction')}</button>
           </div>
           <div className="flex flex-wrap gap-4 items-stretch">
             <div className="p-4 rounded-xl flex flex-col justify-center items-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, minWidth: 160 }}>
-              <p className="text-[10px]" style={{ color: C.textMuted }}>Score de performance CAPA</p>
+              <p className="text-[10px]" style={{ color: C.textMuted }}>{t('capa.scorePerformanceTitle')}</p>
               <p className="text-3xl font-bold" style={{ color: niveauColor[score.niveau] || C.text }}>{score.score ?? '—'}</p>
               <p className="text-xs font-medium" style={{ color: niveauColor[score.niveau] || C.textMuted }}>{niveauLabel[score.niveau] || '—'}</p>
             </div>
             <div className="flex flex-wrap gap-3 flex-1">
-              <KpiCard label="Actions totales" value={dv(dash.total)} color={C.blue} icon={Wrench} />
-              <KpiCard label="Ouvertes" value={dv(dash.ouvertes)} color={C.amber} icon={Activity} />
-              <KpiCard label="Terminées" value={dv(dash.terminees)} color={C.green} icon={ShieldCheck} />
-              <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-              <KpiCard label="Échéance proche (7j)" value={dv(dash.echeanceProche)} color={C.amber} icon={AlertTriangle} />
-              <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
+              <KpiCard label={t('capa.kpiActionsTotales')} value={dv(dash.total)} color={C.blue} icon={Wrench} />
+              <KpiCard label={t('capa.kpiOuvertes')} value={dv(dash.ouvertes)} color={C.amber} icon={Activity} />
+              <KpiCard label={t('capa.kpiTerminees')} value={dv(dash.terminees)} color={C.green} icon={ShieldCheck} />
+              <KpiCard label={t('capa.kpiEnRetard')} value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+              <KpiCard label={t('capa.kpiEcheanceProche')} value={dv(dash.echeanceProche)} color={C.amber} icon={AlertTriangle} />
+              <KpiCard label={t('capa.kpiCritiques')} value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="En attente de validation" value={dv(dash.enAttenteValidation)} color={C.blue} icon={ClipboardCheck} />
-            <KpiCard label="Taux de clôture" value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Taux en retard" value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
-            <KpiCard label="Taux d'efficacité" value={dv(score.tauxEfficacite, '%')} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="Délai moyen de réalisation (j)" value={dv(dash.delaiMoyenRealisation)} color={C.blue} icon={Activity} />
+            <KpiCard label={t('capa.kpiEnAttenteValidation')} value={dv(dash.enAttenteValidation)} color={C.blue} icon={ClipboardCheck} />
+            <KpiCard label={t('capa.kpiTauxCloture')} value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('capa.kpiTauxEnRetard')} value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
+            <KpiCard label={t('capa.kpiTauxEfficacite')} value={dv(score.tauxEfficacite, '%')} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('capa.kpiDelaiMoyenRealisation')} value={dv(dash.delaiMoyenRealisation)} color={C.blue} icon={Activity} />
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <Panel title="Statut des actions" className="col-span-1"><DonutChart data={[{ name: 'Terminées', value: dash.terminees || 0 }, { name: 'Ouvertes', value: dash.ouvertes || 0 }, { name: 'En retard', value: dash.enRetard || 0 }]} colors={[C.green, C.blue, C.red]} /></Panel>
-            <Panel title="Alertes (avec escalade)" className="col-span-2" subtitle={`${alertes.length} point(s) nécessitant attention`}>
+            <Panel title={t('capa.statutActionsTitle')} className="col-span-1"><DonutChart data={[{ name: 'Terminées', value: dash.terminees || 0 }, { name: 'Ouvertes', value: dash.ouvertes || 0 }, { name: 'En retard', value: dash.enRetard || 0 }]} colors={[C.green, C.blue, C.red]} /></Panel>
+            <Panel title={t('capa.alertesTitle')} className="col-span-2" subtitle={t('capa.alertesSubtitle', { count: String(alertes.length) })}>
               {alertes.length
                 ? <div className="space-y-2 max-h-64 overflow-y-auto">{alertes.map((a, i) => (
                     <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -9750,7 +9751,7 @@ function CapaPage() {
                       <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${alerteColor[a.niveau]}22`, color: alerteColor[a.niveau] }}>{a.niveau}</span>
                     </div>
                   ))}</div>
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('capa.aucuneAlerte')}</p>}
             </Panel>
           </div>
         </div>
@@ -9760,25 +9761,25 @@ function CapaPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouvelle action CAPA</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('capa.nouvelleAction')}</button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une action (titre, source, responsable, unité...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={exportActionsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
-            <button onClick={exportActionsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('capa.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportActionsExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('capa.excel')}</button>
+            <button onClick={exportActionsCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('capa.csv')}</button>
           </div>
-          <Panel title={searchResults ? `Résultats de recherche (${sorted.length})` : "Plan d'actions CAPA (curatives, correctives, préventives, amélioration)"}>
+          <Panel title={searchResults ? t('capa.resultatsRecherche', { count: String(sorted.length) }) : t('capa.planActionsTitle')}>
             {sorted.length
-              ? <DataTable columns={['Action', 'Type', 'Criticité', 'Priorité', 'Avancement', 'Échéance', 'Statut']}
+              ? <DataTable columns={[t('capa.colAction'), t('capa.colType'), t('capa.colCriticite'), t('capa.colPriorite'), t('capa.colAvancement'), t('capa.colEcheance'), t('capa.colStatut')]}
                   rows={sorted.map((a) => [
                     a.title, a.actionType || '—',
                     a.criticite ? <span style={{ color: criticiteColor[a.criticite], fontWeight: 600 }}>{a.criticite}</span> : '—',
                     a.priority, `${a.avancement || 0}%`,
                     a.dueDate ? new Date(a.dueDate).toLocaleDateString('fr-FR') : '—',
-                    <StatusChip statut={isOverdue(a.dueDate, a.status) ? 'En retard' : (ACTION_STATUS_LABELS[a.status] || a.status)} />,
+                    <StatusChip statut={isOverdue(a.dueDate, a.status) ? t('capa.enRetard') : (ACTION_STATUS_LABELS[a.status] || a.status)} />,
                   ])}
                   onRowClick={(i) => setViewing(sorted[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucune action enregistrée pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? t('capa.aucunResultatRecherche') : t('capa.aucuneActionMoment')}</p>}
           </Panel>
         </div>
       )}
@@ -9786,7 +9787,7 @@ function CapaPage() {
       {tab === 'analyses' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Évolution sur 12 mois — créées vs réalisées">
+          <Panel title={t('capa.evolution12MoisTitle')}>
             {trends.length
               ? <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={trends}>
@@ -9794,14 +9795,14 @@ function CapaPage() {
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.textMuted }} />
                     <YAxis tick={{ fontSize: 11, fill: C.textMuted }} />
                     <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
-                    <Line type="monotone" dataKey="creees" name="Créées" stroke={C.blue} strokeWidth={2} />
-                    <Line type="monotone" dataKey="realisees" name="Réalisées" stroke={C.green} strokeWidth={2} />
+                    <Line type="monotone" dataKey="creees" name={t('capa.legendCreees')} stroke={C.blue} strokeWidth={2} />
+                    <Line type="monotone" dataKey="realisees" name={t('capa.legendRealisees')} stroke={C.green} strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
-              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas encore assez de données</p>}
+              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('capa.pasAssezDeDonnees')}</p>}
           </Panel>
-          <Panel title="Actions par origine">
-            {(dash.parOrigine || []).length ? <HorizontalBars data={dash.parOrigine} labelKey="source" valueKey="nombre" color={C.blue} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune donnée</p>}
+          <Panel title={t('capa.parOrigineTitle')}>
+            {(dash.parOrigine || []).length ? <HorizontalBars data={dash.parOrigine} labelKey="source" valueKey="nombre" color={C.blue} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('capa.aucuneDonnee')}</p>}
           </Panel>
         </div>
       )}
