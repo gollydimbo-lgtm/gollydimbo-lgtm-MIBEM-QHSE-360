@@ -7787,6 +7787,7 @@ function WorkUnitForm({ record, onClose, onCreated }) {
 }
 
 function RisquesPage() {
+  const { t } = useI18n();
   const C = useTheme();
   const risks = useCollection('/business/risks');
   const dashboardQ = useCollection('/business/risk-dashboard');
@@ -7808,10 +7809,10 @@ function RisquesPage() {
   const [searchResults, setSearchResults] = useState(null);
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults(null); return; }
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api.get(`/business/risks-search?q=${encodeURIComponent(searchQuery.trim())}`).then(setSearchResults).catch(() => setSearchResults([]));
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [searchQuery]);
   if (risks.loading || dashboardQ.loading) return <LoadingPanel />;
   if (risks.error) return <ErrorPanel message={risks.error} onRetry={risks.reload} />;
@@ -7830,7 +7831,7 @@ function RisquesPage() {
   function exportRisquesExcel() {
     downloadWorkbook([
       ['Risques', [
-        ['Code', 'Danger', 'Catégorie', 'Unité de travail', 'Situation dangereuse', 'Événement redouté', 'Dommage potentiel', 'Personnes exposées', 'Méthode', 'Gravité', 'Probabilité', 'Exposition', 'Score brut', 'Niveau', 'Gravité résiduelle', 'Probabilité résiduelle', 'Score résiduel', 'Niveau résiduel', 'Statut de maîtrise', 'Prochaine réévaluation'],
+        [t('risques.colCode'), t('risques.colDanger'), t('risques.colCategorie'), t('risques.colUniteTravail'), 'Situation dangereuse', 'Événement redouté', 'Dommage potentiel', 'Personnes exposées', 'Méthode', t('risques.colGravite'), t('risques.colProbabilite'), 'Exposition', t('risques.colScoreBrut'), 'Niveau', 'Gravité résiduelle', 'Probabilité résiduelle', 'Score résiduel', 'Niveau résiduel', t('risques.colStatutMaitrise'), 'Prochaine réévaluation'],
         ...list.map((r) => [r.code, r.hazard, r.category?.label || '', r.workUnit?.name || '', r.hazardousSituation || '', r.hazardousEvent || '', r.potentialDamage || '', r.exposedPersons || '', r.method, r.severity, r.probability, r.exposure, r.grossScore ?? r.score, r.grossLevel || '', r.residualSeverity ?? '', r.residualProbability ?? '', r.residualScore ?? '', r.residualLevel || '', r.controlStatus, r.nextReviewDate ? new Date(r.nextReviewDate).toLocaleDateString('fr-FR') : '']),
       ]],
     ], `Registre-des-risques-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -7858,6 +7859,7 @@ function RisquesPage() {
     if (!hazard) errors.push('Danger manquant');
     if (!severity || severity < 1 || severity > 5) errors.push('Gravité invalide (1-5)');
     if (!probability || probability < 1 || probability > 5) errors.push('Probabilité invalide (1-5)');
+    // Messages d'erreur d'import laisses en francais (donnees issues du fichier importe par l'utilisateur).
     return { hazard, activity, severity, probability, measures, categoryId: category?.id || null, workUnitId: workUnit?.id || null, categorieLabel, workUnitName, errors };
   });
   async function runImport() {
@@ -7877,10 +7879,10 @@ function RisquesPage() {
   // au moins une action ouverte dont l'échéance est dépassée.
   const hasActionEnRetard = (r) => (r.actions || []).some((a) => a.dueDate && new Date(a.dueDate) < new Date() && a.status !== 'CLOSED');
   const priorites = [
-    { id: 'CRITIQUE', label: 'Priorité immédiate — Risques critiques', color: C.red },
-    { id: 'ELEVE', label: 'Priorité haute — Risques élevés', color: C.amber },
-    { id: 'MODERE', label: 'Priorité moyenne — Risques modérés', color: '#B45309' },
-    { id: 'FAIBLE', label: 'Surveillance — Risques faibles', color: C.green },
+    { id: 'CRITIQUE', label: t('risques.prioriteCritique'), color: C.red },
+    { id: 'ELEVE', label: t('risques.prioriteElevee'), color: C.amber },
+    { id: 'MODERE', label: t('risques.prioriteModeree'), color: '#B45309' },
+    { id: 'FAIBLE', label: t('risques.prioriteFaible'), color: C.green },
   ].map((p) => ({ ...p, risques: list.filter((r) => (r.grossLevel || 'FAIBLE') === p.id).sort((a, b) => (hasActionEnRetard(b) - hasActionEnRetard(a)) || (b.grossScore - a.grossScore)) }));
 
   return (
@@ -7891,7 +7893,7 @@ function RisquesPage() {
       {showWorkUnitForm && <WorkUnitForm onClose={() => setShowWorkUnitForm(false)} onCreated={workUnitsQ.reload} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre complet'], ['hierarchisation', 'Hiérarchisation'], ['cartographie', 'Cartographie'], ['top10', 'Top 10'], ['rapport', 'Rapport & Export'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+        {[['apercu', t('risques.tabApercu')], ['registre', t('risques.tabRegistre')], ['hierarchisation', t('risques.tabHierarchisation')], ['cartographie', t('risques.tabCartographie')], ['top10', t('risques.tabTop10')], ['rapport', t('risques.tabRapport')], ['parametrage', t('risques.tabParametrage')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -7900,27 +7902,27 @@ function RisquesPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau risque</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('risques.nouveauRisque')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Risques recensés" value={dv(dash.total)} color={C.blue} icon={AlertTriangle} />
-            <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="Élevés" value={dv(dash.eleves)} color={C.amber} icon={AlertTriangle} />
-            <KpiCard label="Modérés" value={dv(dash.moderes)} color="#B45309" icon={AlertTriangle} />
-            <KpiCard label="Faibles" value={dv(dash.faibles)} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="Non maîtrisés" value={dv(dash.nonMaitrises)} color={dash.nonMaitrises > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Avec action ouverte" value={dv(dash.avecActionsOuvertes)} color={C.blue} icon={ClipboardList} />
-            <KpiCard label="Actions en retard" value={dv(dash.actionsEnRetard)} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="À réévaluer" value={dv(dash.aReevaluer)} color={dash.aReevaluer > 0 ? C.amber : C.green} icon={RefreshCw} />
-            <KpiCard label="Taux de maîtrise" value={dv(dash.tauxMaitrise, '%')} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Taux de mise à jour" value={dv(dash.tauxMiseAJour, '%')} color={C.blue} icon={Activity} />
-            <KpiCard label="Taux de clôture des actions" value={dv(dash.tauxClotureActions, '%')} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('risques.kpiRisquesRecenses')} value={dv(dash.total)} color={C.blue} icon={AlertTriangle} />
+            <KpiCard label={t('risques.kpiCritiques')} value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('risques.kpiEleves')} value={dv(dash.eleves)} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label={t('risques.kpiModeres')} value={dv(dash.moderes)} color="#B45309" icon={AlertTriangle} />
+            <KpiCard label={t('risques.kpiFaibles')} value={dv(dash.faibles)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('risques.kpiNonMaitrises')} value={dv(dash.nonMaitrises)} color={dash.nonMaitrises > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('risques.kpiAvecActionOuverte')} value={dv(dash.avecActionsOuvertes)} color={C.blue} icon={ClipboardList} />
+            <KpiCard label={t('risques.kpiActionsEnRetard')} value={dv(dash.actionsEnRetard)} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('risques.kpiAReevaluer')} value={dv(dash.aReevaluer)} color={dash.aReevaluer > 0 ? C.amber : C.green} icon={RefreshCw} />
+            <KpiCard label={t('risques.kpiTauxMaitrise')} value={dv(dash.tauxMaitrise, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('risques.kpiTauxMiseAJour')} value={dv(dash.tauxMiseAJour, '%')} color={C.blue} icon={Activity} />
+            <KpiCard label={t('risques.kpiTauxClotureActions')} value={dv(dash.tauxClotureActions, '%')} color={C.blue} icon={ClipboardList} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Matrice de criticité 5×5 (gravité × probabilité)">
-              {list.length ? <RiskMatrix5x5 risques={list.map((r) => ({ gravite: r.severity, probabilite: r.probability }))} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+            <Panel title={t('risques.matriceTitle')}>
+              {list.length ? <RiskMatrix5x5 risques={list.map((r) => ({ gravite: r.severity, probabilite: r.probability }))} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('risques.aucunRisque')}</p>}
             </Panel>
-            <Panel title="Alertes" subtitle={`${alertes.length} point(s) nécessitant attention`}>
+            <Panel title={t('risques.alertesTitle')} subtitle={t('risques.alertesSubtitle', { count: String(alertes.length) })}>
               {alertes.length
                 ? <div className="space-y-2 max-h-64 overflow-y-auto">{alertes.map((a, i) => (
                     <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -7928,7 +7930,7 @@ function RisquesPage() {
                       <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${alerteColor[a.niveau]}22`, color: alerteColor[a.niveau] }}>{a.niveau}</span>
                     </div>
                   ))}</div>
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('risques.aucuneAlerte')}</p>}
             </Panel>
           </div>
         </div>
@@ -7938,12 +7940,12 @@ function RisquesPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between gap-3">
             <LiveBadge />
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Rechercher un risque (danger, situation, catégorie, unité de travail...)" className="flex-1 max-w-md px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Nouveau risque</button>
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t('risques.rechercherPlaceholder')} className="flex-1 max-w-md px-3 py-1.5 rounded-lg text-xs outline-none" style={inputStyle(C)} />
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('risques.nouveauRisque')}</button>
           </div>
-          <Panel title={searchResults ? `Résultats de recherche (${searchResults.length})` : 'Registre complet des risques'}>
+          <Panel title={searchResults ? t('risques.resultatsRecherche', { count: String(searchResults.length) }) : t('risques.registreCompletTitle')}>
             {(searchResults ?? list).length
-              ? <DataTable columns={['Risque', 'Catégorie', 'Unité de travail', 'Score brut', 'Résiduel', 'Statut de maîtrise']}
+              ? <DataTable columns={[t('risques.colRisque'), t('risques.colCategorie'), t('risques.colUniteTravail'), t('risques.colScoreBrut'), t('risques.colResiduel'), t('risques.colStatutMaitrise')]}
                   rows={(searchResults ?? list).map((r) => [
                     r.hazard, r.category?.label || '—', r.workUnit?.name || '—',
                     <span style={{ color: niveauColor[r.grossLevel] || C.text, fontWeight: 600 }}>{r.grossScore ?? r.score} ({r.grossLevel || '—'})</span>,
@@ -7951,7 +7953,7 @@ function RisquesPage() {
                     <StatusChip statut={r.controlStatus === 'MAITRISE' ? 'Conforme' : r.controlStatus === 'PARTIELLEMENT_MAITRISE' ? 'Sous surveillance' : 'Non conforme'} />,
                   ])}
                   onRowClick={(i) => setViewing((searchResults ?? list)[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? 'Aucun résultat pour cette recherche' : 'Aucun risque enregistré pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{searchResults ? t('risques.aucunResultatRecherche') : t('risques.aucunRisqueMoment')}</p>}
           </Panel>
         </div>
       )}
@@ -7967,13 +7969,13 @@ function RisquesPage() {
                       <div key={r.id} onClick={() => setViewing(r)} className="flex items-center justify-between py-2 px-2 rounded-lg cursor-pointer" style={{ borderLeft: `3px solid ${p.color}`, backgroundColor: C.cardAlt }}>
                         <div>
                           <p className="text-sm font-medium" style={{ color: C.text }}>{r.hazard}</p>
-                          <p className="text-[11px]" style={{ color: C.textMuted }}>{r.workUnit?.name || 'Sans unité'} · {(r.actions || []).length} action(s){hasActionEnRetard(r) ? ' · action en retard' : ''}</p>
+                          <p className="text-[11px]" style={{ color: C.textMuted }}>{r.workUnit?.name || t('risques.sansUnite')} · {t('risques.actionCount', { count: String((r.actions || []).length) })}{hasActionEnRetard(r) ? t('risques.actionEnRetard') : ''}</p>
                         </div>
                         <span className="text-sm font-bold" style={{ color: p.color }}>{r.grossScore ?? r.score}</span>
                       </div>
                     ))}
                   </div>
-                : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>Aucun risque dans cette catégorie</p>}
+                : <p className="text-sm text-center py-4" style={{ color: C.textMuted }}>{t('risques.aucunRisqueCategorie')}</p>}
             </Panel>
           ))}
         </div>
@@ -7983,18 +7985,18 @@ function RisquesPage() {
         <div className="space-y-6">
           <LiveBadge />
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Répartition par catégorie">
-              {list.length ? <DonutChart data={groupCount(list, (r) => r.category?.label)} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899', '#14B8A6']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+            <Panel title={t('risques.parCategorieTitle')}>
+              {list.length ? <DonutChart data={groupCount(list, (r) => r.category?.label)} colors={[C.blue, C.green, C.amber, C.red, '#8B5CF6', '#EC4899', '#14B8A6']} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('risques.aucunRisque')}</p>}
             </Panel>
-            <Panel title="Répartition par niveau de criticité">
-              {list.length ? <DonutChart data={groupCount(list, (r) => r.grossLevel)} colors={[C.red, C.amber, '#B45309', C.green]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+            <Panel title={t('risques.parNiveauTitle')}>
+              {list.length ? <DonutChart data={groupCount(list, (r) => r.grossLevel)} colors={[C.red, C.amber, '#B45309', C.green]} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('risques.aucunRisque')}</p>}
             </Panel>
           </div>
-          <Panel title="Répartition par unité de travail">
-            {list.length ? <HorizontalBars data={groupCount(list, (r) => r.workUnit?.name)} labelKey="name" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+          <Panel title={t('risques.parUniteTitle')}>
+            {list.length ? <HorizontalBars data={groupCount(list, (r) => r.workUnit?.name)} labelKey="name" valueKey="value" color={C.blue} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('risques.aucunRisque')}</p>}
           </Panel>
-          <Panel title="Pareto des risques (par score brut)">
-            {list.length ? <ParetoChart causes={list.map((r) => ({ cause: r.hazard, occurrences: r.grossScore ?? r.score ?? 0 }))} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+          <Panel title={t('risques.paretoTitle')}>
+            {list.length ? <ParetoChart causes={list.map((r) => ({ cause: r.hazard, occurrences: r.grossScore ?? r.score ?? 0 }))} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('risques.aucunRisque')}</p>}
           </Panel>
         </div>
       )}
@@ -8002,50 +8004,50 @@ function RisquesPage() {
       {tab === 'rapport' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Rapport QHSE imprimable" right={<div className="flex gap-2"><button onClick={exportRisquesExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Exporter Excel</button><button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button></div>}>
+          <Panel title={t('risques.rapportTitle')} right={<div className="flex gap-2"><button onClick={exportRisquesExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{t('risques.exporterExcel')}</button><button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('risques.imprimerPdf')}</button></div>}>
             <div className="space-y-4">
               <div className="text-center border-b pb-3" style={{ borderColor: C.border }}>
-                <h2 className="text-lg font-bold" style={{ color: C.text }}>REGISTRE DES RISQUES — RAPPORT QHSE</h2>
-                <p className="text-xs" style={{ color: C.textMuted }}>Généré le {new Date().toLocaleDateString('fr-FR')} par {currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'un utilisateur du système'}</p>
+                <h2 className="text-lg font-bold" style={{ color: C.text }}>{t('risques.rapportHeading')}</h2>
+                <p className="text-xs" style={{ color: C.textMuted }}>{t('risques.genereLe', { date: new Date().toLocaleDateString('fr-FR'), user: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : t('risques.unUtilisateur') })}</p>
               </div>
               <div className="grid grid-cols-4 gap-3 text-center">
-                <div><p className="text-xl font-bold" style={{ color: C.text }}>{dash.total ?? list.length}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Risques recensés</p></div>
-                <div><p className="text-xl font-bold" style={{ color: C.red }}>{dash.critiques ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Critiques</p></div>
-                <div><p className="text-xl font-bold" style={{ color: C.amber }}>{dash.eleves ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Élevés</p></div>
-                <div><p className="text-xl font-bold" style={{ color: dash.nonMaitrises > 0 ? C.red : C.green }}>{dash.nonMaitrises ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>Non maîtrisés</p></div>
+                <div><p className="text-xl font-bold" style={{ color: C.text }}>{dash.total ?? list.length}</p><p className="text-[10px]" style={{ color: C.textMuted }}>{t('risques.kpiRisquesRecenses')}</p></div>
+                <div><p className="text-xl font-bold" style={{ color: C.red }}>{dash.critiques ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>{t('risques.kpiCritiques')}</p></div>
+                <div><p className="text-xl font-bold" style={{ color: C.amber }}>{dash.eleves ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>{t('risques.kpiEleves')}</p></div>
+                <div><p className="text-xl font-bold" style={{ color: dash.nonMaitrises > 0 ? C.red : C.green }}>{dash.nonMaitrises ?? 0}</p><p className="text-[10px]" style={{ color: C.textMuted }}>{t('risques.kpiNonMaitrises')}</p></div>
               </div>
               <div>
-                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>Matrice de criticité</p>
-                {list.length ? <RiskMatrix5x5 risques={list.map((r) => ({ gravite: r.severity, probabilite: r.probability }))} /> : <p className="text-xs" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>{t('risques.matriceCriticiteLabel')}</p>
+                {list.length ? <RiskMatrix5x5 risques={list.map((r) => ({ gravite: r.severity, probabilite: r.probability }))} /> : <p className="text-xs" style={{ color: C.textMuted }}>{t('risques.aucunRisque')}</p>}
               </div>
               <div>
-                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>Risques critiques et élevés</p>
+                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>{t('risques.risquesCritiquesElevesLabel')}</p>
                 {list.filter((r) => ['CRITIQUE', 'ELEVE'].includes(r.grossLevel)).length
-                  ? <DataTable columns={['Risque', 'Unité de travail', 'Score', 'Actions ouvertes']} rows={list.filter((r) => ['CRITIQUE', 'ELEVE'].includes(r.grossLevel)).sort((a, b) => b.grossScore - a.grossScore).map((r) => [r.hazard, r.workUnit?.name || '—', r.grossScore, (r.actions || []).filter((a) => a.status !== 'CLOSED').length])} />
-                  : <p className="text-xs" style={{ color: C.textMuted }}>Aucun risque critique ou élevé</p>}
+                  ? <DataTable columns={[t('risques.colRisque'), t('risques.colUniteTravail'), 'Score', t('risques.colActionsOuvertes')]} rows={list.filter((r) => ['CRITIQUE', 'ELEVE'].includes(r.grossLevel)).sort((a, b) => b.grossScore - a.grossScore).map((r) => [r.hazard, r.workUnit?.name || '—', r.grossScore, (r.actions || []).filter((a) => a.status !== 'CLOSED').length])} />
+                  : <p className="text-xs" style={{ color: C.textMuted }}>{t('risques.aucunRisqueCritiqueEleve')}</p>}
               </div>
               <div>
-                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>Statistiques</p>
-                <DataTable columns={['Indicateur', 'Valeur']} rows={[
-                  ['Taux de maîtrise', dv(dash.tauxMaitrise, '%')], ['Taux de mise à jour du registre', dv(dash.tauxMiseAJour, '%')],
-                  ['Taux de clôture des actions', dv(dash.tauxClotureActions, '%')], ['Actions en retard', dv(dash.actionsEnRetard)],
-                  ['Risques à réévaluer', dv(dash.aReevaluer)], ['Nouveaux risques (30 derniers jours)', dv(dash.nouveauxDepuis30Jours)],
+                <p className="text-xs font-semibold mb-2" style={{ color: C.text }}>{t('risques.statistiquesLabel')}</p>
+                <DataTable columns={[t('risques.colIndicateur'), t('risques.colValeur')]} rows={[
+                  [t('risques.statTauxMaitrise'), dv(dash.tauxMaitrise, '%')], [t('risques.statTauxMiseAJourRegistre'), dv(dash.tauxMiseAJour, '%')],
+                  [t('risques.statTauxClotureActions'), dv(dash.tauxClotureActions, '%')], [t('risques.statActionsEnRetard'), dv(dash.actionsEnRetard)],
+                  [t('risques.statRisquesAReevaluer'), dv(dash.aReevaluer)], [t('risques.statNouveauxRisques'), dv(dash.nouveauxDepuis30Jours)],
                 ]} />
               </div>
             </div>
           </Panel>
-          <Panel title="Import de risques (Excel / CSV)">
-            <p className="text-xs mb-3" style={{ color: C.textMuted }}>Colonnes reconnues automatiquement : Danger, Activité, Catégorie, Unité de travail, Gravité, Probabilité, Mesures. La catégorie et l'unité de travail sont reliées si leur nom correspond exactement à une entrée existante, sinon laissées vides.</p>
+          <Panel title={t('risques.importTitle')}>
+            <p className="text-xs mb-3" style={{ color: C.textMuted }}>{t('risques.importDescription')}</p>
             <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImportFile} className="text-xs mb-3" style={{ color: C.text }} />
             {importRows.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs" style={{ color: C.textMuted }}>{importRows.length} ligne(s) détectée(s) — {importCandidates.filter((r) => r.errors.length === 0).length} valide(s), {importCandidates.filter((r) => r.errors.length > 0).length} en erreur.</p>
-                <DataTable columns={['Danger', 'Catégorie', 'Unité de travail', 'Gravité', 'Probabilité', 'Statut']}
-                  rows={importCandidates.slice(0, 15).map((r) => [r.hazard || '—', r.categorieLabel || '—', r.workUnitName || '—', r.severity ?? '—', r.probability ?? '—', r.errors.length ? <span style={{ color: C.red }}>{r.errors.join(', ')}</span> : <span style={{ color: C.green }}>Valide</span>])} />
-                <button onClick={runImport} disabled={importing || !importCandidates.some((r) => r.errors.length === 0)} className="px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: importing ? 0.7 : 1 }}>{importing ? 'Import en cours…' : `Importer ${importCandidates.filter((r) => r.errors.length === 0).length} risque(s)`}</button>
+                <p className="text-xs" style={{ color: C.textMuted }}>{t('risques.lignesDetectees', { count: String(importRows.length), valid: String(importCandidates.filter((r) => r.errors.length === 0).length), invalid: String(importCandidates.filter((r) => r.errors.length > 0).length) })}</p>
+                <DataTable columns={[t('risques.colDanger'), t('risques.colCategorie'), t('risques.colUniteTravail'), t('risques.colGravite'), t('risques.colProbabilite'), t('risques.colStatut')]}
+                  rows={importCandidates.slice(0, 15).map((r) => [r.hazard || '—', r.categorieLabel || '—', r.workUnitName || '—', r.severity ?? '—', r.probability ?? '—', r.errors.length ? <span style={{ color: C.red }}>{r.errors.join(', ')}</span> : <span style={{ color: C.green }}>{t('risques.valide')}</span>])} />
+                <button onClick={runImport} disabled={importing || !importCandidates.some((r) => r.errors.length === 0)} className="px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff', opacity: importing ? 0.7 : 1 }}>{importing ? t('risques.importEnCours') : t('risques.importerRisques', { count: String(importCandidates.filter((r) => r.errors.length === 0).length) })}</button>
               </div>
             )}
-            {importResult && <p className="text-xs mt-3" style={{ color: importResult.ko > 0 ? C.amber : C.green }}>{importResult.ok} risque(s) importé(s){importResult.ko > 0 ? `, ${importResult.ko} échec(s)` : ''}.</p>}
+            {importResult && <p className="text-xs mt-3" style={{ color: importResult.ko > 0 ? C.amber : C.green }}>{t('risques.risquesImportes', { count: String(importResult.ok) })}{importResult.ko > 0 ? t('risques.echecs', { count: String(importResult.ko) }) : ''}.</p>}
           </Panel>
         </div>
       )}
@@ -8053,16 +8055,16 @@ function RisquesPage() {
       {tab === 'top10' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Top 10 des risques les plus critiques">
+          <Panel title={t('risques.top10Title')}>
             {top10.length
-              ? <DataTable columns={['Rang', 'Risque', 'Unité de travail', 'Catégorie', 'Score', 'Actions']}
+              ? <DataTable columns={[t('risques.colRang'), t('risques.colRisque'), t('risques.colUniteTravail'), t('risques.colCategorie'), 'Score', t('risques.colActions')]}
                   rows={top10.map((r, i) => [
                     i + 1, r.hazard, r.workUnit?.name || '—', r.category?.label || '—',
                     <span style={{ color: niveauColor[r.grossLevel] || C.text, fontWeight: 600 }}>{r.grossScore}</span>,
-                    (r.actions || []).length ? `${r.actions.length} action(s)` : 'Aucune',
+                    (r.actions || []).length ? t('risques.actionCount', { count: String(r.actions.length) }) : t('risques.aucuneAction'),
                   ])}
                   onRowClick={(i) => setViewing(top10[i])} />
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucun risque enregistré</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('risques.aucunRisque')}</p>}
           </Panel>
         </div>
       )}
@@ -8070,15 +8072,15 @@ function RisquesPage() {
       {tab === 'parametrage' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <Panel title="Catégories de risques" right={<button onClick={() => setShowCategoryForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+            <Panel title={t('risques.categoriesTitle')} right={<button onClick={() => setShowCategoryForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('risques.ajouter')}</button>}>
               {categories.length
-                ? <DataTable columns={['Code', 'Libellé']} rows={categories.map((c) => [c.code, c.label])} onRowClick={(i) => setSelectedCategory(categories[i])} />
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune catégorie définie — la liste reste entièrement libre</p>}
+                ? <DataTable columns={[t('risques.colCode'), t('risques.colLibelle')]} rows={categories.map((c) => [c.code, c.label])} onRowClick={(i) => setSelectedCategory(categories[i])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('risques.aucuneCategorie')}</p>}
             </Panel>
-            <Panel title="Unités de travail" right={<button onClick={() => setShowWorkUnitForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Ajouter</button>}>
+            <Panel title={t('risques.unitesTravailTitle')} right={<button onClick={() => setShowWorkUnitForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('risques.ajouter')}</button>}>
               {workUnits.length
-                ? <DataTable columns={['Nom', 'Département', 'Service']} rows={workUnits.map((w) => [w.name, w.department || '—', w.service || '—'])} />
-                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune unité de travail définie</p>}
+                ? <DataTable columns={[t('risques.colNom'), t('risques.colDepartement'), t('risques.colService')]} rows={workUnits.map((w) => [w.name, w.department || '—', w.service || '—'])} />
+                : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('risques.aucuneUnite')}</p>}
             </Panel>
           </div>
         </div>
