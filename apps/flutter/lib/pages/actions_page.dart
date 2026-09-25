@@ -7,6 +7,7 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../main.dart';
 import '../theme.dart';
+import '../i18n/i18n.dart';
 import 'attachment_helpers.dart';
 import 'load_error_view.dart';
 import 'validation_history_widgets.dart';
@@ -15,18 +16,18 @@ import 'validation_history_widgets.dart';
 // côté mobile pour les Actions CAPA, déjà présent côté web).
 String _capaCsvEscape(String v) => v.contains(',') || v.contains('"') || v.contains('\n') ? '"${v.replaceAll('"', '""')}"' : v;
 
-const _capaStatusLabels = {
-  'DRAFT': 'Brouillon', 'TO_ANALYZE': 'À analyser', 'PLANNED': 'Planifiée', 'ASSIGNED': 'Assignée',
-  'OPEN': 'En cours', 'VALIDATION_PENDING': 'Soumise à validation', 'COMPLETED': 'Action réalisée',
-  'EFFECTIVENESS_CHECK': "Évaluation de l'efficacité", 'VALIDATED': 'Validée', 'CLOSED': 'Clôturée',
-  'SUSPENDED': 'Suspendue', 'BLOCKED': 'Bloquée', 'REJECTED': 'Rejetée', 'TO_REDO': 'À reprendre', 'CANCELLED': 'Annulée',
+Map<String, String> _capaStatusLabels() => {
+  'DRAFT': t('actionsPage.status.draft'), 'TO_ANALYZE': t('actionsPage.status.toAnalyze'), 'PLANNED': t('actionsPage.status.planned'), 'ASSIGNED': t('actionsPage.status.assigned'),
+  'OPEN': t('actionsPage.status.open'), 'VALIDATION_PENDING': t('actionsPage.status.validationPending'), 'COMPLETED': t('actionsPage.status.completed'),
+  'EFFECTIVENESS_CHECK': t('actionsPage.status.effectivenessCheck'), 'VALIDATED': t('actionsPage.status.validated'), 'CLOSED': t('actionsPage.status.closed'),
+  'SUSPENDED': t('actionsPage.status.suspended'), 'BLOCKED': t('actionsPage.status.blocked'), 'REJECTED': t('actionsPage.status.rejected'), 'TO_REDO': t('actionsPage.status.toRedo'), 'CANCELLED': t('actionsPage.status.cancelled'),
 };
-const _capaTypeLabels = {
-  'CURATIVE': 'Curative / immédiate', 'CORRECTIVE': 'Corrective', 'PREVENTIVE': 'Préventive', 'AMELIORATION': 'Amélioration',
-  'MAITRISE': 'Maîtrise', 'REDUCTION_RISQUE': 'Réduction du risque', 'REGLEMENTAIRE': 'Réglementaire', 'AUDIT': "Issue d'audit", 'AUTRE': 'Autre',
+Map<String, String> _capaTypeLabels() => {
+  'CURATIVE': t('actionsPage.type.curative'), 'CORRECTIVE': t('actionsPage.type.corrective'), 'PREVENTIVE': t('actionsPage.type.preventive'), 'AMELIORATION': t('actionsPage.type.amelioration'),
+  'MAITRISE': t('actionsPage.type.maitrise'), 'REDUCTION_RISQUE': t('actionsPage.type.reductionRisque'), 'REGLEMENTAIRE': t('actionsPage.type.reglementaire'), 'AUDIT': t('actionsPage.type.audit'), 'AUTRE': t('actionsPage.type.autre'),
 };
-const _capaEffLabels = {'EFFICACE': 'Efficace', 'PARTIELLEMENT_EFFICACE': 'Partiellement efficace', 'INEFFICACE': 'Inefficace'};
-const _capaNiveauLabels = {'EXCELLENT': 'Excellent', 'BON': 'Bon', 'A_SURVEILLER': 'À surveiller', 'INSUFFISANT': 'Insuffisant', 'CRITIQUE': 'Critique'};
+Map<String, String> _capaEffLabels() => {'EFFICACE': t('actionsPage.eff.efficace'), 'PARTIELLEMENT_EFFICACE': t('actionsPage.eff.partiellementEfficace'), 'INEFFICACE': t('actionsPage.eff.inefficace')};
+Map<String, String> _capaNiveauLabels() => {'EXCELLENT': t('actionsPage.niveau.excellent'), 'BON': t('actionsPage.niveau.bon'), 'A_SURVEILLER': t('actionsPage.niveau.aSurveiller'), 'INSUFFISANT': t('actionsPage.niveau.insuffisant'), 'CRITIQUE': t('actionsPage.niveau.critique')};
 
 Color _capaCriticiteColor(String? n) => {
       'CRITIQUE': QhseColors.red, 'MAJEURE': QhseColors.amber,
@@ -59,22 +60,22 @@ class _ActionsPageState extends State<ActionsPage> {
   Future<void> exportCsv() async {
     setState(() => exporting = true);
     try {
-      final headers = ['Code', 'Titre', 'Type', 'Statut', 'Avancement', 'Échéance', 'Efficacité'];
+      final headers = [t('actionsPage.csv.code'), t('actionsPage.csv.titre'), t('actionsPage.csv.type'), t('actionsPage.csv.statut'), t('actionsPage.csv.avancement'), t('actionsPage.csv.echeance'), t('actionsPage.csv.efficacite')];
       final buffer = StringBuffer();
       buffer.writeln(headers.map((v) => _capaCsvEscape(v)).join(','));
       for (final a in items) {
         buffer.writeln([
-          a['code'], a['title'], _capaTypeLabels[a['actionType']] ?? a['actionType'] ?? '', _capaStatusLabels[a['status']] ?? a['status'] ?? '',
+          a['code'], a['title'], _capaTypeLabels()[a['actionType']] ?? a['actionType'] ?? '', _capaStatusLabels()[a['status']] ?? a['status'] ?? '',
           a['avancement'] != null ? '${a['avancement']}%' : '',
           a['dueDate'] != null ? DateTime.parse(a['dueDate']).toIso8601String().substring(0, 10) : '',
-          _capaEffLabels[a['effectivenessResult']] ?? a['effectivenessResult'] ?? '',
+          _capaEffLabels()[a['effectivenessResult']] ?? a['effectivenessResult'] ?? '',
         ].map((v) => _capaCsvEscape('$v')).join(','));
       }
       final dir = await getTemporaryDirectory();
       final fileName = 'Actions-CAPA-${DateTime.now().millisecondsSinceEpoch}.csv';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...buffer.toString().codeUnits]);
-      await Share.shareXFiles([XFile(file.path)], text: 'Registre des actions CAPA');
+      await Share.shareXFiles([XFile(file.path)], text: t('actionsPage.shareText'));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -110,21 +111,21 @@ class _ActionsPageState extends State<ActionsPage> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Actions CAPA'), actions: [
-          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: 'Exporter le registre', onPressed: exporting ? null : exportCsv),
-        ], bottom: const TabBar(tabs: [Tab(text: "Plan d'action"), Tab(text: 'Critiques'), Tab(text: 'Analyses')])),
+        appBar: AppBar(title: Text(t('actionsPage.title')), actions: [
+          IconButton(icon: exporting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.ios_share), tooltip: t('actionsPage.exportTooltip'), onPressed: exporting ? null : exportCsv),
+        ], bottom: TabBar(tabs: [Tab(text: t('actionsPage.tabPlan')), Tab(text: t('actionsPage.tabCritiques')), Tab(text: t('actionsPage.tabAnalyses'))])),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const CapaFormPage())).then((_) => load()),
           icon: const Icon(Icons.add),
-          label: const Text('Nouvelle action'),
+          label: Text(t('actionsPage.nouvelleAction')),
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
             : error != null
                 ? LoadErrorView(error: error, onRetry: load)
             : TabBarView(children: [
-                _buildList(c, items, now, empty: 'Aucune action'),
-                _buildList(c, critiques, now, empty: 'Aucune action critique — tout est sous contrôle'),
+                _buildList(c, items, now, empty: t('actionsPage.aucuneAction')),
+                _buildList(c, critiques, now, empty: t('actionsPage.aucuneActionCritique')),
                 _buildAnalyses(c),
               ]),
       ),
@@ -137,18 +138,18 @@ class _ActionsPageState extends State<ActionsPage> {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: TextField(
-          decoration: const InputDecoration(prefixIcon: Icon(Icons.search, size: 18), hintText: 'Rechercher (code, titre...)', isDense: true, border: OutlineInputBorder()),
+          decoration: InputDecoration(prefixIcon: const Icon(Icons.search, size: 18), hintText: t('actionsPage.searchHint'), isDense: true, border: const OutlineInputBorder()),
           onChanged: (v) => setState(() => search = v),
         ),
       ),
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: KpiBar([
-          KpiStat('Total', '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.build_outlined),
-          KpiStat('Ouvertes', '${dashboard['ouvertes'] ?? 0}', color: QhseColors.amber, icon: Icons.pending_actions),
-          KpiStat('Terminées', '${dashboard['terminees'] ?? 0}', color: QhseColors.green, icon: Icons.check_circle_outline),
-          KpiStat('En retard', '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
-          KpiStat('Critiques', '${dashboard['critiques'] ?? 0}', color: (dashboard['critiques'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
+          KpiStat(t('actionsPage.kpi.total'), '${dashboard['total'] ?? items.length}', color: QhseColors.blue, icon: Icons.build_outlined),
+          KpiStat(t('actionsPage.kpi.ouvertes'), '${dashboard['ouvertes'] ?? 0}', color: QhseColors.amber, icon: Icons.pending_actions),
+          KpiStat(t('actionsPage.kpi.terminees'), '${dashboard['terminees'] ?? 0}', color: QhseColors.green, icon: Icons.check_circle_outline),
+          KpiStat(t('actionsPage.kpi.enRetard'), '${dashboard['enRetard'] ?? 0}', color: (dashboard['enRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+          KpiStat(t('actionsPage.kpi.critiques'), '${dashboard['critiques'] ?? 0}', color: (dashboard['critiques'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.error_outline),
         ]),
       ),
       Builder(builder: (_) {
@@ -157,7 +158,7 @@ class _ActionsPageState extends State<ActionsPage> {
             : rawList.where((a) => ('${a['code'] ?? ''} ${a['title'] ?? ''}').toLowerCase().contains(search.trim().toLowerCase())).toList();
         return Expanded(
         child: list.isEmpty
-            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? empty : 'Aucun résultat pour cette recherche')))])
+            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(search.trim().isEmpty ? empty : t('actionsPage.aucunResultat'))))])
             : ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: list.length,
@@ -172,7 +173,7 @@ class _ActionsPageState extends State<ActionsPage> {
                         color: a['status'] == 'CLOSED' ? Colors.green : (overdue ? Colors.red : Colors.orange),
                       ),
                       title: Text('${a['code']} — ${a['title']}'),
-                      subtitle: Text('${_capaStatusLabels[a['status']] ?? a['status']}${a['actionType'] != null ? ' · ${_capaTypeLabels[a['actionType']] ?? a['actionType']}' : ''}${due != null ? ' · échéance ${due.toIso8601String().substring(0, 10)}' : ''}${overdue ? ' ⚠️ en retard' : ''}'),
+                      subtitle: Text('${_capaStatusLabels()[a['status']] ?? a['status']}${a['actionType'] != null ? ' · ${_capaTypeLabels()[a['actionType']] ?? a['actionType']}' : ''}${due != null ? t('actionsPage.echeanceSuffix', {'date': due.toIso8601String().substring(0, 10)}) : ''}${overdue ? t('actionsPage.enRetardSuffix') : ''}'),
                       trailing: a['avancement'] != null ? Text('${a['avancement']}%', style: const TextStyle(fontWeight: FontWeight.bold)) : null,
                       onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => CapaDetailPage(actionId: a['id']))).then((_) => load()),
                     ),
@@ -192,12 +193,12 @@ class _ActionsPageState extends State<ActionsPage> {
   Widget _buildAnalyses(BuildContext c) => RefreshIndicator(
     onRefresh: load,
     child: ListView(padding: const EdgeInsets.all(16), children: [
-      Text('Alertes (avec escalade)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+      Text(t('actionsPage.alertesTitle'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
       const SizedBox(height: 4),
-      Text('${alertes.length} point(s) nécessitant attention', style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
+      Text(t('actionsPage.alertesCount', {'count': '${alertes.length}'}), style: TextStyle(fontSize: 11, color: QhseColors.textSecondary)),
       const SizedBox(height: 8),
       alertes.isEmpty
-          ? Card(child: Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.textSecondary)))))
+          ? Card(child: Padding(padding: const EdgeInsets.all(16), child: Center(child: Text(t('actionsPage.aucuneAlerte'), style: TextStyle(color: QhseColors.textSecondary)))))
           : Card(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: [
               for (final a in alertes)
                 ListTile(
@@ -212,17 +213,17 @@ class _ActionsPageState extends State<ActionsPage> {
             ]))),
       const SizedBox(height: 16),
       Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
-        Text('Score de performance CAPA', style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Text(t('actionsPage.scoreTitle'), style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
         const SizedBox(height: 4),
         Text('${score['score'] ?? '—'}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: _capaNiveauColor(score['niveau']))),
-        Text(_capaNiveauLabels[score['niveau']] ?? '—', style: TextStyle(color: _capaNiveauColor(score['niveau']), fontWeight: FontWeight.bold)),
+        Text(_capaNiveauLabels()[score['niveau']] ?? '—', style: TextStyle(color: _capaNiveauColor(score['niveau']), fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Text("Taux d'efficacité : ${score['tauxEfficacite'] ?? '—'}%", style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
+        Text(t('actionsPage.tauxEfficacite', {'value': '${score['tauxEfficacite'] ?? '—'}'}), style: TextStyle(fontSize: 12, color: QhseColors.textSecondary)),
       ]))),
       const SizedBox(height: 16),
-      Text('Évolution sur 12 mois — créées vs réalisées', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
+      Text(t('actionsPage.evolutionTitle'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: QhseColors.textPrimary)),
       const SizedBox(height: 8),
-      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text('Pas encore assez de données', style: TextStyle(color: QhseColors.textSecondary))) : _CapaTrendChart(trends: trends)),
+      SizedBox(height: 200, child: trends.isEmpty ? Center(child: Text(t('actionsPage.pasAssezDeDonnees'), style: TextStyle(color: QhseColors.textSecondary))) : _CapaTrendChart(trends: trends)),
     ]),
   );
 }
@@ -321,7 +322,7 @@ class _CapaFormPageState extends State<CapaFormPage> {
 
   Future<void> submit() async {
     if (title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le titre est obligatoire')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('actionsPage.titreObligatoire'))));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -352,7 +353,7 @@ class _CapaFormPageState extends State<CapaFormPage> {
       if (e.networkError && !editing) {
         await SyncQueue.enqueue('action', 'CREATE', {'code': genCode('ACT'), ...payload});
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : action enregistrée hors-ligne, elle sera synchronisée automatiquement.'), duration: Duration(seconds: 4)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('actionsPage.horsLigneMessage')), duration: const Duration(seconds: 4)));
           Navigator.pop(context);
         }
       } else {
@@ -368,56 +369,56 @@ class _CapaFormPageState extends State<CapaFormPage> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: Text(widget.parentActionId != null ? 'Nouvelle sous-action' : editing ? "Modifier l'action" : 'Nouvelle action CAPA')),
+    appBar: AppBar(title: Text(widget.parentActionId != null ? t('actionsPage.nouvelleSousAction') : editing ? t('actionsPage.modifierAction') : t('actionsPage.nouvelleActionCapa'))),
     body: loadingLists
         ? const Center(child: CircularProgressIndicator())
         : ListView(padding: const EdgeInsets.all(16), children: [
             if (widget.sourceModule != null)
               Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: QhseColors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text("Informations récupérées automatiquement depuis la source — modifiez-les librement avant d'enregistrer.", style: TextStyle(color: QhseColors.blue, fontSize: 11))),
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'Action')),
+                child: Text(t('actionsPage.infoSourceBanner'), style: TextStyle(color: QhseColors.blue, fontSize: 11))),
+            TextField(controller: title, decoration: InputDecoration(labelText: t('actionsPage.actionLabel'))),
             const SizedBox(height: 12),
-            TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),
+            TextField(controller: description, maxLines: 3, decoration: InputDecoration(labelText: t('actionsPage.descriptionLabel'))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: actionType, isExpanded: true, decoration: const InputDecoration(labelText: "Type d'action"),
-              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ..._capaTypeLabels.entries.map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))],
+              value: actionType, isExpanded: true, decoration: InputDecoration(labelText: t('actionsPage.typeActionLabel')),
+              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ..._capaTypeLabels().entries.map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))],
               onChanged: (v) => setState(() => actionType = v),
             ),
             const SizedBox(height: 12),
-            TextField(controller: source, decoration: const InputDecoration(labelText: 'Source / origine')),
+            TextField(controller: source, decoration: InputDecoration(labelText: t('actionsPage.sourceLabel'))),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: criticite, isExpanded: true, decoration: const InputDecoration(labelText: 'Criticité'),
-              items: const [DropdownMenuItem<String>(value: null, child: Text('—')), DropdownMenuItem(value: 'NON_CRITIQUE', child: Text('Non critique')), DropdownMenuItem(value: 'MINEURE', child: Text('Mineure')), DropdownMenuItem(value: 'MAJEURE', child: Text('Majeure')), DropdownMenuItem(value: 'CRITIQUE', child: Text('Critique'))],
+              value: criticite, isExpanded: true, decoration: InputDecoration(labelText: t('actionsPage.criticiteLabel')),
+              items: [const DropdownMenuItem<String>(value: null, child: Text('—')), DropdownMenuItem(value: 'NON_CRITIQUE', child: Text(t('actionsPage.criticiteOptions.nonCritique'))), DropdownMenuItem(value: 'MINEURE', child: Text(t('actionsPage.criticiteOptions.mineure'))), DropdownMenuItem(value: 'MAJEURE', child: Text(t('actionsPage.criticiteOptions.majeure'))), DropdownMenuItem(value: 'CRITIQUE', child: Text(t('actionsPage.criticiteOptions.critique')))],
               onChanged: (v) => setState(() => criticite = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              value: priority, decoration: const InputDecoration(labelText: 'Priorité'),
-              items: const [DropdownMenuItem(value: 1, child: Text('Urgente')), DropdownMenuItem(value: 2, child: Text('Haute')), DropdownMenuItem(value: 3, child: Text('Moyenne')), DropdownMenuItem(value: 4, child: Text('Faible'))],
+              value: priority, decoration: InputDecoration(labelText: t('actionsPage.prioriteLabel')),
+              items: [DropdownMenuItem(value: 1, child: Text(t('actionsPage.priorite.urgente'))), DropdownMenuItem(value: 2, child: Text(t('actionsPage.priorite.haute'))), DropdownMenuItem(value: 3, child: Text(t('actionsPage.priorite.moyenne'))), DropdownMenuItem(value: 4, child: Text(t('actionsPage.priorite.faible')))],
               onChanged: (v) => setState(() => priority = v ?? 2),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: responsibleId, isExpanded: true, decoration: const InputDecoration(labelText: 'Responsable'),
+              value: responsibleId, isExpanded: true, decoration: InputDecoration(labelText: t('actionsPage.responsableLabel')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...users.map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u['id'] as String, child: Text('${u['firstName']} ${u['lastName']}')))],
               onChanged: (v) => setState(() => responsibleId = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: workUnitId, isExpanded: true, decoration: const InputDecoration(labelText: 'Unité de travail / service'),
+              value: workUnitId, isExpanded: true, decoration: InputDecoration(labelText: t('actionsPage.workUnitLabel')),
               items: [const DropdownMenuItem<String>(value: null, child: Text('—')), ...workUnits.map<DropdownMenuItem<String>>((w) => DropdownMenuItem<String>(value: w['id'] as String, child: Text(w['name'] ?? '')))],
               onChanged: (v) => setState(() => workUnitId = v),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dueDate != null ? 'Échéance : ${dueDate!.toIso8601String().substring(0, 10)}' : 'Échéance')),
+            OutlinedButton.icon(onPressed: pickDate, icon: const Icon(Icons.event), label: Text(dueDate != null ? t('actionsPage.echeanceValeur', {'date': dueDate!.toIso8601String().substring(0, 10)}) : t('actionsPage.echeanceLabel'))),
             const SizedBox(height: 16),
-            Text('Avancement : $avancement%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            Text(t('actionsPage.avancementValeur', {'value': '$avancement'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             Slider(value: avancement.toDouble(), min: 0, max: 100, divisions: 4, label: '$avancement%', onChanged: (v) => setState(() => avancement = v.round())),
             if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Envoi...' : 'Enregistrer'))),
+            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : submit, child: Text(busy ? t('actionsPage.envoiEnCours') : t('actionsPage.enregistrer')))),
           ]),
   );
 }
@@ -477,13 +478,13 @@ class _CapaDetailPageState extends State<CapaDetailPage> {
     String methode = '5_POURQUOI';
     bool estRacine = false;
     final ok = await showDialog<bool>(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-      title: const Text('Analyse des causes'),
+      title: Text(t('actionsPage.analyseCausesTitle')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        DropdownButtonFormField<String>(value: methode, items: const [DropdownMenuItem(value: '5_POURQUOI', child: Text('5 Pourquoi')), DropdownMenuItem(value: 'ISHIKAWA', child: Text('Ishikawa (5M)')), DropdownMenuItem(value: 'AUTRE', child: Text('Autre'))], onChanged: (v) => setD(() => methode = v ?? '5_POURQUOI')),
-        TextField(controller: desc, maxLines: 2, decoration: const InputDecoration(labelText: 'Description de la cause')),
-        CheckboxListTile(contentPadding: EdgeInsets.zero, value: estRacine, title: const Text('Cause racine', style: TextStyle(fontSize: 13)), onChanged: (v) => setD(() => estRacine = v ?? false)),
+        DropdownButtonFormField<String>(value: methode, items: [DropdownMenuItem(value: '5_POURQUOI', child: Text(t('actionsPage.methode.cinqPourquoi'))), DropdownMenuItem(value: 'ISHIKAWA', child: Text(t('actionsPage.methode.ishikawa'))), DropdownMenuItem(value: 'AUTRE', child: Text(t('actionsPage.methode.autre')))], onChanged: (v) => setD(() => methode = v ?? '5_POURQUOI')),
+        TextField(controller: desc, maxLines: 2, decoration: InputDecoration(labelText: t('actionsPage.descriptionCauseLabel'))),
+        CheckboxListTile(contentPadding: EdgeInsets.zero, value: estRacine, title: Text(t('actionsPage.causeRacineCheckbox'), style: const TextStyle(fontSize: 13)), onChanged: (v) => setD(() => estRacine = v ?? false)),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ajouter'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('actionsPage.annuler'))), FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('actionsPage.ajouter')))],
     )));
     if (ok != true || desc.text.trim().isEmpty) return;
     try { await api.post('/business/action-causes', {'methode': methode, 'description': desc.text.trim(), 'estRacine': estRacine, 'actionId': widget.actionId}); load(); }
@@ -494,15 +495,15 @@ class _CapaDetailPageState extends State<CapaDetailPage> {
     DateTime? newDate;
     final motif = TextEditingController();
     final ok = await showDialog<bool>(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-      title: const Text('Demander une prolongation'),
+      title: Text(t('actionsPage.prolongationTitle')),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         OutlinedButton.icon(
           onPressed: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365))); if (d != null) setD(() => newDate = d); },
-          icon: const Icon(Icons.event), label: Text(newDate != null ? newDate!.toIso8601String().substring(0, 10) : 'Choisir la nouvelle échéance'),
+          icon: const Icon(Icons.event), label: Text(newDate != null ? newDate!.toIso8601String().substring(0, 10) : t('actionsPage.choisirEcheance')),
         ),
-        TextField(controller: motif, decoration: const InputDecoration(labelText: 'Motif')),
+        TextField(controller: motif, decoration: InputDecoration(labelText: t('actionsPage.motifLabel'))),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Confirmer'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('actionsPage.annuler'))), FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t('actionsPage.confirmer')))],
     )));
     if (ok != true || newDate == null || motif.text.trim().isEmpty) return;
     try { await api.post('/business/actions/${widget.actionId}/extensions', {'nouvelleEcheance': newDate!.toIso8601String(), 'motif': motif.text.trim()}); load(); }
@@ -511,8 +512,8 @@ class _CapaDetailPageState extends State<CapaDetailPage> {
 
   @override
   Widget build(BuildContext c) {
-    if (loading) return Scaffold(appBar: AppBar(title: const Text('Action CAPA')), body: const Center(child: CircularProgressIndicator()));
-    if (error != null || action == null) return Scaffold(appBar: AppBar(title: const Text('Action CAPA')), body: Center(child: Text(error ?? 'Introuvable')));
+    if (loading) return Scaffold(appBar: AppBar(title: Text(t('actionsPage.detailTitle'))), body: const Center(child: CircularProgressIndicator()));
+    if (error != null || action == null) return Scaffold(appBar: AppBar(title: Text(t('actionsPage.detailTitle'))), body: Center(child: Text(error ?? t('actionsPage.introuvable'))));
     final a = action!;
     final subActions = List.from(a['subActions'] ?? []);
     final causes = List.from(a['causes'] ?? []);
@@ -529,19 +530,19 @@ class _CapaDetailPageState extends State<CapaDetailPage> {
           if (a['description'] != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('${a['description']}')),
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 6, children: [
-            Chip(label: Text(_capaStatusLabels[a['status']] ?? a['status'])),
-            if (a['actionType'] != null) Chip(label: Text(_capaTypeLabels[a['actionType']] ?? a['actionType'])),
+            Chip(label: Text(_capaStatusLabels()[a['status']] ?? a['status'])),
+            if (a['actionType'] != null) Chip(label: Text(_capaTypeLabels()[a['actionType']] ?? a['actionType'])),
             if (a['criticite'] != null) Chip(label: Text(a['criticite']), backgroundColor: _capaCriticiteColor(a['criticite']).withOpacity(0.15)),
           ]),
           const SizedBox(height: 10),
           Row(children: [
-            if (a['status'] == 'CLOSED') OutlinedButton(onPressed: busy ? null : reopen, child: const Text('Réouvrir'))
-            else FilledButton(onPressed: busy || a['effectivenessResult'] != 'EFFICACE' || a['validationStatus'] == 'SOUMISE' || a['validationStatus'] == 'REJETEE' ? null : close, child: const Text('Clôturer')),
+            if (a['status'] == 'CLOSED') OutlinedButton(onPressed: busy ? null : reopen, child: Text(t('actionsPage.reouvrir')))
+            else FilledButton(onPressed: busy || a['effectivenessResult'] != 'EFFICACE' || a['validationStatus'] == 'SOUMISE' || a['validationStatus'] == 'REJETEE' ? null : close, child: Text(t('actionsPage.cloturer'))),
             const SizedBox(width: 8),
-            OutlinedButton(onPressed: requestExtension, child: const Text('Prolonger')),
+            OutlinedButton(onPressed: requestExtension, child: Text(t('actionsPage.prolonger'))),
           ]),
           const SizedBox(height: 16),
-          Text('Avancement : ${a['avancement'] ?? 0}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(t('actionsPage.avancementValeur', {'value': '${a['avancement'] ?? 0}'}), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: (a['avancement'] ?? 0) / 100, minHeight: 8)),
           const SizedBox(height: 20),
           ValidationWorkflowSection(item: a, endpointBase: '/business/actions/${a['id']}', onChanged: load),
@@ -550,35 +551,35 @@ class _CapaDetailPageState extends State<CapaDetailPage> {
           const SizedBox(height: 12),
 
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('Plan d\'action — sous-actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            TextButton.icon(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => CapaFormPage(parentActionId: a['id']))).then((_) => load()), icon: const Icon(Icons.add, size: 16), label: const Text('Sous-action')),
+            Text(t('actionsPage.sousActionsTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton.icon(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => CapaFormPage(parentActionId: a['id']))).then((_) => load()), icon: const Icon(Icons.add, size: 16), label: Text(t('actionsPage.sousActionBtn'))),
           ]),
-          if (subActions.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune sous-action', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
-          else ...subActions.map((sa) => Card(child: ListTile(dense: true, title: Text('${sa['title']}'), subtitle: Text('${_capaStatusLabels[sa['status']] ?? sa['status']} · ${sa['avancement'] ?? 0}%')))),
+          if (subActions.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('actionsPage.aucuneSousAction'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+          else ...subActions.map((sa) => Card(child: ListTile(dense: true, title: Text('${sa['title']}'), subtitle: Text('${_capaStatusLabels()[sa['status']] ?? sa['status']} · ${sa['avancement'] ?? 0}%')))),
 
           const SizedBox(height: 16),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('Analyse des causes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            TextButton.icon(onPressed: addCause, icon: const Icon(Icons.add, size: 16), label: const Text('Ajouter')),
+            Text(t('actionsPage.causesTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            TextButton.icon(onPressed: addCause, icon: const Icon(Icons.add, size: 16), label: Text(t('actionsPage.ajouter'))),
           ]),
-          if (causes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('Aucune cause enregistrée', style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
-          else ...causes.map((cs) => Card(child: ListTile(dense: true, title: Text('${cs['description']}'), subtitle: Text('${cs['methode']}${cs['estRacine'] == true ? ' · Racine' : ''}')))),
+          if (causes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t('actionsPage.aucuneCause'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 12)))
+          else ...causes.map((cs) => Card(child: ListTile(dense: true, title: Text('${cs['description']}'), subtitle: Text('${cs['methode']}${cs['estRacine'] == true ? t('actionsPage.racineSuffix') : ''}')))),
 
           const SizedBox(height: 16),
-          const Text("Vérification d'efficacité", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-          if (a['effectivenessResult'] != null) Text('Dernier résultat : ${_capaEffLabels[a['effectivenessResult']]}', style: TextStyle(color: a['effectivenessResult'] == 'EFFICACE' ? QhseColors.green : a['effectivenessResult'] == 'INEFFICACE' ? QhseColors.red : QhseColors.amber)),
+          Text(t('actionsPage.verificationEfficaciteTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          if (a['effectivenessResult'] != null) Text(t('actionsPage.dernierResultat', {'value': '${_capaEffLabels()[a['effectivenessResult']]}'}), style: TextStyle(color: a['effectivenessResult'] == 'EFFICACE' ? QhseColors.green : a['effectivenessResult'] == 'INEFFICACE' ? QhseColors.red : QhseColors.amber)),
           DropdownButtonFormField<String>(
-            value: effResult.isEmpty ? null : effResult, decoration: const InputDecoration(labelText: 'Résultat'),
-            items: const [DropdownMenuItem(value: 'EFFICACE', child: Text('Efficace')), DropdownMenuItem(value: 'PARTIELLEMENT_EFFICACE', child: Text('Partiellement efficace')), DropdownMenuItem(value: 'INEFFICACE', child: Text('Inefficace'))],
+            value: effResult.isEmpty ? null : effResult, decoration: InputDecoration(labelText: t('actionsPage.resultatLabel')),
+            items: [DropdownMenuItem(value: 'EFFICACE', child: Text(t('actionsPage.eff.efficace'))), DropdownMenuItem(value: 'PARTIELLEMENT_EFFICACE', child: Text(t('actionsPage.eff.partiellementEfficace'))), DropdownMenuItem(value: 'INEFFICACE', child: Text(t('actionsPage.eff.inefficace')))],
             onChanged: (v) => setState(() => effResult = v ?? ''),
           ),
-          TextField(controller: effNotes, decoration: const InputDecoration(labelText: 'Notes (optionnel)')),
+          TextField(controller: effNotes, decoration: InputDecoration(labelText: t('actionsPage.notesLabel'))),
           const SizedBox(height: 8),
-          SizedBox(width: double.infinity, child: OutlinedButton(onPressed: busy || effResult.isEmpty ? null : saveEffectiveness, child: const Text('Enregistrer la vérification'))),
+          SizedBox(width: double.infinity, child: OutlinedButton(onPressed: busy || effResult.isEmpty ? null : saveEffectiveness, child: Text(t('actionsPage.enregistrerVerification')))),
 
           if (extensions.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text('Prolongations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(t('actionsPage.prolongationsTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             ...extensions.map((ex) => Card(child: ListTile(dense: true, title: Text('${ex['nouvelleEcheance'].toString().substring(0, 10)}'), subtitle: Text('${ex['motif']}')))),
           ],
         ]),
