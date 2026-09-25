@@ -4,17 +4,31 @@ import '../services/api.dart';
 import '../services/sync_queue.dart';
 import '../theme.dart';
 import 'load_error_view.dart';
+import '../i18n/i18n.dart';
 
 Color _niveauColor(String? n) => {'CRITIQUE': QhseColors.red, 'URGENT': QhseColors.red, 'ATTENTION': QhseColors.amber}[n] ?? QhseColors.textSecondary;
 Color _criticiteColor(int c) => c >= 12 ? QhseColors.red : c >= 6 ? QhseColors.amber : QhseColors.green;
-String _criticiteLabel(int c) => c >= 12 ? 'Critique' : c >= 6 ? 'Élevé' : 'Faible/Modéré';
+String _criticiteLabel(int c) => c >= 12 ? t('environnement.critiqueLabel') : c >= 6 ? t('environnement.eleveLabel') : t('environnement.faibleModereLabel');
 const List<String> kCategoriesEnv = ['Déchets', 'Eau', 'Énergie', 'Carburants', 'Émissions atmosphériques', 'GES / Carbone', 'Effluents', 'Sols', 'Produits chimiques', 'Nuisances', 'Biodiversité'];
-const Map<String, String> kVeilleStatutLabels = {
-  'A_TRAITER': 'À traiter', 'EN_COURS': 'En cours', 'INTEGREE': 'Intégrée', 'CONFORME': 'Conforme',
-  'PARTIELLEMENT_CONFORME': 'Partiellement conforme', 'NON_CONFORME': 'Non conforme', 'NON_APPLICABLE': 'Non applicable', 'A_VERIFIER': 'À vérifier',
+const Map<String, String> _categorieEnvKeys = {
+  'Déchets': 'catDechets', 'Eau': 'catEau', 'Énergie': 'catEnergie', 'Carburants': 'catCarburants',
+  'Émissions atmosphériques': 'catEmissionsAtmospheriques', 'GES / Carbone': 'catGesCarbone', 'Effluents': 'catEffluents',
+  'Sols': 'catSols', 'Produits chimiques': 'catProduitsChimiques', 'Nuisances': 'catNuisances', 'Biodiversité': 'catBiodiversite',
 };
+String _categorieEnvLabel(String? cat) => cat == null ? '—' : t('environnement.${_categorieEnvKeys[cat] ?? 'catDechets'}');
+const List<String> kMilieuxEnv = ['Air', 'Eau', 'Sol', 'Sous-sol', 'Biodiversité', 'Ressources naturelles', 'Population', 'Climat'];
+const Map<String, String> _milieuEnvKeys = {
+  'Air': 'milieuAir', 'Eau': 'milieuEau', 'Sol': 'milieuSol', 'Sous-sol': 'milieuSousSol',
+  'Biodiversité': 'milieuBiodiversite', 'Ressources naturelles': 'milieuRessourcesNaturelles', 'Population': 'milieuPopulation', 'Climat': 'milieuClimat',
+};
+String _milieuEnvLabel(String? m) => m == null ? '—' : t('environnement.${_milieuEnvKeys[m] ?? 'milieuAir'}');
+const Map<String, String> kVeilleStatutKeys = {
+  'A_TRAITER': 'veilleATraiter', 'EN_COURS': 'veilleEnCours', 'INTEGREE': 'veilleIntegree', 'CONFORME': 'veilleConforme',
+  'PARTIELLEMENT_CONFORME': 'veillePartiellementConforme', 'NON_CONFORME': 'veilleNonConforme', 'NON_APPLICABLE': 'veilleNonApplicable', 'A_VERIFIER': 'veilleAVerifier',
+};
+String kVeilleStatutLabel(String? s) { if (s == null) return ''; final k = kVeilleStatutKeys[s]; return k == null ? s : t('environnement.$k'); }
 Color _veilleStatutColor(String? s) => {'CONFORME': QhseColors.green, 'INTEGREE': QhseColors.green, 'PARTIELLEMENT_CONFORME': QhseColors.amber, 'NON_CONFORME': QhseColors.red, 'A_VERIFIER': QhseColors.amber, 'A_TRAITER': QhseColors.amber, 'EN_COURS': QhseColors.blue}[s] ?? QhseColors.textSecondary;
-String _dv(dynamic v, [String suffix = '']) => v == null ? 'Aucune donnée' : '$v$suffix';
+String _dv(dynamic v, [String suffix = '']) => v == null ? t('environnement.aucuneDonnee') : '$v$suffix';
 
 // --- Écran principal à 6 onglets ---
 class EnvironnementHome extends StatefulWidget {
@@ -63,10 +77,10 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
       length: 6,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Environnement'),
-          bottom: const TabBar(isScrollable: true, tabs: [
-            Tab(text: "Vue d'ensemble"), Tab(text: 'Relevés'), Tab(text: 'Aspects & Impacts'),
-            Tab(text: 'Conformité'), Tab(text: 'Produits chimiques'), Tab(text: 'Indicateurs'),
+          title: Text(t('environnement.pageTitle')),
+          bottom: TabBar(isScrollable: true, tabs: [
+            Tab(text: t('environnement.tabApercu')), Tab(text: t('environnement.tabReleves')), Tab(text: t('environnement.tabAspects')),
+            Tab(text: t('environnement.tabConformite')), Tab(text: t('environnement.tabProduits')), Tab(text: t('environnement.tabIndicateurs')),
           ]),
         ),
         body: loading
@@ -92,9 +106,9 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
       onRefresh: load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
         Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Score environnemental global', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(t('environnement.scoreTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           const SizedBox(height: 8),
-          Text(score != null ? '$score/100' : 'Aucune donnée disponible', style: TextStyle(fontWeight: FontWeight.bold, fontSize: score != null ? 32 : 16, color: scoreColor)),
+          Text(score != null ? '$score/100' : t('environnement.aucuneDonneeDisponible'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: score != null ? 32 : 16, color: scoreColor)),
           if (dashboard['scoreDetail'] != null) Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Wrap(spacing: 8, runSpacing: 6, children: List.from(dashboard['scoreDetail']).map<Widget>((d) => Chip(label: Text('${d['nom']} : ${d['valeur'] ?? '—'}${d['valeur'] != null ? '%' : ''}', style: const TextStyle(fontSize: 11)))).toList()),
@@ -102,25 +116,25 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
         ]))),
         const SizedBox(height: 12),
         KpiBar([
-          KpiStat('Conformité', _dv(dashboard['tauxConformite'], '%'), color: QhseColors.blue, icon: Icons.shield_outlined),
-          KpiStat('Déchets', _dv(dashboard['dechets']), color: QhseColors.amber, icon: Icons.delete_outline),
-          KpiStat('Eau', _dv(dashboard['eau']), color: QhseColors.blue, icon: Icons.water_drop_outlined),
-          KpiStat('Énergie', _dv(dashboard['energie']), color: QhseColors.amber, icon: Icons.bolt_outlined),
+          KpiStat(t('environnement.kpiConformite'), _dv(dashboard['tauxConformite'], '%'), color: QhseColors.blue, icon: Icons.shield_outlined),
+          KpiStat(t('environnement.kpiDechets'), _dv(dashboard['dechets']), color: QhseColors.amber, icon: Icons.delete_outline),
+          KpiStat(t('environnement.kpiEau'), _dv(dashboard['eau']), color: QhseColors.blue, icon: Icons.water_drop_outlined),
+          KpiStat(t('environnement.kpiEnergie'), _dv(dashboard['energie']), color: QhseColors.amber, icon: Icons.bolt_outlined),
         ]),
         const SizedBox(height: 8),
         KpiBar([
-          KpiStat('Valorisation déchets', _dv(dashboard['tauxValorisationDechets'], '%'), color: QhseColors.green, icon: Icons.recycling),
-          KpiStat('Conf. réglementaire', _dv(dashboard['tauxConformiteReglementaire'], '%'), color: QhseColors.blue, icon: Icons.gavel_outlined),
-          KpiStat('Aspects significatifs', '${dashboard['aspectsSignificatifs'] ?? 0}', color: (dashboard['aspectsSignificatifs'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
-          KpiStat('Actions en retard', '${dashboard['actionsEnRetard'] ?? 0}', color: (dashboard['actionsEnRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
+          KpiStat(t('environnement.kpiValorisationDechets'), _dv(dashboard['tauxValorisationDechets'], '%'), color: QhseColors.green, icon: Icons.recycling),
+          KpiStat(t('environnement.kpiConfReglementaire'), _dv(dashboard['tauxConformiteReglementaire'], '%'), color: QhseColors.blue, icon: Icons.gavel_outlined),
+          KpiStat(t('environnement.kpiAspectsSignificatifs'), '${dashboard['aspectsSignificatifs'] ?? 0}', color: (dashboard['aspectsSignificatifs'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+          KpiStat(t('environnement.kpiActionsEnRetard'), '${dashboard['actionsEnRetard'] ?? 0}', color: (dashboard['actionsEnRetard'] ?? 0) > 0 ? QhseColors.red : QhseColors.green, icon: Icons.timer_off_outlined),
         ]),
         const SizedBox(height: 16),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Alertes environnementales', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(t('environnement.alertesTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           Text('${alertes.length}', style: TextStyle(color: QhseColors.textSecondary)),
         ]),
         const SizedBox(height: 6),
-        if (alertes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune alerte — tout est sous contrôle', style: TextStyle(color: QhseColors.green)))
+        if (alertes.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('environnement.aucuneAlerte'), style: TextStyle(color: QhseColors.green)))
         else ...alertes.map((a) => Card(child: ListTile(
               dense: true,
               title: Text(a['label'] ?? ''),
@@ -131,11 +145,11 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
               ),
             ))),
         const SizedBox(height: 20),
-        const Text('Tendances mensuelles par catégorie', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        Text('Calculées uniquement sur les mois où des relevés existent réellement.', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
+        Text(t('environnement.tendancesTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text(t('environnement.tendancesSubtitle'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)),
         const SizedBox(height: 8),
         if (tendances.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Aucune donnée disponible pour tracer une tendance', style: TextStyle(color: QhseColors.textSecondary)))
+          Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(t('environnement.aucuneDonneeTendance'), style: TextStyle(color: QhseColors.textSecondary)))
         else
           ...tendances.map((t) {
             final points = List.from(t['points'] ?? []);
@@ -148,7 +162,7 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
                 SizedBox(
                   height: 140,
                   child: points.isEmpty
-                      ? Center(child: Text('Pas de données', style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)))
+                      ? Center(child: Text(t('environnement.pasDeDonnees'), style: TextStyle(color: QhseColors.textSecondary, fontSize: 11)))
                       : LineChart(LineChartData(
                           gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: QhseColors.border, strokeWidth: 1)),
                           titlesData: FlTitlesData(
@@ -173,11 +187,11 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
   }
 
   Widget _buildReleves(BuildContext c) => Scaffold(
-        floatingActionButton: FloatingActionButton.extended(onPressed: () => showReleveDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: const Text('Relevé')),
+        floatingActionButton: FloatingActionButton.extended(onPressed: () => showReleveDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: Text(t('environnement.fabReleve'))),
         body: RefreshIndicator(
           onRefresh: load,
           child: releves.isEmpty
-              ? ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Aucun relevé enregistré')))])
+              ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('environnement.aucunReleve'))))])
               : ListView.builder(
                   padding: const EdgeInsets.all(12),
                   itemCount: releves.length,
@@ -197,16 +211,16 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
   Widget _buildAspects(BuildContext c) {
     final significatifs = aspects.where((a) => a['significatif'] == true && a['statut'] == 'ACTIVE').length;
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => showAspectDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: const Text('Aspect')),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => showAspectDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: Text(t('environnement.fabAspect'))),
       body: RefreshIndicator(
         onRefresh: load,
         child: ListView(padding: const EdgeInsets.all(12), children: [
           KpiBar([
-            KpiStat('Aspects', '${aspects.length}', color: QhseColors.blue, icon: Icons.eco_outlined),
-            KpiStat('Significatifs', '$significatifs', color: significatifs > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
+            KpiStat(t('environnement.kpiAspects'), '${aspects.length}', color: QhseColors.blue, icon: Icons.eco_outlined),
+            KpiStat(t('environnement.kpiSignificatifs'), '$significatifs', color: significatifs > 0 ? QhseColors.red : QhseColors.green, icon: Icons.warning_amber_outlined),
           ]),
           const SizedBox(height: 12),
-          if (aspects.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Aucun aspect identifié', style: TextStyle(color: QhseColors.textSecondary))))
+          if (aspects.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('environnement.aucunAspect'), style: TextStyle(color: QhseColors.textSecondary))))
           else ...aspects.map((a) => Card(child: ListTile(
                 leading: Icon(Icons.circle, size: 12, color: _criticiteColor(a['criticite'] ?? 1)),
                 title: Text(a['aspect'] ?? ''),
@@ -217,11 +231,11 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
                   // même logique que le web (calculerRisque, jamais ressaisi à la main).
                   if (a['significatif'] == true)
                     a['riskId'] != null
-                        ? const Text('Risque créé', style: TextStyle(color: QhseColors.green, fontSize: 10))
+                        ? Text(t('environnement.risqueCree'), style: const TextStyle(color: QhseColors.green, fontSize: 10))
                         : TextButton(
                             onPressed: generatingRiskAspectId == a['id'] ? null : () => generateRiskFromAspect(a['id']),
                             style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                            child: Text(generatingRiskAspectId == a['id'] ? '…' : 'Générer un risque', style: const TextStyle(fontSize: 10, color: QhseColors.red)),
+                            child: Text(generatingRiskAspectId == a['id'] ? t('environnement.enCours') : t('environnement.genererUnRisque'), style: const TextStyle(fontSize: 10, color: QhseColors.red)),
                           ),
                 ]),
                 onTap: () => showAspectDialog(c, api, record: a, onSaved: load),
@@ -232,20 +246,20 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
   }
 
   Widget _buildConformite(BuildContext c, List veilleEnv) => Scaffold(
-        floatingActionButton: FloatingActionButton.extended(onPressed: () => showVeilleEnvDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: const Text('Exigence')),
+        floatingActionButton: FloatingActionButton.extended(onPressed: () => showVeilleEnvDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: Text(t('environnement.fabExigence'))),
         body: RefreshIndicator(
           onRefresh: load,
           child: ListView(padding: const EdgeInsets.all(12), children: [
             KpiBar([
-              KpiStat('Exigences', '${veilleEnv.length}', color: QhseColors.blue, icon: Icons.gavel_outlined),
-              KpiStat('Non conformes', '${veilleEnv.where((v) => v['statut'] == 'NON_CONFORME').length}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
-              KpiStat('À vérifier', '${veilleEnv.where((v) => v['statut'] == 'A_VERIFIER').length}', color: QhseColors.amber, icon: Icons.help_outline),
+              KpiStat(t('environnement.kpiExigences'), '${veilleEnv.length}', color: QhseColors.blue, icon: Icons.gavel_outlined),
+              KpiStat(t('environnement.kpiNonConformes'), '${veilleEnv.where((v) => v['statut'] == 'NON_CONFORME').length}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+              KpiStat(t('environnement.kpiAVerifier'), '${veilleEnv.where((v) => v['statut'] == 'A_VERIFIER').length}', color: QhseColors.amber, icon: Icons.help_outline),
             ]),
             const SizedBox(height: 12),
-            if (veilleEnv.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Aucune exigence environnementale enregistrée', style: TextStyle(color: QhseColors.textSecondary))))
+            if (veilleEnv.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('environnement.aucuneExigence'), style: TextStyle(color: QhseColors.textSecondary))))
             else ...veilleEnv.map((v) => Card(child: ListTile(
                   title: Text((v['texte'] ?? '').toString().length > 50 ? '${v['texte'].toString().substring(0, 50)}…' : v['texte'] ?? ''),
-                  trailing: Text(kVeilleStatutLabels[v['statut']] ?? v['statut'] ?? '', style: TextStyle(color: _veilleStatutColor(v['statut']), fontWeight: FontWeight.bold, fontSize: 11)),
+                  trailing: Text(kVeilleStatutLabel(v['statut']), style: TextStyle(color: _veilleStatutColor(v['statut']), fontWeight: FontWeight.bold, fontSize: 11)),
                   onTap: () => showVeilleEnvDialog(c, api, record: v, onSaved: load),
                 ))),
           ]),
@@ -255,25 +269,25 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
   Widget _buildProduits(BuildContext c) {
     final now = DateTime.now();
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => showProduitChimiqueDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: const Text('Produit')),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => showProduitChimiqueDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: Text(t('environnement.fabProduit'))),
       body: RefreshIndicator(
         onRefresh: load,
         child: ListView(padding: const EdgeInsets.all(12), children: [
           KpiBar([
-            KpiStat('Produits', '${produits.length}', color: QhseColors.blue, icon: Icons.science_outlined),
-            KpiStat('FDS manquantes', '${produits.where((p) => p['fdsDisponible'] != true).length}', color: QhseColors.amber, icon: Icons.description_outlined),
-            KpiStat('Expirés', '${produits.where((p) => p['dateExpiration'] != null && DateTime.parse(p['dateExpiration']).isBefore(now)).length}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
+            KpiStat(t('environnement.kpiProduits'), '${produits.length}', color: QhseColors.blue, icon: Icons.science_outlined),
+            KpiStat(t('environnement.kpiFdsManquantes'), '${produits.where((p) => p['fdsDisponible'] != true).length}', color: QhseColors.amber, icon: Icons.description_outlined),
+            KpiStat(t('environnement.kpiExpires'), '${produits.where((p) => p['dateExpiration'] != null && DateTime.parse(p['dateExpiration']).isBefore(now)).length}', color: QhseColors.red, icon: Icons.warning_amber_outlined),
           ]),
           const SizedBox(height: 12),
-          if (produits.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Aucun produit chimique enregistré', style: TextStyle(color: QhseColors.textSecondary))))
+          if (produits.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('environnement.aucunProduit'), style: TextStyle(color: QhseColors.textSecondary))))
           else ...produits.map((p) {
             final expired = p['dateExpiration'] != null && DateTime.parse(p['dateExpiration']).isBefore(now);
             return Card(child: ListTile(
               title: Text(p['nom'] ?? ''),
               subtitle: Text('${p['classification'] ?? '—'} • Stock : ${p['quantiteStockee'] ?? '—'}${p['unite'] ?? ''}'),
               trailing: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                if (p['fdsDisponible'] != true) Text('FDS manquante', style: TextStyle(fontSize: 10, color: QhseColors.amber)),
-                if (expired) Text('Expiré', style: TextStyle(fontSize: 10, color: QhseColors.red, fontWeight: FontWeight.bold)),
+                if (p['fdsDisponible'] != true) Text(t('environnement.fdsManquante'), style: TextStyle(fontSize: 10, color: QhseColors.amber)),
+                if (expired) Text(t('environnement.expire'), style: TextStyle(fontSize: 10, color: QhseColors.red, fontWeight: FontWeight.bold)),
               ]),
               onTap: () => showProduitChimiqueDialog(c, api, record: p, onSaved: load),
             ));
@@ -286,17 +300,17 @@ class _EnvironnementHomeState extends State<EnvironnementHome> {
   Widget _buildIndicateurs(BuildContext c) {
     final cibles = indicateurs.where((i) => (i['sensInverse'] == true) ? (i['actuel'] <= i['cible']) : (i['actuel'] >= i['cible'])).length;
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => showIndicateurEnvDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: const Text('Indicateur')),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => showIndicateurEnvDialog(c, api, onSaved: load), icon: const Icon(Icons.add), label: Text(t('environnement.fabIndicateur'))),
       body: RefreshIndicator(
         onRefresh: load,
         child: ListView(padding: const EdgeInsets.all(12), children: [
           KpiBar([
-            KpiStat('Indicateurs', '${indicateurs.length}', color: QhseColors.blue, icon: Icons.insights_outlined),
-            KpiStat('Dans la cible', '$cibles', color: QhseColors.green, icon: Icons.check_circle_outline),
-            KpiStat('Hors cible', '${indicateurs.length - cibles}', color: QhseColors.red, icon: Icons.error_outline),
+            KpiStat(t('environnement.kpiIndicateurs'), '${indicateurs.length}', color: QhseColors.blue, icon: Icons.insights_outlined),
+            KpiStat(t('environnement.kpiDansLaCible'), '$cibles', color: QhseColors.green, icon: Icons.check_circle_outline),
+            KpiStat(t('environnement.kpiHorsCible'), '${indicateurs.length - cibles}', color: QhseColors.red, icon: Icons.error_outline),
           ]),
           const SizedBox(height: 12),
-          if (indicateurs.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Aucun indicateur environnemental — créez-en un librement (nom, formule, unité, fréquence, seuils, source)', style: TextStyle(color: QhseColors.textSecondary))))
+          if (indicateurs.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(t('environnement.aucunIndicateur'), style: TextStyle(color: QhseColors.textSecondary))))
           else ...indicateurs.map((i) {
             final atteint = i['sensInverse'] == true ? i['actuel'] <= i['cible'] : i['actuel'] >= i['cible'];
             return Card(child: ListTile(
@@ -322,23 +336,23 @@ Future<void> showReleveDialog(BuildContext context, Api api, {Map? record, requi
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: Text(record == null ? 'Nouveau relevé environnemental' : 'Modifier le relevé'),
+    title: Text(record == null ? t('environnement.nouveauReleveTitle') : t('environnement.modifierReleveTitle')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
       DropdownButtonFormField<String>(
-        value: categorie, isExpanded: true, decoration: const InputDecoration(labelText: 'Catégorie'),
-        items: kCategoriesEnv.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+        value: categorie, isExpanded: true, decoration: InputDecoration(labelText: t('environnement.categorie')),
+        items: kCategoriesEnv.map((cat) => DropdownMenuItem(value: cat, child: Text(_categorieEnvLabel(cat)))).toList(),
         onChanged: (v) => setD(() => categorie = v),
       ),
-      TextField(controller: type, decoration: const InputDecoration(labelText: 'Type de relevé')),
+      TextField(controller: type, decoration: InputDecoration(labelText: t('environnement.typeDeReleve'))),
       Row(children: [
-        Expanded(child: TextField(controller: value, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Valeur'))),
+        Expanded(child: TextField(controller: value, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('environnement.valeur')))),
         const SizedBox(width: 8),
-        Expanded(child: TextField(controller: unit, decoration: const InputDecoration(labelText: 'Unité'))),
+        Expanded(child: TextField(controller: unit, decoration: InputDecoration(labelText: t('environnement.unite')))),
       ]),
-      TextField(controller: site, decoration: const InputDecoration(labelText: 'Site (optionnel)')),
+      TextField(controller: site, decoration: InputDecoration(labelText: t('environnement.siteOptionnel'))),
       DropdownButtonFormField<bool>(
-        value: conforme, decoration: const InputDecoration(labelText: 'Conformité (optionnel)'),
-        items: const [DropdownMenuItem(value: true, child: Text('Conforme')), DropdownMenuItem(value: false, child: Text('Non conforme'))],
+        value: conforme, decoration: InputDecoration(labelText: t('environnement.conformiteOptionnelle')),
+        items: [DropdownMenuItem(value: true, child: Text(t('environnement.conformiteConforme'))), DropdownMenuItem(value: false, child: Text(t('environnement.conformiteNonConforme')))],
         onChanged: (v) => setD(() => conforme = v),
       ),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
@@ -347,8 +361,8 @@ Future<void> showReleveDialog(BuildContext context, Api api, {Map? record, requi
       if (record != null) TextButton(onPressed: () async {
         try { await api.delete('/business/environment/${record['id']}'); if (context.mounted) Navigator.pop(c); onSaved(); }
         catch (e) { setD(() => formError = '$e'); }
-      }, child: const Text('Supprimer', style: TextStyle(color: QhseColors.red))),
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      }, child: Text(t('environnement.supprimer'), style: const TextStyle(color: QhseColors.red))),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('environnement.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         final payload = {'categorie': categorie, 'type': type.text, 'value': double.tryParse(value.text), 'unit': unit.text.isEmpty ? null : unit.text, 'site': site.text.isEmpty ? null : site.text, 'conforme': conforme};
@@ -361,7 +375,7 @@ Future<void> showReleveDialog(BuildContext context, Api api, {Map? record, requi
           if (e.networkError && record == null) {
             await SyncQueue.enqueue('environmentRecord', 'CREATE', {'code': 'ENV-${DateTime.now().millisecondsSinceEpoch}', ...payload, 'recordedAt': DateTime.now().toIso8601String()});
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pas de réseau : relevé enregistré hors-ligne, il sera synchronisé automatiquement.'), duration: Duration(seconds: 4)));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('environnement.releveHorsLigne')), duration: const Duration(seconds: 4)));
               Navigator.pop(c);
             }
             onSaved();
@@ -369,7 +383,7 @@ Future<void> showReleveDialog(BuildContext context, Api api, {Map? record, requi
             setD(() { saving = false; formError = '$e'; });
           }
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Enregistrer')),
+      }, child: Text(saving ? t('environnement.enCours') : t('environnement.enregistrer'))),
     ],
   )));
 }
@@ -381,28 +395,28 @@ Future<void> showAspectDialog(BuildContext context, Api api, {Map? record, requi
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: Text(record == null ? 'Nouvel aspect environnemental' : "Modifier l'aspect"),
+    title: Text(record == null ? t('environnement.nouvelAspectTitle') : t('environnement.modifierAspectTitle')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: aspect, decoration: const InputDecoration(labelText: 'Aspect environnemental')),
+      TextField(controller: aspect, decoration: InputDecoration(labelText: t('environnement.aspectEnvironnemental'))),
       DropdownButtonFormField<String>(
-        value: milieu, decoration: const InputDecoration(labelText: 'Milieu concerné'),
-        items: ['Air', 'Eau', 'Sol', 'Sous-sol', 'Biodiversité', 'Ressources naturelles', 'Population', 'Climat'].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+        value: milieu, decoration: InputDecoration(labelText: t('environnement.milieuConcerne')),
+        items: kMilieuxEnv.map((m) => DropdownMenuItem(value: m, child: Text(_milieuEnvLabel(m)))).toList(),
         onChanged: (v) => setD(() => milieu = v),
       ),
-      const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(top: 8), child: Text('Criticité = Fréquence × Gravité × Probabilité ÷ Maîtrise', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+      Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.only(top: 8), child: Text(t('environnement.criticiteFormule'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
       Row(children: [
-        Expanded(child: DropdownButtonFormField<int>(value: frequence, decoration: const InputDecoration(labelText: 'Fréq.'), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => frequence = v!))),
+        Expanded(child: DropdownButtonFormField<int>(value: frequence, decoration: InputDecoration(labelText: t('environnement.freq')), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => frequence = v!))),
         const SizedBox(width: 6),
-        Expanded(child: DropdownButtonFormField<int>(value: gravite, decoration: const InputDecoration(labelText: 'Gravité'), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => gravite = v!))),
+        Expanded(child: DropdownButtonFormField<int>(value: gravite, decoration: InputDecoration(labelText: t('environnement.graviteLabel')), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => gravite = v!))),
       ]),
       Row(children: [
-        Expanded(child: DropdownButtonFormField<int>(value: probabilite, decoration: const InputDecoration(labelText: 'Proba.'), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => probabilite = v!))),
+        Expanded(child: DropdownButtonFormField<int>(value: probabilite, decoration: InputDecoration(labelText: t('environnement.probaLabel')), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => probabilite = v!))),
         const SizedBox(width: 6),
-        Expanded(child: DropdownButtonFormField<int>(value: maitrise, decoration: const InputDecoration(labelText: 'Maîtrise'), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => maitrise = v!))),
+        Expanded(child: DropdownButtonFormField<int>(value: maitrise, decoration: InputDecoration(labelText: t('environnement.maitriseLabel')), items: [1, 2, 3, 4].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(), onChanged: (v) => setD(() => maitrise = v!))),
       ]),
       Builder(builder: (context) {
         final crit = ((frequence * gravite * probabilite) / maitrise).round();
-        return Padding(padding: const EdgeInsets.only(top: 6), child: Text('Criticité calculée : $crit (${_criticiteLabel(crit)})', style: TextStyle(color: _criticiteColor(crit), fontSize: 12)));
+        return Padding(padding: const EdgeInsets.only(top: 6), child: Text(t('environnement.criticiteCalculee', {'crit': '$crit', 'label': _criticiteLabel(crit)}), style: TextStyle(color: _criticiteColor(crit), fontSize: 12)));
       }),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
@@ -410,8 +424,8 @@ Future<void> showAspectDialog(BuildContext context, Api api, {Map? record, requi
       if (record != null) TextButton(onPressed: () async {
         try { await api.delete('/business/environnement-aspects/${record['id']}'); if (context.mounted) Navigator.pop(c); onSaved(); }
         catch (e) { setD(() => formError = '$e'); }
-      }, child: const Text('Supprimer', style: TextStyle(color: QhseColors.red))),
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      }, child: Text(t('environnement.supprimer'), style: const TextStyle(color: QhseColors.red))),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('environnement.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         final payload = {'aspect': aspect.text, 'milieu': milieu, 'gravite': gravite, 'probabilite': probabilite, 'frequence': frequence, 'maitrise': maitrise};
@@ -421,7 +435,7 @@ Future<void> showAspectDialog(BuildContext context, Api api, {Map? record, requi
           if (context.mounted) Navigator.pop(c);
           onSaved();
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Enregistrer')),
+      }, child: Text(saving ? t('environnement.enCours') : t('environnement.enregistrer'))),
     ],
   )));
 }
@@ -432,12 +446,12 @@ Future<void> showVeilleEnvDialog(BuildContext context, Api api, {Map? record, re
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: Text(record == null ? 'Nouvelle exigence' : "Modifier l'exigence"),
+    title: Text(record == null ? t('environnement.nouvelleExigenceTitle') : t('environnement.modifierExigenceTitle')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: texte, maxLines: 3, decoration: const InputDecoration(labelText: 'Texte réglementaire')),
+      TextField(controller: texte, maxLines: 3, decoration: InputDecoration(labelText: t('environnement.texteReglementaire'))),
       DropdownButtonFormField<String>(
-        value: statut, isExpanded: true, decoration: const InputDecoration(labelText: 'Statut'),
-        items: kVeilleStatutLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+        value: statut, isExpanded: true, decoration: InputDecoration(labelText: t('environnement.statut')),
+        items: kVeilleStatutKeys.keys.map((k) => DropdownMenuItem(value: k, child: Text(kVeilleStatutLabel(k)))).toList(),
         onChanged: (v) => setD(() => statut = v ?? 'A_TRAITER'),
       ),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
@@ -446,8 +460,8 @@ Future<void> showVeilleEnvDialog(BuildContext context, Api api, {Map? record, re
       if (record != null) TextButton(onPressed: () async {
         try { await api.delete('/business/veille-reglementaire/${record['id']}'); if (context.mounted) Navigator.pop(c); onSaved(); }
         catch (e) { setD(() => formError = '$e'); }
-      }, child: const Text('Supprimer', style: TextStyle(color: QhseColors.red))),
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      }, child: Text(t('environnement.supprimer'), style: const TextStyle(color: QhseColors.red))),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('environnement.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         final payload = {'texte': texte.text, 'domaine': 'Environnement', 'statut': statut};
@@ -457,7 +471,7 @@ Future<void> showVeilleEnvDialog(BuildContext context, Api api, {Map? record, re
           if (context.mounted) Navigator.pop(c);
           onSaved();
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Enregistrer')),
+      }, child: Text(saving ? t('environnement.enCours') : t('environnement.enregistrer'))),
     ],
   )));
 }
@@ -471,24 +485,24 @@ Future<void> showProduitChimiqueDialog(BuildContext context, Api api, {Map? reco
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: Text(record == null ? 'Nouveau produit chimique' : 'Modifier le produit'),
+    title: Text(record == null ? t('environnement.nouveauProduitTitle') : t('environnement.modifierProduitTitle')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: nom, decoration: const InputDecoration(labelText: 'Nom')),
+      TextField(controller: nom, decoration: InputDecoration(labelText: t('environnement.nom'))),
       Row(children: [
-        Expanded(child: TextField(controller: quantite, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Quantité stockée'))),
+        Expanded(child: TextField(controller: quantite, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('environnement.quantiteStockee')))),
         const SizedBox(width: 8),
-        Expanded(child: TextField(controller: unite, decoration: const InputDecoration(labelText: 'Unité'))),
+        Expanded(child: TextField(controller: unite, decoration: InputDecoration(labelText: t('environnement.unite')))),
       ]),
-      CheckboxListTile(contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, title: const Text('Rétention en place', style: TextStyle(fontSize: 12)), value: retention, onChanged: (v) => setD(() => retention = v ?? false)),
-      CheckboxListTile(contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, title: const Text('FDS disponible', style: TextStyle(fontSize: 12)), value: fdsDisponible, onChanged: (v) => setD(() => fdsDisponible = v ?? false)),
+      CheckboxListTile(contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, title: Text(t('environnement.retentionEnPlace'), style: const TextStyle(fontSize: 12)), value: retention, onChanged: (v) => setD(() => retention = v ?? false)),
+      CheckboxListTile(contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, title: Text(t('environnement.fdsDisponible'), style: const TextStyle(fontSize: 12)), value: fdsDisponible, onChanged: (v) => setD(() => fdsDisponible = v ?? false)),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
     actions: [
       if (record != null) TextButton(onPressed: () async {
         try { await api.delete('/business/produits-chimiques/${record['id']}'); if (context.mounted) Navigator.pop(c); onSaved(); }
         catch (e) { setD(() => formError = '$e'); }
-      }, child: const Text('Supprimer', style: TextStyle(color: QhseColors.red))),
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      }, child: Text(t('environnement.supprimer'), style: const TextStyle(color: QhseColors.red))),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('environnement.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         final payload = {'nom': nom.text, 'quantiteStockee': double.tryParse(quantite.text), 'unite': unite.text.isEmpty ? null : unite.text, 'retention': retention, 'fdsDisponible': fdsDisponible};
@@ -498,7 +512,7 @@ Future<void> showProduitChimiqueDialog(BuildContext context, Api api, {Map? reco
           if (context.mounted) Navigator.pop(c);
           onSaved();
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Enregistrer')),
+      }, child: Text(saving ? t('environnement.enCours') : t('environnement.enregistrer'))),
     ],
   )));
 }
@@ -512,20 +526,20 @@ Future<void> showIndicateurEnvDialog(BuildContext context, Api api, {required Vo
   String? formError;
   bool saving = false;
   await showDialog(context: context, builder: (c) => StatefulBuilder(builder: (c, setD) => AlertDialog(
-    title: const Text('Nouvel indicateur environnemental'),
+    title: Text(t('environnement.nouvelIndicateurTitle')),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: indicateur, decoration: const InputDecoration(labelText: 'Nom de l\'indicateur')),
-      TextField(controller: formule, decoration: const InputDecoration(labelText: 'Formule (optionnel)')),
+      TextField(controller: indicateur, decoration: InputDecoration(labelText: t('environnement.nomIndicateur'))),
+      TextField(controller: formule, decoration: InputDecoration(labelText: t('environnement.formuleOptionnel'))),
       Row(children: [
-        Expanded(child: TextField(controller: actuel, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Actuel'))),
+        Expanded(child: TextField(controller: actuel, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('environnement.actuel')))),
         const SizedBox(width: 8),
-        Expanded(child: TextField(controller: cible, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cible'))),
+        Expanded(child: TextField(controller: cible, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('environnement.cible')))),
       ]),
-      TextField(controller: unite, decoration: const InputDecoration(labelText: 'Unité')),
+      TextField(controller: unite, decoration: InputDecoration(labelText: t('environnement.unite'))),
       if (formError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(formError!, style: const TextStyle(color: QhseColors.red, fontSize: 12))),
     ])),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Annuler')),
+      TextButton(onPressed: () => Navigator.pop(c), child: Text(t('environnement.annuler'))),
       FilledButton(onPressed: saving ? null : () async {
         setD(() => saving = true);
         try {
@@ -537,7 +551,7 @@ Future<void> showIndicateurEnvDialog(BuildContext context, Api api, {required Vo
           if (context.mounted) Navigator.pop(c);
           onSaved();
         } catch (e) { setD(() { saving = false; formError = '$e'; }); }
-      }, child: Text(saving ? '…' : 'Enregistrer')),
+      }, child: Text(saving ? t('environnement.enCours') : t('environnement.enregistrer'))),
     ],
   )));
 }
