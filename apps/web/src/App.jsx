@@ -9198,6 +9198,7 @@ function NcDetailModal({ nc, onClose, onChanged, onEdit }) {
 }
 
 function NonConformitesPage() {
+  const { t } = useI18n();
   const C = useTheme();
   const ncs = useCollection('/business/non-conformities');
   const dashboardQ = useCollection('/business/nc-dashboard');
@@ -9213,9 +9214,9 @@ function NonConformitesPage() {
   const [tab, setTab] = useState(() => {
     // Ouverture directe depuis le pilotage central (ex. clic sur une récurrence) :
     // on lit une seule fois l'onglet demandé, puis on l'efface.
-    const t = window.__qhsePendingTab;
-    if (t) delete window.__qhsePendingTab;
-    return t || 'apercu';
+    const pendingTab = window.__qhsePendingTab;
+    if (pendingTab) delete window.__qhsePendingTab;
+    return pendingTab || 'apercu';
   });
   const [settingsForm, setSettingsForm] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -9269,7 +9270,7 @@ function NonConformitesPage() {
       {viewing && <NcDetailModal nc={viewing} onClose={() => setViewing(null)} onChanged={reloadAll} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
 
       <div className="flex flex-wrap gap-2">
-        {[['apercu', "Vue d'ensemble"], ['registre', 'Registre'], ['recurrence', 'Récurrence'], ['analyses', 'Analyses & Export'], ['parametrage', 'Paramétrage']].map(([id, label]) => (
+        {[['apercu', t('nonConformites.tabApercu')], ['registre', t('nonConformites.tabRegistre')], ['recurrence', t('nonConformites.tabRecurrence')], ['analyses', t('nonConformites.tabAnalyses')], ['parametrage', t('nonConformites.tabParametrage')]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: tab === id ? C.blue : 'transparent', color: tab === id ? '#fff' : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -9278,34 +9279,34 @@ function NonConformitesPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <LiveBadge />
-            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
+            <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('nonConformites.declarerNc')}</button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Total" value={dv(dash.total)} color={C.blue} icon={FileWarning} />
-            <KpiCard label="Nouvelles (7 jours)" value={dv(dash.nouvelles)} color={C.blue} icon={FileWarning} />
-            <KpiCard label="Ouvertes" value={dv(dash.ouvertes)} color={C.amber} icon={FileWarning} />
-            <KpiCard label="Clôturées" value={dv(dash.cloturees)} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="Réouvertes" value={dv(dash.reouvertes)} color={dash.reouvertes > 0 ? C.amber : C.green} icon={RefreshCw} />
-            <KpiCard label="En retard" value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Critiques" value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
-            <KpiCard label="Majeures" value={dv(dash.majeures)} color={C.amber} icon={AlertTriangle} />
+            <KpiCard label={t('nonConformites.kpiTotal')} value={dv(dash.total)} color={C.blue} icon={FileWarning} />
+            <KpiCard label={t('nonConformites.kpiNouvelles')} value={dv(dash.nouvelles)} color={C.blue} icon={FileWarning} />
+            <KpiCard label={t('nonConformites.kpiOuvertes')} value={dv(dash.ouvertes)} color={C.amber} icon={FileWarning} />
+            <KpiCard label={t('nonConformites.kpiCloturees')} value={dv(dash.cloturees)} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('nonConformites.kpiReouvertes')} value={dv(dash.reouvertes)} color={dash.reouvertes > 0 ? C.amber : C.green} icon={RefreshCw} />
+            <KpiCard label={t('nonConformites.kpiEnRetard')} value={dv(dash.enRetard)} color={dash.enRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('nonConformites.kpiCritiques')} value={dv(dash.critiques)} color={C.red} icon={AlertTriangle} />
+            <KpiCard label={t('nonConformites.kpiMajeures')} value={dv(dash.majeures)} color={C.amber} icon={AlertTriangle} />
           </div>
           <div className="flex flex-wrap gap-3">
-            <KpiCard label="Taux de clôture" value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Clôture dans les délais" value={dv(dash.tauxClotureDansLesDelais, '%')} color={C.blue} icon={ShieldCheck} />
-            <KpiCard label="Taux en retard" value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
-            <KpiCard label="Délai moyen de traitement (j)" value={dv(dash.delaiMoyenTraitement)} color={C.blue} icon={Activity} />
-            <KpiCard label="Âge moyen des NC ouvertes (j)" value={dv(dash.ageMoyenOuvertes)} color={C.blue} icon={Activity} />
-            <KpiCard label="Actions en retard" value={dv(dash.actionsEnRetard)} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
-            <KpiCard label="Taux d'efficacité des actions" value={dv(dash.tauxEfficaciteActions, '%')} color={C.green} icon={ShieldCheck} />
-            <KpiCard label="NC récurrentes" value={dv(dash.recurrentes)} color={dash.recurrentes > 0 ? C.amber : C.green} icon={RefreshCw} />
-            <KpiCard label="Coût total de non-qualité" value={dv(dash.coutTotalNonQualite)} color={C.red} icon={FileWarning} />
-            <KpiCard label="Coût moyen par NC" value={dv(dash.coutMoyenParNc)} color={C.amber} icon={FileWarning} />
+            <KpiCard label={t('nonConformites.kpiTauxCloture')} value={dv(dash.tauxCloture, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('nonConformites.kpiClotureDelais')} value={dv(dash.tauxClotureDansLesDelais, '%')} color={C.blue} icon={ShieldCheck} />
+            <KpiCard label={t('nonConformites.kpiTauxEnRetard')} value={dv(dash.tauxEnRetard, '%')} color={dash.tauxEnRetard > 20 ? C.red : C.blue} icon={AlertTriangle} />
+            <KpiCard label={t('nonConformites.kpiDelaiMoyenTraitement')} value={dv(dash.delaiMoyenTraitement)} color={C.blue} icon={Activity} />
+            <KpiCard label={t('nonConformites.kpiAgeMoyenOuvertes')} value={dv(dash.ageMoyenOuvertes)} color={C.blue} icon={Activity} />
+            <KpiCard label={t('nonConformites.kpiActionsEnRetard')} value={dv(dash.actionsEnRetard)} color={dash.actionsEnRetard > 0 ? C.red : C.green} icon={AlertTriangle} />
+            <KpiCard label={t('nonConformites.kpiTauxEfficaciteActions')} value={dv(dash.tauxEfficaciteActions, '%')} color={C.green} icon={ShieldCheck} />
+            <KpiCard label={t('nonConformites.kpiNcRecurrentes')} value={dv(dash.recurrentes)} color={dash.recurrentes > 0 ? C.amber : C.green} icon={RefreshCw} />
+            <KpiCard label={t('nonConformites.kpiCoutTotalNonQualite')} value={dv(dash.coutTotalNonQualite)} color={C.red} icon={FileWarning} />
+            <KpiCard label={t('nonConformites.kpiCoutMoyenParNc')} value={dv(dash.coutMoyenParNc)} color={C.amber} icon={FileWarning} />
           </div>
-          <Panel title="Diagramme de Pareto — par source de non-conformité" subtitle="Loi des 80/20 : occurrences (barres) et % cumulé (courbe)">
-            {bySource.length ? <ParetoChart causes={bySource} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Aucune non-conformité enregistrée</p>}
+          <Panel title={t('nonConformites.paretoTitle')} subtitle={t('nonConformites.paretoSubtitle')}>
+            {bySource.length ? <ParetoChart causes={bySource} /> : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('nonConformites.aucuneNc')}</p>}
           </Panel>
-          <Panel title="Alertes" subtitle={`${alertes.length} point(s) nécessitant attention`}>
+          <Panel title={t('nonConformites.alertesTitle')} subtitle={t('nonConformites.alertesSubtitle', { count: String(alertes.length) })}>
             {alertes.length
               ? <div className="space-y-2 max-h-64 overflow-y-auto">{alertes.map((a, i) => (
                   <div key={i} className="flex items-center justify-between py-2" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -9313,7 +9314,7 @@ function NonConformitesPage() {
                     <span className="text-[11px] px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${alerteColor[a.niveau]}22`, color: alerteColor[a.niveau] }}>{a.niveau}</span>
                   </div>
                 ))}</div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune alerte — tout est sous contrôle</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('nonConformites.aucuneAlerte')}</p>}
           </Panel>
         </div>
       )}
@@ -9334,16 +9335,16 @@ function NonConformitesPage() {
                 onClick={() => { setMultiSelectMode((v) => !v); setSelectedIds([]); }}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium"
                 style={{ backgroundColor: multiSelectMode ? C.blue : C.cardAlt, color: multiSelectMode ? '#fff' : C.text }}
-              >{multiSelectMode ? 'Annuler la sélection' : 'Sélection multiple'}</button>
-              <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>+ Déclarer une non-conformité</button>
+              >{multiSelectMode ? t('nonConformites.annulerSelection') : t('nonConformites.selectionMultiple')}</button>
+              <button onClick={() => setShowForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('nonConformites.declarerNc')}</button>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une NC (code, titre, source, unité, responsable...)" className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={exportNcExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> Excel</button>
-            <button onClick={exportNcCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> CSV</button>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('nonConformites.rechercherPlaceholder')} className="flex-1 min-w-[240px] text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={exportNcExcel} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('nonConformites.excel')}</button>
+            <button onClick={exportNcCsv} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}><Download size={14} /> {t('nonConformites.csv')}</button>
           </div>
-          <Panel title={search.trim() ? `Résultats de recherche (${filtered.length})` : 'Registre des non-conformités'}>
+          <Panel title={search.trim() ? t('nonConformites.resultatsRecherche', { count: String(filtered.length) }) : t('nonConformites.registreTitre')}>
             {filtered.length
               ? (multiSelectMode
                   ? <div className="space-y-1">
@@ -9360,7 +9361,7 @@ function NonConformitesPage() {
                         </div>
                       ))}
                     </div>
-                  : <DataTable columns={['Titre', 'Source', 'Criticité', 'Responsable', 'Date', 'Statut']}
+                  : <DataTable columns={[t('nonConformites.colTitre'), t('nonConformites.colSource'), t('nonConformites.colCriticite'), t('nonConformites.colResponsable'), t('nonConformites.colDate'), t('nonConformites.colStatut')]}
                       rows={filtered.map((n) => [
                         n.title, n.source || '—',
                         n.criticiteNiveau ? <span style={{ color: criticiteColor[n.criticiteNiveau], fontWeight: 600 }}>{n.criticiteScore} ({n.criticiteNiveau})</span> : '—',
@@ -9368,12 +9369,12 @@ function NonConformitesPage() {
                         new Date(n.occurredAt).toLocaleDateString('fr-FR'), <StatusChip statut={NC_STATUS_LABELS[n.status] || n.status} />,
                       ])}
                       onRowClick={(i) => setViewing(filtered[i])} />)
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? 'Aucun résultat pour cette recherche' : 'Aucune non-conformité enregistrée pour le moment'}</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{search.trim() ? t('nonConformites.aucunResultatRecherche') : t('nonConformites.aucuneNcMoment')}</p>}
           </Panel>
           {multiSelectMode && selectedIds.length > 0 && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg z-40" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-              <span className="text-xs font-medium" style={{ color: C.text }}>{selectedIds.length} sélectionnée{selectedIds.length > 1 ? 's' : ''}</span>
-              <button onClick={() => setShowCapaCommon(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>Créer une CAPA commune</button>
+              <span className="text-xs font-medium" style={{ color: C.text }}>{t('nonConformites.selectionnees', { count: String(selectedIds.length), plural: selectedIds.length > 1 ? 's' : '' })}</span>
+              <button onClick={() => setShowCapaCommon(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{t('nonConformites.creerCapaCommune')}</button>
             </div>
           )}
         </div>
@@ -9382,21 +9383,21 @@ function NonConformitesPage() {
       {tab === 'recurrence' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Non-conformités récurrentes" subtitle="Écarts identiques constatés au moins deux fois">
+          <Panel title={t('nonConformites.recurrentesTitle')} subtitle={t('nonConformites.recurrentesSubtitle')}>
             {recurrentes.length
               ? <div className="space-y-2">
                   {recurrentes.map((r, i) => (
                     <div key={i} className="p-2.5 rounded-lg" style={{ backgroundColor: C.cardAlt }}>
                       <div className="flex items-center justify-between">
                         <p className="text-sm" style={{ color: C.text }}>{r.titre}</p>
-                        <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{r.occurrences}× constatée</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${C.red}22`, color: C.red }}>{t('nonConformites.foisConstatee', { count: String(r.occurrences) })}</span>
                       </div>
-                      <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>{r.processus} · dernière occurrence le {new Date(r.derniereOccurrence).toLocaleDateString('fr-FR')}</p>
+                      <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>{t('nonConformites.derniereOccurrence', { processus: r.processus, date: new Date(r.derniereOccurrence).toLocaleDateString('fr-FR') })}</p>
                     </div>
                   ))}
-                  <p className="text-xs pt-1" style={{ color: C.textMuted }}>Envisager une action corrective systémique pour ces écarts récurrents.</p>
+                  <p className="text-xs pt-1" style={{ color: C.textMuted }}>{t('nonConformites.envisagerAction')}</p>
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Aucune non-conformité récurrente détectée</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('nonConformites.aucuneRecurrenceDetectee')}</p>}
           </Panel>
         </div>
       )}
@@ -9404,7 +9405,7 @@ function NonConformitesPage() {
       {tab === 'analyses' && (
         <div className="space-y-6">
           <LiveBadge />
-          <Panel title="Évolution sur 12 mois">
+          <Panel title={t('nonConformites.evolution12MoisTitle')}>
             {trends.length
               ? <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={trends}>
@@ -9412,37 +9413,37 @@ function NonConformitesPage() {
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.textMuted }} />
                     <YAxis tick={{ fontSize: 11, fill: C.textMuted }} />
                     <Tooltip contentStyle={{ backgroundColor: C.card, border: `1px solid ${C.border}`, fontSize: 12 }} />
-                    <Line type="monotone" dataKey="nouvelles" name="Nouvelles NC" stroke={C.blue} strokeWidth={2} />
-                    <Line type="monotone" dataKey="critiques" name="Dont critiques" stroke={C.red} strokeWidth={2} />
+                    <Line type="monotone" dataKey="nouvelles" name={t('nonConformites.legendNouvellesNc')} stroke={C.blue} strokeWidth={2} />
+                    <Line type="monotone" dataKey="critiques" name={t('nonConformites.legendDontCritiques')} stroke={C.red} strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
-              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>Pas encore assez de données</p>}
+              : <p className="text-sm text-center py-8" style={{ color: C.textMuted }}>{t('nonConformites.pasAssezDeDonnees')}</p>}
           </Panel>
-          <Panel title="Export et synthèse Direction" right={<div className="flex gap-2"><button onClick={exportNcExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>Exporter Excel</button>{synthese && <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>Imprimer / PDF</button>}<button onClick={generateSynthese} disabled={syntheseLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{syntheseLoading ? '…' : 'Générer synthèse'}</button></div>}>
+          <Panel title={t('nonConformites.exportSyntheseTitle')} right={<div className="flex gap-2"><button onClick={exportNcExcel} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.cardAlt, border: `1px solid ${C.border}`, color: C.text }}>{t('nonConformites.exporterExcel')}</button>{synthese && <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.green, color: '#052e1f' }}>{t('nonConformites.imprimerPdf')}</button>}<button onClick={generateSynthese} disabled={syntheseLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{syntheseLoading ? '…' : t('nonConformites.genererSynthese')}</button></div>}>
             {synthese
               ? <div className="space-y-3">
-                  <p className="text-xs" style={{ color: C.textMuted }}>Générée le {new Date(synthese.genereLe).toLocaleDateString('fr-FR')}</p>
-                  <DataTable columns={['Indicateur', 'Valeur']} rows={[
-                    ['Total NC', synthese.dashboard.total], ['NC critiques', synthese.dashboard.critiques], ['NC majeures', synthese.dashboard.majeures],
-                    ['Taux de clôture', synthese.dashboard.tauxCloture != null ? `${synthese.dashboard.tauxCloture}%` : '—'],
-                    ['Taux de récurrence', synthese.dashboard.total ? `${Math.round((synthese.dashboard.recurrentes / synthese.dashboard.total) * 1000) / 10}%` : '—'],
-                    ['Actions en retard', synthese.dashboard.actionsEnRetard], ['Coût total de non-qualité', synthese.dashboard.coutTotalNonQualite],
+                  <p className="text-xs" style={{ color: C.textMuted }}>{t('nonConformites.genereeLe', { date: new Date(synthese.genereLe).toLocaleDateString('fr-FR') })}</p>
+                  <DataTable columns={[t('nonConformites.colIndicateur'), t('nonConformites.colValeur')]} rows={[
+                    [t('nonConformites.statTotalNc'), synthese.dashboard.total], [t('nonConformites.statNcCritiques'), synthese.dashboard.critiques], [t('nonConformites.statNcMajeures'), synthese.dashboard.majeures],
+                    [t('nonConformites.statTauxCloture'), synthese.dashboard.tauxCloture != null ? `${synthese.dashboard.tauxCloture}%` : '—'],
+                    [t('nonConformites.statTauxRecurrence'), synthese.dashboard.total ? `${Math.round((synthese.dashboard.recurrentes / synthese.dashboard.total) * 1000) / 10}%` : '—'],
+                    [t('nonConformites.statActionsEnRetard'), synthese.dashboard.actionsEnRetard], [t('nonConformites.statCoutTotalNonQualite'), synthese.dashboard.coutTotalNonQualite],
                   ]} />
-                  <p className="text-xs font-semibold" style={{ color: C.text }}>Processus les plus problématiques</p>
-                  <DataTable columns={['Processus', 'Nombre de NC']} rows={synthese.processusLesPlusProblematiques.map((p) => [p.processus, p.nombre])} />
+                  <p className="text-xs font-semibold" style={{ color: C.text }}>{t('nonConformites.processusProblematiquesTitle')}</p>
+                  <DataTable columns={[t('nonConformites.colProcessus'), t('nonConformites.colNombreNc')]} rows={synthese.processusLesPlusProblematiques.map((p) => [p.processus, p.nombre])} />
                   {synthese.principalesRecurrences.length > 0 && <>
-                    <p className="text-xs font-semibold" style={{ color: C.text }}>Principales récurrences</p>
-                    <DataTable columns={['Titre', 'Occurrences']} rows={synthese.principalesRecurrences.map((r) => [r.titre, r.occurrences])} />
+                    <p className="text-xs font-semibold" style={{ color: C.text }}>{t('nonConformites.recurrencesPrincipalesTitle')}</p>
+                    <DataTable columns={[t('nonConformites.colTitre'), t('nonConformites.colOccurrences')]} rows={synthese.principalesRecurrences.map((r) => [r.titre, r.occurrences])} />
                   </>}
                 </div>
-              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>Clique sur "Générer synthèse" pour produire le rapport Direction</p>}
+              : <p className="text-sm text-center py-6" style={{ color: C.textMuted }}>{t('nonConformites.cliquePourGenererSynthese')}</p>}
           </Panel>
         </div>
       )}
 
       {tab === 'parametrage' && (
         <div className="space-y-6">
-          <Panel title="Seuils de criticité et délai standard">
+          <Panel title={t('nonConformites.seuilsTitle')}>
             {settingsQ.loading
               ? <LoadingPanel />
               : (() => {
@@ -9451,14 +9452,14 @@ function NonConformitesPage() {
                   return (
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
-                        <FormField label="Seuil Modérée (score ≥)"><input type="number" value={s.seuilModeree} onChange={(e) => setSettingsForm({ ...s, seuilModeree: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-                        <FormField label="Seuil Majeure (score ≥)"><input type="number" value={s.seuilMajeure} onChange={(e) => setSettingsForm({ ...s, seuilMajeure: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                        <FormField label={t('nonConformites.seuilModereeLabel')}><input type="number" value={s.seuilModeree} onChange={(e) => setSettingsForm({ ...s, seuilModeree: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                        <FormField label={t('nonConformites.seuilMajeureLabel')}><input type="number" value={s.seuilMajeure} onChange={(e) => setSettingsForm({ ...s, seuilMajeure: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <FormField label="Seuil Critique (score ≥)"><input type="number" value={s.seuilCritique} onChange={(e) => setSettingsForm({ ...s, seuilCritique: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
-                        <FormField label="Délai standard de traitement (jours)"><input type="number" value={s.delaiStandardJours} onChange={(e) => setSettingsForm({ ...s, delaiStandardJours: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                        <FormField label={t('nonConformites.seuilCritiqueLabel')}><input type="number" value={s.seuilCritique} onChange={(e) => setSettingsForm({ ...s, seuilCritique: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
+                        <FormField label={t('nonConformites.delaiStandardLabel')}><input type="number" value={s.delaiStandardJours} onChange={(e) => setSettingsForm({ ...s, delaiStandardJours: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle(C)} /></FormField>
                       </div>
-                      <button onClick={saveSettings} disabled={savingSettings} className="px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{savingSettings ? '…' : 'Enregistrer'}</button>
+                      <button onClick={saveSettings} disabled={savingSettings} className="px-4 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: C.blue, color: '#fff' }}>{savingSettings ? '…' : t('nonConformites.enregistrer')}</button>
                     </div>
                   );
                 })()}
