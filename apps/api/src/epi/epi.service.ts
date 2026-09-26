@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'; import { PrismaService } from '../c
 import { stripSystemFields } from '../common/strip-system-fields';
 @Injectable() export class EpiService{constructor(private db:PrismaService){} async dashboard(date=new Date()){const start=new Date(date);start.setHours(0,0,0,0);const end=new Date(start);end.setDate(end.getDate()+1);const [epis,movements,headcount,employees]=await Promise.all([this.db.epi.findMany({where:{active:true}}),this.db.epiMovement.findMany(),this.db.dailyHeadcount.findUnique({where:{date:start}}),this.db.employee.count({where:{active:true}})]); const stock=epis.map(e=>{const ms=movements.filter(m=>m.epiId===e.id);return {...e,stock:ms.reduce((s,m)=>s+((m.type===EpiMovementType.RECEIPT||m.type===EpiMovementType.ADJUSTMENT)?m.quantity:-m.quantity),0),dailyDistributed:ms.filter(m=>m.distributionDate>=start&&m.distributionDate<end&&m.type===EpiMovementType.DAILY_DISTRIBUTION).reduce((s,m)=>s+m.quantity,0)}}); return {date:start,effectiveHeadcount:headcount?.headcount??employees,dailyExpected:stock.filter(e=>e.frequency===EpiFrequency.DAILY).map(e=>({epi:e.name,quantity:headcount?.headcount??employees})),stock};} async annualRenewals(days=30){const until=new Date();until.setDate(until.getDate()+days);return this.db.epiAssignment.findMany({where:{renewalAt:{lte:until}},include:{employee:true,epi:true},orderBy:{renewalAt:'asc'}})}
 
- employeeList(){return this.db.employee.findMany({orderBy:{lastName:'asc'}})}
+ employeeList(take?:number,skip?:number){return this.db.employee.findMany({orderBy:{lastName:'asc'},take:take??500,skip:skip??0})}
  async employeeCreate(b:any){const r=await this.db.employee.create({data:stripSystemFields(b)}); await writeAudit(this.db,'Employee','CREATE',r.id,null,r); return r;}
  async employeeUpdate(id:string,b:any){const old=await this.db.employee.findUnique({where:{id}}); const r=await this.db.employee.update({where:{id},data:stripSystemFields(b)}); await writeAudit(this.db,'Employee','UPDATE',id,old,r); return r;}
  async employeeDelete(id:string){const old=await this.db.employee.findUnique({where:{id}}); const r=await this.db.employee.delete({where:{id}}); await writeAudit(this.db,'Employee','DELETE',id,old,null); return r;}
@@ -44,7 +44,7 @@ import { stripSystemFields } from '../common/strip-system-fields';
  async epcCategoryUpdate(id:string,b:any){const old=await this.db.epcCategory.findUnique({where:{id}}); const r=await this.db.epcCategory.update({where:{id},data:stripSystemFields(b)}); await writeAudit(this.db,'EpcCategory','UPDATE',id,old,r); return r;}
  async epcCategoryDelete(id:string){const old=await this.db.epcCategory.findUnique({where:{id}}); const r=await this.db.epcCategory.delete({where:{id}}); await writeAudit(this.db,'EpcCategory','DELETE',id,old,null); return r;}
 
- epcList(){return this.db.epc.findMany({include:{category:true,responsible:true},orderBy:{name:'asc'}})}
+ epcList(take?:number,skip?:number){return this.db.epc.findMany({include:{category:true,responsible:true},orderBy:{name:'asc'},take:take??500,skip:skip??0})}
  async epcCreate(b:any){const r=await this.db.epc.create({data:stripSystemFields(b)}); await writeAudit(this.db,'Epc','CREATE',r.id,null,r); return r;}
  async epcUpdate(id:string,b:any){const old=await this.db.epc.findUnique({where:{id}}); const r=await this.db.epc.update({where:{id},data:stripSystemFields(b)}); await writeAudit(this.db,'Epc','UPDATE',id,old,r); return r;}
  async epcDelete(id:string){const old=await this.db.epc.findUnique({where:{id}}); const r=await this.db.epc.delete({where:{id}}); await writeAudit(this.db,'Epc','DELETE',id,old,null); return r;}
@@ -56,17 +56,17 @@ import { stripSystemFields } from '../common/strip-system-fields';
   return insp;
  }
 
- epiInspectionList(){return this.db.epiInspection.findMany({include:{epi:true,employee:true},orderBy:{inspectedAt:'desc'}})}
+ epiInspectionList(take?:number,skip?:number){return this.db.epiInspection.findMany({include:{epi:true,employee:true},orderBy:{inspectedAt:'desc'},take:take??500,skip:skip??0})}
  async epiInspectionCreate(b:any){const r=await this.db.epiInspection.create({data:stripSystemFields(b)}); await writeAudit(this.db,'EpiInspection','CREATE',r.id,null,r); return r;}
 
- epcInspectionList(){return this.db.epcInspection.findMany({include:{epc:true},orderBy:{inspectedAt:'desc'}})}
+ epcInspectionList(take?:number,skip?:number){return this.db.epcInspection.findMany({include:{epc:true},orderBy:{inspectedAt:'desc'},take:take??500,skip:skip??0})}
 
  jobRiskProtectionList(){return this.db.jobRiskProtection.findMany({include:{epi:true,epc:true},orderBy:{jobTitle:'asc'}})}
  async jobRiskProtectionCreate(b:any){const r=await this.db.jobRiskProtection.create({data:stripSystemFields(b)}); await writeAudit(this.db,'JobRiskProtection','CREATE',r.id,null,r); return r;}
  async jobRiskProtectionUpdate(id:string,b:any){const old=await this.db.jobRiskProtection.findUnique({where:{id}}); const r=await this.db.jobRiskProtection.update({where:{id},data:stripSystemFields(b)}); await writeAudit(this.db,'JobRiskProtection','UPDATE',id,old,r); return r;}
  async jobRiskProtectionDelete(id:string){const old=await this.db.jobRiskProtection.findUnique({where:{id}}); const r=await this.db.jobRiskProtection.delete({where:{id}}); await writeAudit(this.db,'JobRiskProtection','DELETE',id,old,null); return r;}
 
- assignmentList(){return this.db.epiAssignment.findMany({include:{employee:true,epi:true,responsible:true},orderBy:{distributedAt:'desc'}})}
+ assignmentList(take?:number,skip?:number){return this.db.epiAssignment.findMany({include:{employee:true,epi:true,responsible:true},orderBy:{distributedAt:'desc'},take:take??500,skip:skip??0})}
  assignmentGet(id:string){return this.db.epiAssignment.findUnique({where:{id},include:{employee:true,epi:true,responsible:true}})}
  // La création d'une dotation enregistre aussi automatiquement le mouvement
  // de stock correspondant — pas besoin de le saisir deux fois séparément.

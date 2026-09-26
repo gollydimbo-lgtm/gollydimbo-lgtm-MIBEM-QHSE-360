@@ -1429,7 +1429,7 @@ import { saveFile } from '../documents/file-storage.util';
   const criticite=Math.round((frequence*gravite*probabilite)/maitrise);
   return {frequence,gravite,probabilite,maitrise,criticite,significatif:criticite>=12};
  }
- environnementAspectList(){return this.db.environnementAspect.findMany({where:currentSiteScope(),include:{site:true,processus:true,responsable:true,actions:true,risk:true},orderBy:{criticite:'desc'}})}
+ environnementAspectList(take?:number,skip?:number){return this.db.environnementAspect.findMany({where:currentSiteScope(),include:{site:true,processus:true,responsable:true,actions:true,risk:true},orderBy:{criticite:'desc'},take:take??500,skip:skip??0})}
  environnementAspectGet(id:string){return this.db.environnementAspect.findUnique({where:{id},include:{site:true,processus:true,responsable:true,actions:{include:{responsible:true}},risk:true}})}
  environnementAspectCreate(b:any){return this.db.environnementAspect.create({data:{...stripSystemFields(b),...this.calculerAspect(b)}})}
  async environnementAspectUpdate(id:string,b:any){
@@ -1562,7 +1562,7 @@ import { saveFile } from '../documents/file-storage.util';
   return alertes.sort((a,b)=>({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[a.niveau]-({CRITIQUE:0,URGENT:1,ATTENTION:2} as any)[b.niveau]);
  }
 
- produitChimiqueList(){return this.db.produitChimique.findMany({include:{fournisseur:true},orderBy:{nom:'asc'}})}
+ produitChimiqueList(take?:number,skip?:number){return this.db.produitChimique.findMany({include:{fournisseur:true},orderBy:{nom:'asc'},take:take??500,skip:skip??0})}
  produitChimiqueCreate(b:any){return this.db.produitChimique.create({data:stripSystemFields(b)})}
  produitChimiqueUpdate(id:string,b:any){return this.db.produitChimique.update({where:{id},data:stripSystemFields(b)})}
  async produitChimiqueDelete(id:string){const row=await this.db.produitChimique.delete({where:{id}});await writeAudit(this.db,'PRODUIT_CHIMIQUE','DELETE',id,row,null);return row;}
@@ -1792,7 +1792,7 @@ import { saveFile } from '../documents/file-storage.util';
   };
  }
 
- async besoinFormationList(){return this.db.besoinFormation.findMany({include:{employee:true,training:true,traitePar:true},orderBy:{createdAt:'desc'}})}
+ async besoinFormationList(take?:number,skip?:number){return this.db.besoinFormation.findMany({include:{employee:true,training:true,traitePar:true},orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  async besoinFormationUpdate(id:string,b:any){
   const current=await this.db.besoinFormation.findUnique({where:{id}});
   if(!current) throw new NotFoundException('Besoin de formation introuvable');
@@ -1912,7 +1912,7 @@ import { saveFile } from '../documents/file-storage.util';
  // Boucle complete du point 27 : Formation -> Evaluation (connaissances,
  // deja en place) -> Application terrain -> Mesure d'efficacite (ici,
  // a J+30/60/90) -> Analyse QHSE -> Action si inefficace.
- async efficaciteEvaluationList(){return this.db.trainingEfficaciteEvaluation.findMany({include:{training:true,employee:true,evaluateur:true},orderBy:{dateEvaluation:'desc'}})}
+ async efficaciteEvaluationList(take?:number,skip?:number){return this.db.trainingEfficaciteEvaluation.findMany({include:{training:true,employee:true,evaluateur:true},orderBy:{dateEvaluation:'desc'},take:take??500,skip:skip??0})}
  async efficaciteEvaluationCreate(b:any){
   const training=await this.db.training.findUnique({where:{id:b.trainingId}});
   if(!training) throw new NotFoundException('Formation introuvable');
@@ -2742,11 +2742,11 @@ import { saveFile } from '../documents/file-storage.util';
   const risks=await this.db.risk.findMany({where:{fournisseurId:{not:null},status:'ACTIVE'},include:{fournisseur:true},orderBy:{score:'desc'}});
   return risks.map(r=>({id:r.id,fournisseur:r.fournisseur?.nom,hazard:r.hazard,severity:r.severity,probability:r.probability,score:r.score}));
  }
- visiteMedicaleList(){return this.db.visiteMedicale.findMany({include:{employee:true},orderBy:{prochaineVisite:'asc'}})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:stripSystemFields(b)})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:stripSystemFields(b)})} async visiteMedicaleDelete(id:string){const row=await this.db.visiteMedicale.delete({where:{id}});await writeAudit(this.db,'VISITE_MEDICALE','DELETE',id,row,null);return row;}
+ visiteMedicaleList(take?:number,skip?:number){return this.db.visiteMedicale.findMany({include:{employee:true},orderBy:{prochaineVisite:'asc'},take:take??500,skip:skip??0})} visiteMedicaleCreate(b:any){return this.db.visiteMedicale.create({data:stripSystemFields(b)})} visiteMedicaleUpdate(id:string,b:any){return this.db.visiteMedicale.update({where:{id},data:stripSystemFields(b)})} async visiteMedicaleDelete(id:string){const row=await this.db.visiteMedicale.delete({where:{id}});await writeAudit(this.db,'VISITE_MEDICALE','DELETE',id,row,null);return row;}
 
  // Risques sanitaires — la criticité se recalcule à chaque écriture,
  // jamais ressaisie séparément par l'utilisateur.
- risqueSanitaireList(){return this.db.risqueSanitaire.findMany({where:currentSiteScope(),include:{site:true,processus:true,responsable:true,expositions:true,actions:true},orderBy:{criticite:'desc'}})}
+ risqueSanitaireList(take?:number,skip?:number){return this.db.risqueSanitaire.findMany({where:currentSiteScope(),include:{site:true,processus:true,responsable:true,expositions:true,actions:true},orderBy:{criticite:'desc'},take:take??500,skip:skip??0})}
  risqueSanitaireGet(id:string){return this.db.risqueSanitaire.findUnique({where:{id},include:{site:true,processus:true,responsable:true,expositions:{include:{employee:true}},actions:{include:{responsible:true}}}})}
  risqueSanitaireCreate(b:any){
   const gravite=Number(b.gravite)||1,probabilite=Number(b.probabilite)||1;
@@ -2770,7 +2770,7 @@ import { saveFile } from '../documents/file-storage.util';
   const count=facteurs.filter(f=>b[f]===true).length;
   return count>=6?'CRITIQUE':count>=4?'ELEVE':count>=2?'MODERE':'FAIBLE';
  }
- analyseErgonomiqueList(){return this.db.analyseErgonomique.findMany({where:currentSiteScope(),include:{site:true,processus:true,evaluateur:true,tmsSignalements:true,actions:true},orderBy:{createdAt:'desc'}})}
+ analyseErgonomiqueList(take?:number,skip?:number){return this.db.analyseErgonomique.findMany({where:currentSiteScope(),include:{site:true,processus:true,evaluateur:true,tmsSignalements:true,actions:true},orderBy:{createdAt:'desc'},take:take??500,skip:skip??0})}
  analyseErgonomiqueGet(id:string){return this.db.analyseErgonomique.findUnique({where:{id},include:{site:true,processus:true,evaluateur:true,tmsSignalements:{include:{employee:true}},actions:{include:{responsible:true}}}})}
  analyseErgonomiqueCreate(b:any){return this.db.analyseErgonomique.create({data:{...stripSystemFields(b),scoreErgonomique:this.calculerScoreErgonomique(b)}})}
  async analyseErgonomiqueUpdate(id:string,b:any){
@@ -2780,7 +2780,7 @@ import { saveFile } from '../documents/file-storage.util';
  }
  async analyseErgonomiqueDelete(id:string){const row=await this.db.analyseErgonomique.delete({where:{id}});await writeAudit(this.db,'ANALYSE_ERGONOMIQUE','DELETE',id,row,null);return row;}
 
- tmsSignalementList(){return this.db.tmsSignalement.findMany({include:{employee:true,analyseErgonomique:true},orderBy:{dateSignalement:'desc'}})}
+ tmsSignalementList(take?:number,skip?:number){return this.db.tmsSignalement.findMany({include:{employee:true,analyseErgonomique:true},orderBy:{dateSignalement:'desc'},take:take??500,skip:skip??0})}
  tmsSignalementCreate(b:any){return this.db.tmsSignalement.create({data:stripSystemFields(b)})}
  tmsSignalementUpdate(id:string,b:any){return this.db.tmsSignalement.update({where:{id},data:stripSystemFields(b)})}
  async tmsSignalementDelete(id:string){const row=await this.db.tmsSignalement.delete({where:{id}});await writeAudit(this.db,'TMS_SIGNALEMENT','DELETE',id,row,null);return row;}
@@ -2789,7 +2789,7 @@ import { saveFile } from '../documents/file-storage.util';
  penibiliteFactorCreate(b:any){return this.db.penibiliteFactor.create({data:stripSystemFields(b)})}
  async penibiliteFactorDelete(id:string){const row=await this.db.penibiliteFactor.update({where:{id},data:{actif:false}});await writeAudit(this.db,'PENIBILITE_FACTOR','UPDATE',id,null,row);return row;}
 
- penibiliteExpositionList(){return this.db.penibiliteExposition.findMany({include:{employee:true,facteur:true},orderBy:{dateEvaluation:'desc'}})}
+ penibiliteExpositionList(take?:number,skip?:number){return this.db.penibiliteExposition.findMany({include:{employee:true,facteur:true},orderBy:{dateEvaluation:'desc'},take:take??500,skip:skip??0})}
  penibiliteExpositionCreate(b:any){return this.db.penibiliteExposition.create({data:stripSystemFields(b)})}
  async penibiliteExpositionDelete(id:string){const row=await this.db.penibiliteExposition.delete({where:{id}});await writeAudit(this.db,'PENIBILITE_EXPOSITION','DELETE',id,row,null);return row;}
 
@@ -3738,7 +3738,7 @@ import { saveFile } from '../documents/file-storage.util';
   await writeAudit(this.db,'OBJECTIF_RECETTE','UPDATE',id,current,updated);
   return updated;
  }
- workedHoursList(){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'}})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...stripSystemFields(b),hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...stripSystemFields(b),...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} async workedHoursDelete(id:string){const row=await this.db.workedHours.delete({where:{id}});await writeAudit(this.db,'WORKED_HOURS','DELETE',id,row,null);return row;}
+ workedHoursList(take?:number,skip?:number){return this.db.workedHours.findMany({orderBy:{periodStart:'desc'},take:take??500,skip:skip??0})} workedHoursCreate(b:any){return this.db.workedHours.create({data:{...stripSystemFields(b),hours:Number(b.hours)}})} workedHoursUpdate(id:string,b:any){return this.db.workedHours.update({where:{id},data:{...stripSystemFields(b),...(b.hours!==undefined?{hours:Number(b.hours)}:{})}})} async workedHoursDelete(id:string){const row=await this.db.workedHours.delete({where:{id}});await writeAudit(this.db,'WORKED_HOURS','DELETE',id,row,null);return row;}
 
  // ============================================================================
  // RAPPORTS QHSE — Phase 1 : identite de l'entreprise + moteur de
