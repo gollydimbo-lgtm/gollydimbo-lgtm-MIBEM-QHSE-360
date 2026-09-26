@@ -12,7 +12,7 @@ export class QualityController {
   @Delete('types/:id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) deleteType(@Param('id')id:string){return this.service.deleteType(id);}
   @Get('templates') listTemplates(@Query('domain')domain?:string){return this.service.listTemplates(domain);}
   @Post('templates') createTemplate(@Body() body:any){return this.service.createTemplate(body);}
-  @Get('controls') listControls(@Query('domain')domain?:string){return this.service.listControls(domain);}
+  @Get('controls') listControls(@Query('domain')domain?:string,@Query('take')take?:string,@Query('skip')skip?:string){return this.service.listControls(domain,take?Number(take):undefined,skip?Number(skip):undefined);}
   @Get('controls/:id') getControl(@Param('id') id:string){return this.service.getControl(id);}
   @Post('controls') createControl(@Body() body:any){return this.service.createControl(body);}
   @Patch('controls/:id') update(@Param('id')id:string,@Body()body:any){return this.service.updateControl(id,body);}
@@ -21,7 +21,7 @@ export class QualityController {
   @Post('controls/:id/signatures') sign(@Param('id')id:string,@Body()body:any){return this.service.sign(id,body);}
   @Post('controls/:id/submit') submit(@Param('id')id:string){return this.service.submit(id);}
   @Delete('controls/:id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) remove(@Param('id')id:string){return this.service.removeControl(id);}
-  @Get('schedules') listSchedules(@Query('domain')domain?:string){return this.service.listSchedules(domain);}
+  @Get('schedules') listSchedules(@Query('domain')domain?:string,@Query('take')take?:string,@Query('skip')skip?:string){return this.service.listSchedules(domain,take?Number(take):undefined,skip?Number(skip):undefined);}
   @Post('schedules') createSchedule(@Body()body:any){return this.service.createSchedule(body);}
   @Patch('schedules/:id') updateSchedule(@Param('id')id:string,@Body()body:any){return this.service.updateSchedule(id,body);}
   @Delete('schedules/:id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) deleteSchedule(@Param('id')id:string){return this.service.deleteSchedule(id);}

@@ -54,7 +54,7 @@ export class DocumentsService {
   // Bibliothèque / CRUD document
   // ---------------------------------------------------------------------
 
-  list(f: { status?: string; documentType?: string; domaine?: string; service?: string; siteId?: string; processusId?: string; workUnitId?: string; criticite?: string; responsibleId?: string; external?: string; q?: string }) {
+  list(f: { status?: string; documentType?: string; domaine?: string; service?: string; siteId?: string; processusId?: string; workUnitId?: string; criticite?: string; responsibleId?: string; external?: string; q?: string; take?: string; skip?: string }) {
     const where: any = {};
     if (f.status) where.status = f.status;
     if (f.documentType) where.documentType = f.documentType;
@@ -70,7 +70,7 @@ export class DocumentsService {
       const contains = { contains: f.q, mode: 'insensitive' as const };
       where.OR = [{ title: contains }, { code: contains }, { description: contains }, { motsCles: contains }];
     }
-    return this.db.document.findMany({ where: { ...where, ...currentSiteScope() }, include: DOC_INCLUDE_LIST, orderBy: { updatedAt: 'desc' } });
+    return this.db.document.findMany({ where: { ...where, ...currentSiteScope() }, include: DOC_INCLUDE_LIST, orderBy: { updatedAt: 'desc' }, take: f.take ? Number(f.take) : 500, skip: f.skip ? Number(f.skip) : 0 });
   }
 
   groups() {

@@ -65,7 +65,7 @@ export class QualityService {
     },include:CONTROL_INCLUDE});
   }
 
-  listControls(domain?:string) { return this.db.qualityControl.findMany({where:{...(domain?{domain}:{}),...currentSiteScope()},include:{...CONTROL_INCLUDE,results:{include:{point:true}},nonConformities:{include:{actions:true}},attachments:{include:{attachment:true}},signatures:true,createdBy:true},orderBy:{controlDate:'desc'}}); }
+  listControls(domain?:string,take?:number,skip?:number) { return this.db.qualityControl.findMany({where:{...(domain?{domain}:{}),...currentSiteScope()},include:{...CONTROL_INCLUDE,results:{include:{point:true}},nonConformities:{include:{actions:true}},attachments:{include:{attachment:true}},signatures:true,createdBy:true},orderBy:{controlDate:'desc'},take:take??500,skip:skip??0}); }
 
   getControl(id:string) { return this.db.qualityControl.findUnique({where:{id},include:{...CONTROL_INCLUDE,results:{include:{point:true}},nonConformities:{include:{actions:true}},attachments:{include:{attachment:true}},signatures:{include:{user:true}},createdBy:true}}); }
 
@@ -161,8 +161,8 @@ export class QualityService {
   }
 
   // --- Planification des contrôles récurrents ---
-  listSchedules(domain?:string) {
-    return this.db.controlSchedule.findMany({where:{...(domain?{domain}:{}),...currentSiteScope()},include:{type:true,template:true,assignedTo:true,site:true,productionLine:true},orderBy:{nextDueDate:'asc'}});
+  listSchedules(domain?:string,take?:number,skip?:number) {
+    return this.db.controlSchedule.findMany({where:{...(domain?{domain}:{}),...currentSiteScope()},include:{type:true,template:true,assignedTo:true,site:true,productionLine:true},orderBy:{nextDueDate:'asc'},take:take??500,skip:skip??0});
   }
 
   createSchedule(data:any) {
