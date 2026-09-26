@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../common/prisma.service';
 import { BusinessService } from '../business/business.service';
 import { DashboardService } from '../dashboard/dashboard.service';
+import { MailerService } from './mailer.service';
 
 // Calendrier centralisé + notifications actives (chantier issu de l'audit).
 // Jusqu'ici les échéances (habilitations, actions, audits, EPI, équipements,
@@ -17,15 +19,20 @@ import { DashboardService } from '../dashboard/dashboard.service';
 //     RegulatoryRiskReevaluationRequest) : relancer la génération ne
 //     duplique jamais une notification déjà créée pour le même événement,
 //     et une notification déjà marquée "lue" par un utilisateur le reste.
-// Ceci reste interne à l'application : pas d'envoi e-mail/SMS, qui
-// demanderait un service externe et des identifiants que l'entreprise
-// devrait configurer séparément (limite explicitement assumée).
+// E-mail : envoyé aux ADMINISTRATEUR/RESPONSABLE_QHSE pour toute nouvelle
+// notification CRITICAL/WARNING, via MailerService (SMTP configuré par
+// variables d'environnement, voir .env.example). SMS différé (findings
+// #26/#40) : aucun fournisseur SMS choisi et aucun champ téléphone sur
+// User (décision du 26/09) — à ajouter quand un fournisseur sera retenu.
+// Déclenchement : génération manuelle (POST /notifications/generer) et
+// désormais aussi un job planifié quotidien (voir genererNotificationsPlanifiees).
 @Injectable()
 export class NotificationsService {
   constructor(
     private db: PrismaService,
     private business: BusinessService,
     private dashboard: DashboardService,
+    private mailer: MailerService,
   ) {}
 
   async list(opts?: { nonLuesSeulement?: boolean; take?: number }) {
@@ -178,6 +185,27 @@ export class NotificationsService {
       });
       creees.push(row);
     }
+    const aNotifier = creees.filter((c) => c.niveau === 'CRITICAL' || c.niveau === 'WARNING');
+    if (aNotifier.length) {
+      const destinataires = await this.db.user.findMany({
+        where: { status: 'ACTIVE', roles: { some: { role: { name: { in: ['ADMINISTRATEUR', 'RESPONSABLE_QHSE'] } } } } },
+        select: { email: true },
+      });
+      await this.mailer.envoyerNotificationsCritiques(
+        destinataires.map((d) => d.email),
+        aNotifier,
+      );
+    }
+
     return { analyses: candidats.length, nouvellesNotifications: creees.length, notifications: creees };
+  }
+
+  // Déclenchement automatique quotidien (finding #25) : jusqu'ici
+  // POST /notifications/generer n'était appelé qu'à la main, donc les
+  // notifications n'étaient jamais réellement "actives". Ce job les
+  // régénère (et déclenche l'e-mail ci-dessus) sans action utilisateur.
+  @Cron(CronExpression.EVERY_DAY_AT_6AM)
+  async genererNotificationsPlanifiees() {
+    return this.genererNotifications();
   }
 }
