@@ -118,7 +118,7 @@ export class CreateEquipmentMaintenancePlanDto {
   @IsString() equipmentId!: string;
   @IsString() designation!: string;
   @IsOptional() @IsString() frequenceType?: string;
-  @IsInt() frequenceValeur!: number;
+  @IsNumber() frequenceValeur!: number;
   @IsOptional() @IsString() uniteFrequence?: string;
   @IsOptional() @IsDateString() dateDerniere?: string;
   @IsOptional() @IsDateString() dateProchaine?: string;
@@ -130,7 +130,7 @@ export class CreateEquipmentMaintenancePlanDto {
 export class UpdateEquipmentMaintenancePlanDto {
   @IsOptional() @IsString() designation?: string;
   @IsOptional() @IsString() frequenceType?: string;
-  @IsOptional() @IsInt() frequenceValeur?: number;
+  @IsOptional() @IsNumber() frequenceValeur?: number;
   @IsOptional() @IsString() uniteFrequence?: string;
   @IsOptional() @IsDateString() dateDerniere?: string;
   @IsOptional() @IsDateString() dateProchaine?: string;
