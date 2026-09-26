@@ -27,7 +27,7 @@ export class QualityService {
     if (!data.code || !data.name) throw new BadRequestException('code et name sont obligatoires');
     return this.db.controlType.create({data:{code:data.code,name:data.name,domain:data.domain||'QUALITE',description:data.description,active:data.active??true}});
   }
-  updateType(id:string,data:any) { return this.db.controlType.update({where:{id},data}); }
+  updateType(id:string,data:any) { return this.db.controlType.update({where:{id},data:{name:data.name,domain:data.domain,description:data.description,active:data.active}}); }
   async deleteType(id:string) { const row = await this.db.controlType.delete({where:{id}}); await writeAudit(this.db,'CONTROL_TYPE','DELETE',id,row,null); return row; }
 
   listTemplates(domain?:string) { return this.db.controlTemplate.findMany({ where:{active:true,...(domain?{domain}:{})}, include:{points:{orderBy:{order:'asc'}},type:true}, orderBy:{name:'asc'} }); }

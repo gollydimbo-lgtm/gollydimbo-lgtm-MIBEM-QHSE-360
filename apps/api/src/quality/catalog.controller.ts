@@ -14,6 +14,6 @@ export class QualityCatalogController {
   @Post('machines') machine(@Body() b:any){return this.db.machine.create({data:{lineId:b.lineId,code:b.code,name:b.name,category:b.category}})}
   @Post('shifts') shift(@Body() b:any){return this.db.shift.create({data:{code:b.code,name:b.name,startTime:b.startTime,endTime:b.endTime}})}
   @Get('shifts') shifts(){return this.db.shift.findMany({where:{active:true},orderBy:{name:'asc'}})}
-  @Patch('lines/:id') updateLine(@Param('id')id:string,@Body()b:any){return this.db.productionLine.update({where:{id},data:b})}
+  @Patch('lines/:id') updateLine(@Param('id')id:string,@Body()b:any){return this.db.productionLine.update({where:{id},data:{code:b.code,name:b.name,area:b.area,siteId:b.siteId,active:b.active}})}
   @Delete('lines/:id') @Roles(RoleName.ADMINISTRATEUR,RoleName.RESPONSABLE_QHSE) async deleteLine(@Param('id')id:string){const row=await this.db.productionLine.delete({where:{id}});await writeAudit(this.db,'PRODUCTION_LINE','DELETE',id,row,null);return row;}
 }
